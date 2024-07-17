@@ -2,30 +2,34 @@ import os
 from dotenv import load_dotenv
 
 # Load environment variables from a .env file if it exists
-load_dotenv()
+# Load environment variables from a .env file if it exists
+#dotenv_path = os.path.join(os.path.dirname(__file__), 'config.env')
+dotenv_path = '/Users/youssefadiem/PycharmProjects/OptionsDepth_intraday/config.env'
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
 
 #---------------- DIGITAL OCEAN ---------------------------#
-# - MySQL
+# # - MySQL
 DB_HOST = os.getenv('DB_HOST')
-DB_PORT = os.getenv('DB_PORT')
+DB_PORT = int(os.getenv('DB_PORT'))
 DB_USER = os.getenv('DB_USER')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_NAME = os.getenv('DB_NAME')
 DB_DRIVER = os.getenv('DB_DRIVER')
-
-# - Spaces configuration
+#
+# # - Spaces configuration
 DO_SPACES_URL = os.getenv('DO_SPACES_URL')
 DO_SPACES_KEY = os.getenv('DO_SPACES_KEY')
 DO_SPACES_SECRET = os.getenv('DO_SPACES_SECRET')
 DO_SPACES_BUCKET = os.getenv('DO_SPACES_BUCKET')
 LOG_FILE_KEY = os.getenv('LOG_FILE_KEY')
-
-#---------------- SFTP ---------------------------#
-#- Server
+#
+# #---------------- SFTP ---------------------------#
+# #- Server
 SFTP_HOST = os.getenv('SFTP_HOST')
 SFTP_PORT = int(os.getenv('SFTP_PORT'))
 SFTP_USERNAME = os.getenv('SFTP_USERNAME')
-SFTP_PASSWORD = os.getenv('SFTP_PASSWORD')
+SFTP_PASSWORD = os.getenv('SFTP_PASSWORD_OD')
 SFTP_DIRECTORY = os.getenv('SFTP_DIRECTORY')
 
 #- Monitoring
