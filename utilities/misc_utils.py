@@ -9,11 +9,93 @@ import os
 import re
 import json
 import boto3
-import requests
 from botocore.exceptions import NoCredentialsError, ClientError
 import pytz
 import numpy as np
 
+
+class AsyncDatabaseUtilities:
+    def __init__(self, host: str, port: int, user: str, password: str, database: str):
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.database = database
+        self.pool = None
+        self.logger = logging.getLogger(__name__)
+
+    async def create_pool(self):
+        if self.pool is None:
+            try:
+                self.pool = await aiomysql.create_pool(
+                    host=self.host,
+                    port=self.port,
+                    user=self.user,
+                    password=self.password,
+                    db=self.database,
+                    charset='utf8mb4',
+                    autocommit=True,
+                    cursorclass=aiomysql.DictCursor,
+                    minsize=1,
+                    maxsize=10
+                )
+                self.logger.info("Database connection pool created successfully.")
+            except Exception as e:
+                self.logger.error(f"Failed to create database connection pool: {e}")
+                self.pool = None
+
+    async def execute_query(self, query: str, params: tuple = None) -> List[dict]:
+        if not self.pool:
+            await self.create_pool()
+
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(query, params)
+                return await cursor.fetchall()
+
+    async def execute_insert(self, query: str, params: tuple) -> bool:
+        if not self.pool:
+            await self.create_pool()
+
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                try:
+                    await cursor.execute(query, params)
+                    await conn.commit()
+                    return True
+                except Exception as e:
+                    self.logger.error(f"Error executing insert: {e}")
+                    return False
+
+    async def fetch_dataframe(self, query: str, params: tuple = None) -> pd.DataFrame:
+        results = await self.execute_query(query, params)
+        return pd.DataFrame(results) if results else pd.DataFrame()
+
+    async def get_book(self, ticker: str, active_effective_date: str) -> pd.DataFrame:
+        query = f"""SELECT * FROM intraday.new_daily_book_format WHERE effective_date = %s AND ticker = %s;"""
+        return await self.fetch_dataframe(query, (active_effective_date, ticker))
+
+    async def insert_progress(self, dbName: str, dbTable: str, dataframe: pd.DataFrame):
+        if not self.pool:
+            await self.create_pool()
+
+        chunksize = math.ceil(len(dataframe) / 50)
+        for i, cdf in enumerate(self.chunker(dataframe, chunksize)):
+            try:
+                async with self.pool.acquire() as conn:
+                    await conn.begin()
+                    await conn.execute(f"INSERT INTO {dbName}.{dbTable} VALUES ", cdf.to_dict('records'))
+                    await conn.commit()
+                self.logger.info(f"Inserted chunk {i + 1} ({len(cdf)} rows)")
+            except Exception as e:
+                self.logger.error(f"Error inserting chunk {i}: {e}")
+
+    @staticmethod
+    def chunker(df, size):
+        return (df[pos:pos + size] for pos in range(0, len(df), size))
+
+
+# Additional utility functions for SFTP monitoring
 
 def detect_dates(folder_path: str) -> List[str]:
     date_pattern_cboe = re.compile(r'Close_(\d{4}-\d{2}-\d{2})')
@@ -53,29 +135,6 @@ def list_price(latest_active_spx_price: float, steps: float, range: float) -> np
     lower_end = np.arange(latest_active_spx_price, lower_bound, -steps)
     upper_end = np.arange(latest_active_spx_price, upper_bound, steps)
     return np.unique(np.sort(np.concatenate((lower_end, upper_end))))
-
-def get_previous_business_day(date, calendar):
-    if isinstance(date, pd.Timestamp):
-        date = date.to_pydatetime()
-    prev_days = calendar.valid_days(end_date=date, start_date=date - pd.Timedelta(days=5))
-    return prev_days[-2].to_pydatetime()
-
-def get_expiration_datetime(row):
-    if pd.isna(row['expiration_date_original']):
-        return None
-    base_date = pd.to_datetime(row['expiration_date_original']).strftime('%Y-%m-%d')
-    if row['option_symbol'] in ['SPX', 'VIX']:
-        return f"{base_date} 09:15:00"
-    elif row['option_symbol'] in ['SPXW', 'VIXW']:
-        return f"{base_date} 16:00:00"
-    else:
-        return None
-
-def send_discord_notification(message,webhook_hurl):
-    data = {"content": message}
-    response = requests.post(webhook_hurl, json=data)
-    if response.status_code != 204:
-        raise ValueError(f"Request to Discord returned an error {response.status_code}, the response is:\n{response.text}")
 
 
 # Usage example:

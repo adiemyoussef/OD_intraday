@@ -321,6 +321,7 @@ if __name__ == "__main__":
     # Initialize utilities with the custom logger
     db_utils = AsyncDatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, logger=main_logger)
     s3_utils = S3Utilities(DO_SPACES_URL, DO_SPACES_KEY, DO_SPACES_SECRET, DO_SPACES_BUCKET, logger=main_logger)
+
     monitor = SFTPMonitor(
         SFTP_HOST, SFTP_PORT, SFTP_USERNAME, SFTP_PASSWORD, SFTP_DIRECTORY,
         RABBITMQ_HOST, RABBITMQ_CBOE_QUEUE, RABBITMQ_HEARTBEAT_QUEUE, WEBHOOK_URL,
