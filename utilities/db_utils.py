@@ -78,6 +78,7 @@ class AsyncDatabaseUtilities:
         - aiomysql.Error: If there's an error executing the query.
         - Exception: For any other unexpected errors during query execution.
         """
+        #TODO: Should return a DataFrame
         if not self.pool:
             await self.create_pool()
 
@@ -140,7 +141,7 @@ class AsyncDatabaseUtilities:
         self.logger.info(f"Query results fetched as DataFrame with shape {df.shape}")
         return df
 
-    async def get_book(self, ticker: str, active_effective_date: str) -> pd.DataFrame:
+    async def get_intraday_book(self, ticker: str, active_effective_date: str) -> pd.DataFrame:
         """
         Fetch book data for a specific ticker and date.
 
