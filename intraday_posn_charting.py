@@ -263,8 +263,8 @@ if __name__ == "__main__":
         '2024-07-15',
         'mm',
         strike_input=[5450, 5800],
-        expiration_input='all',
-        position_type='All',  # Can be 'All', 'Net', 'C', or 'P'
+        expiration_input=date(2024,7,16),
+        position_type='C',  # Can be 'All', 'Net', 'C', or 'P'
         img_path='path/to/watermark.png',  # Optional
         color_net='#0000FF',  # Blue for Net
         color_call='#00FF00',  # Green for Calls
