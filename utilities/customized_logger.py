@@ -64,3 +64,4 @@ class DailyRotatingFileHandler(TimedRotatingFileHandler):
             result.sort()
             result = result[:len(result) - self.backupCount]
         return result
+

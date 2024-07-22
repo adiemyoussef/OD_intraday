@@ -1,10 +1,12 @@
 import math
-from typing import List, Optional
+from typing import Optional, Union, List, Dict
 import aiomysql
 import pandas as pd
 import logging
-
-
+import asyncio
+import mysql.connector
+from enum import Enum
+from tqdm import tqdm
 class AsyncDatabaseUtilities:
     """
     A utility class for asynchronous database operations.
@@ -33,6 +35,8 @@ class AsyncDatabaseUtilities:
         self.pool = None
         self.logger = logger or logging.getLogger(__name__)
 
+    def set_event_loop(self, loop: asyncio.AbstractEventLoop):
+        self.loop = loop
     async def create_pool(self):
         """
         Create a connection pool to the database.
@@ -56,7 +60,8 @@ class AsyncDatabaseUtilities:
                     autocommit=True,
                     cursorclass=aiomysql.DictCursor,
                     minsize=1,
-                    maxsize=10
+                    maxsize=10,
+                    loop=self.loop or asyncio.get_event_loop()
                 )
                 self.logger.info("Database connection pool created successfully.")
             except aiomysql.Error as e:
@@ -66,16 +71,23 @@ class AsyncDatabaseUtilities:
                 self.logger.error(f"Unexpected error occurred while creating pool: {e}")
                 raise
 
-    async def execute_query(self, query: str, params: tuple = None) -> List[dict]:
+    async def execute_query(
+            self,
+            query: str,
+            params: Optional[tuple] = None,
+            return_type: str = 'dataframe'
+    ) -> Union[pd.DataFrame, List[Dict], List[tuple]]:
         """
-        Execute a SQL query and return the results.
+        Execute a SQL query and return the results in the specified format.
 
         :param query: SQL query string to execute
         :param params: Optional tuple of parameters to use with the query
-        :return: List of dictionaries representing the query results
+        :param return_type: Type of return value. Options: 'dataframe' (default), 'dict', 'tuple'
+        :return: Query results in the specified format
 
         Exceptions:
         - aiomysql.Error: If there's an error executing the query.
+        - ValueError: If an invalid return_type is specified.
         - Exception: For any other unexpected errors during query execution.
         """
         if not self.pool:
@@ -86,15 +98,29 @@ class AsyncDatabaseUtilities:
                 async with conn.cursor() as cursor:
                     await cursor.execute(query, params)
                     results = await cursor.fetchall()
-                    self.logger.info(f"Query executed successfully: {query[:50]}...")
-                    return results
+                    columns = [column[0] for column in cursor.description]
+
+                    if return_type.lower() == 'dataframe':
+
+                        result = pd.DataFrame(results, columns=columns)
+                        self.logger.info(f"Executed Query: {result.head()}")
+                        return result
+                    elif return_type.lower() == 'dict':
+                        return [dict(zip(columns, row)) for row in results]
+                    elif return_type.lower() == 'tuple':
+                        return results
+                    else:
+                        raise ValueError(
+                            f"Invalid return_type: {return_type}. Valid options are 'dataframe', 'dict', or 'tuple'.")
+
         except aiomysql.Error as e:
             self.logger.error(f"MySQL error occurred while executing query: {e}")
             raise
         except Exception as e:
             self.logger.error(f"Unexpected error occurred while executing query: {e}")
             raise
-
+        finally:
+            self.logger.info(f"Query executed: {query[:50]}...")
     async def execute_insert(self, query: str, params: tuple) -> bool:
         """
         Execute an INSERT SQL query.
@@ -124,23 +150,7 @@ class AsyncDatabaseUtilities:
             self.logger.error(f"Unexpected error occurred while executing insert: {e}")
             return False
 
-    async def fetch_dataframe(self, query: str, params: tuple = None) -> pd.DataFrame:
-        """
-        Execute a SQL query and return the results as a pandas DataFrame.
-
-        :param query: SQL query string to execute
-        :param params: Optional tuple of parameters to use with the query
-        :return: pandas DataFrame containing the query results
-
-        Exceptions:
-        - Same as execute_query method.
-        """
-        results = await self.execute_query(query, params)
-        df = pd.DataFrame(results) if results else pd.DataFrame()
-        self.logger.info(f"Query results fetched as DataFrame with shape {df.shape}")
-        return df
-
-    async def get_book(self, ticker: str, active_effective_date: str) -> pd.DataFrame:
+    async def get_initial_book(self, ticker: str, active_effective_date: str) -> pd.DataFrame:
         """
         Fetch book data for a specific ticker and date.
 
@@ -151,9 +161,9 @@ class AsyncDatabaseUtilities:
         Exceptions:
         - Same as fetch_dataframe method.
         """
-        query = """SELECT * FROM intraday.new_daily_book_format WHERE effective_date = %s AND ticker = %s;"""
+        query = f"""SELECT * FROM intraday.new_daily_book_format WHERE effective_date = '{active_effective_date}' AND ticker = '{ticker}';"""
         self.logger.info(f"Fetching book data for ticker {ticker} on date {active_effective_date}")
-        return await self.fetch_dataframe(query, (active_effective_date, ticker))
+        return await self.execute_query(query)
 
     async def insert_progress(self, dbName: str, dbTable: str, dataframe: pd.DataFrame):
         """
@@ -199,3 +209,192 @@ class AsyncDatabaseUtilities:
         :return: Generator yielding DataFrame chunks
         """
         return (df[pos:pos + size] for pos in range(0, len(df), size))
+
+
+
+
+
+
+class DatabaseStatus(Enum):
+    DISCONNECTED = "Disconnected"
+    CONNECTED = "Connected"
+    ERROR = "Error"
+
+class DatabaseUtilities:
+    """
+    A utility class for synchronous database operations with status tracking.
+    """
+
+    def __init__(self, host: str, port: int, user: str, password: str, database: str,
+                 logger: Optional[logging.Logger] = None):
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.database = database
+        self.connection = None
+        self.logger = logger or logging.getLogger(__name__)
+        self.status = DatabaseStatus.DISCONNECTED
+        self.last_error = None
+        self.chunksize_divider = 50
+
+    def connect(self):
+        if self.connection is None:
+            try:
+                self.connection = mysql.connector.connect(
+                    host=self.host,
+                    port=self.port,
+                    user=self.user,
+                    password=self.password,
+                    database=self.database
+                )
+                self.status = DatabaseStatus.CONNECTED
+                self.logger.info("Database connection created successfully.")
+            except mysql.connector.Error as e:
+                self.status = DatabaseStatus.ERROR
+                self.last_error = str(e)
+                self.logger.error(f"MySQL error occurred while creating connection: {e}")
+                raise
+            except Exception as e:
+                self.status = DatabaseStatus.ERROR
+                self.last_error = str(e)
+                self.logger.error(f"Unexpected error occurred while creating connection: {e}")
+                raise
+
+    def execute_query(
+            self,
+            query: str,
+            params: Optional[tuple] = None,
+            return_type: str = 'dataframe'
+    ) -> Union[pd.DataFrame, List[Dict], List[tuple]]:
+        if not self.connection:
+            self.connect()
+
+        try:
+            with self.connection.cursor(dictionary=True) as cursor:
+                cursor.execute(query, params)
+                results = cursor.fetchall()
+                columns = [column[0] for column in cursor.description]
+
+                if return_type.lower() == 'dataframe':
+                    result = pd.DataFrame(results)
+                    self.logger.info(f"Executed Query: {result.head()}")
+                    return result
+                elif return_type.lower() == 'dict':
+                    return results
+                elif return_type.lower() == 'tuple':
+                    return [tuple(row.values()) for row in results]
+                else:
+                    raise ValueError(
+                        f"Invalid return_type: {return_type}. Valid options are 'dataframe', 'dict', or 'tuple'.")
+
+        except mysql.connector.Error as e:
+            self.status = DatabaseStatus.ERROR
+            self.last_error = str(e)
+            self.logger.error(f"MySQL error occurred while executing query: {e}")
+            raise
+        except Exception as e:
+            self.status = DatabaseStatus.ERROR
+            self.last_error = str(e)
+            self.logger.error(f"Unexpected error occurred while executing query: {e}")
+            raise
+        finally:
+            self.logger.info(f"Query executed: {query[:50]}...")
+
+    def execute_insert(self, query: str, params: tuple) -> bool:
+        if not self.connection:
+            self.connect()
+
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, params)
+                self.connection.commit()
+                self.logger.info(f"Insert query executed successfully: {query[:50]}...")
+                return True
+        except mysql.connector.Error as e:
+            self.status = DatabaseStatus.ERROR
+            self.last_error = str(e)
+            self.logger.error(f"MySQL error occurred while executing insert: {e}")
+            return False
+        except Exception as e:
+            self.status = DatabaseStatus.ERROR
+            self.last_error = str(e)
+            self.logger.error(f"Unexpected error occurred while executing insert: {e}")
+            return False
+
+    def get_initial_book(self, ticker: str, active_effective_date: str) -> pd.DataFrame:
+        query = f"""SELECT * FROM intraday.new_daily_book_format WHERE effective_date = '{active_effective_date}' AND ticker = '{ticker}';"""
+        self.logger.info(f"Fetching book data for ticker {ticker} on date {active_effective_date}")
+        return self.execute_query(query)
+
+    def chunker(self, seq, size):
+        return (seq[pos:pos + size] for pos in range(0, len(seq), size))
+
+    def insert_progress(self, dbName: str, dbTable: str, dataframe: pd.DataFrame):
+        if not self.connection:
+            self.connect()
+
+        chunksize = math.ceil(len(dataframe) / self.chunksize_divider)
+        self.logger.info(
+            f"Inserting DataFrame with {len(dataframe)} rows into {dbName}.{dbTable} in chunks of {chunksize}")
+
+        with tqdm(total=len(dataframe), desc="Inserting data") as pbar:
+            for i, cdf in enumerate(self.chunker(dataframe, chunksize)):
+                try:
+
+                    # inserted = cdf.to_sql(dbTable, schema=dbName, con = self.engine, index=False, if_exists='append')
+                    # pbar.update(chunksize)
+                    with self.connection.cursor() as cursor:
+                        placeholders = ', '.join(['%s'] * len(cdf.columns))
+                        columns = ', '.join(cdf.columns)
+                        query = f"INSERT INTO {dbName}.{dbTable} ({columns}) VALUES ({placeholders})"
+                        values = [tuple(row) for row in cdf.values]
+                        cursor.executemany(query, values)
+                        self.connection.commit()
+                        pbar.update(len(cdf))
+
+                except mysql.connector.Error as e:
+                    self.status = DatabaseStatus.ERROR
+                    self.last_error = str(e)
+                    self.logger.error(f"MySQL error occurred while inserting chunk {i}: {e}")
+                except Exception as e:
+                    self.status = DatabaseStatus.ERROR
+                    self.last_error = str(e)
+                    self.logger.error(f"Unexpected error occurred while inserting chunk {i}: {e}")
+
+        self.logger.info(f"Completed insertion of {len(dataframe)} rows into {dbName}.{dbTable}")
+    @staticmethod
+    def chunker_(df: pd.DataFrame, size: int):
+        return (df[pos:pos + size] for pos in range(0, len(df), size))
+
+    def close(self):
+        if self.connection:
+            self.connection.close()
+            self.logger.info("Database connection closed.")
+            self.connection = None
+        self.status = DatabaseStatus.DISCONNECTED
+
+    def get_status(self) -> Dict[str, str]:
+        """
+        Get the current status of the database connection.
+
+        :return: A dictionary containing the status and last error (if any)
+        """
+        return {
+            "status": self.status.value,
+            "last_error": self.last_error if self.status == DatabaseStatus.ERROR else None
+        }
+
+    def check_connection(self) -> bool:
+        """
+        Check if the database connection is still alive and reconnect if necessary.
+
+        :return: True if the connection is alive (or successfully reconnected), False otherwise
+        """
+        try:
+            if self.connection is None or not self.connection.is_connected():
+                self.connect()
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to check/reconnect to database: {e}")
+            return False
