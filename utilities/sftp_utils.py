@@ -1,5 +1,6 @@
 import asyncio
 import asyncssh
+import io
 import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -33,7 +34,7 @@ class SFTPUtility:
     async def disconnect(self) -> None:
         """Close the SFTP connection."""
         if self.sftp_client:
-            self.sftp_client.close()
+            self.sftp_client.exit()
         if self.connection:
             self.connection.close()
         self.logger.info("SFTP connection closed.")
@@ -47,12 +48,12 @@ class SFTPUtility:
             self.logger.error(f"Error listing directory {directory}: {str(e)}")
             raise
 
-    async def read_file(self, file_path: str) -> str:
-        """Read the contents of a file."""
+    async def read_file(self, file_path: str) -> io.BytesIO:
+        """Read the contents of a file and return a file-like object."""
         try:
-            async with self.sftp_client.open(file_path, 'r') as file:
+            async with self.sftp_client.open(file_path, 'rb') as file:
                 content = await file.read()
-            return content
+            return io.BytesIO(content)
         except Exception as e:
             self.logger.error(f"Error reading file {file_path}: {str(e)}")
             raise
@@ -81,7 +82,7 @@ class SFTPUtility:
         try:
             file_attr = await self.sftp_client.stat(file_path)
             return {
-                "filename": file_path.split('/')[-1],
+                "file_name": file_path.split('/')[-1],
                 "path": file_path,
                 "size": file_attr.size,
                 "mtime": datetime.fromtimestamp(file_attr.mtime).isoformat(),
