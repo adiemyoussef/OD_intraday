@@ -251,11 +251,17 @@ def generate_animated_chart(data, date, participant, strike_input, expiration_in
 
 if __name__ == "__main__":
 
+
+    #TODO: Wrap this in a function where current_date is a param, participant is a param, position_type is a param
+    # return a gif that will be sent to discord
+
     # query = """
     # SELECT * FROM intraday.intraday_books
-    # where date(time_stamp) = '2024-07-16'
+    # where date(time_stamp) = 'current_date'
     # """
     # df = utils.return_query(query)
+
+
     df = pd.read_pickle("/Users/iliaselbekri/PycharmProjects/OD_intraday/20240716_intraday.pkl")
     breakpoint()
     generate_animated_chart(
