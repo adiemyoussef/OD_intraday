@@ -77,10 +77,13 @@ def process_greek(greek_name, poly_data, book):
     latest_greek = poly_data.sort_values('time_stamp', ascending=False).groupby('contract_id').first().reset_index()
     latest_greek = latest_greek[['contract_id', greek_name, 'time_stamp']]
     book = pd.merge(book, latest_greek, on='contract_id', how='left', suffixes=('', '_update'))
+    print(book.columns)
     update_col = f"{greek_name}_update"
     if update_col in book.columns:
         book[greek_name] = book[update_col].combine_first(book[greek_name])
         book.drop(columns=[update_col, "time_stamp_update"], inplace=True)
+
+
     return book
 
 @task(retries=3, retry_delay_seconds=60)
@@ -147,13 +150,14 @@ def get_initial_book(get_unrevised_book: Callable):
         #TODO: Verify that the current_date is a business date
 
         if limit2am <= current_time.time() < limit7pm:  # Between 2 AM and 7 PM
-
+            logger.info(f"Operating during Revised book hours")
             query = f"""
             SELECT * FROM intraday.new_daily_book_format 
             WHERE effective_date = '{current_date}' AND revised = 'Y'
             """
             session_book = db_utils.execute_query(query)
 
+            #logger.info(f"Got Revised book of {session_book['effective_date']}")
 
             if session_book.empty:
                 query = f"""
@@ -161,7 +165,7 @@ def get_initial_book(get_unrevised_book: Callable):
                 WHERE effective_date = '{current_date}'
                 """
                 session_book = db_utils.execute_query(query)
-
+                logger.info("Getting Unrevised book")
                 if session_book.empty:
                     #send_notification(f"No session_book found for {current_date}. Using unrevised session_book.")
                     return get_unrevised_book()
@@ -375,9 +379,8 @@ def fetch_poly_data(previous_date, current_date, previous_datetime, current_date
     WHERE
         date_only BETWEEN'{previous_date}' AND '{current_date}'
         AND time_stamp BETWEEN '{previous_datetime}' AND '{current_datetime}'
-    -- ORDER BY date_only DESC, time_stamp DESC
     """
-    #breakpoint()
+
     poly_data  = db_utils.execute_query(query)
     logger.info(f'Fetched {len(poly_data)} rows in {time.time() - start_time} sec.')
 
@@ -509,7 +512,7 @@ def ensure_connections():
 
 
 #----------------- FLOWS ------------------#
-@flow(name="Optimized Intraday Flow")
+@flow(name="Optimized Intraday Flow - Late Night")
 def Intraday_Flow():
     prefect_logger = get_run_logger()
     flow_start_time = time.time()
@@ -521,6 +524,8 @@ def Intraday_Flow():
         #Fast
         initial_book = get_initial_book(get_unrevised_book)
 
+        book_date_loaded = initial_book["effective_date"].unique()
+        logger.info(f"Initial Book of {book_date_loaded} loaded")
 
         previous_date, current_date, previous_datetime, current_datetime = prepare_poly_fetch()
 

@@ -1,14 +1,7 @@
 import os
-from dotenv import load_dotenv
 import pandas_market_calendars as mcal
 
 nyse = mcal.get_calendar('NYSE')
-# Load environment variables from a .env file if it exists
-# Load environment variables from a .env file if it exists
-#dotenv_path = os.path.join(os.path.dirname(__file__), 'config.env')
-dotenv_path = '/Users/youssefadiem/PycharmProjects/OptionsDepth_intraday/config.env'
-if os.path.exists(dotenv_path):
-    load_dotenv(dotenv_path)
 
 #---------------- DIGITAL OCEAN ---------------------------#
 # # - MySQL
