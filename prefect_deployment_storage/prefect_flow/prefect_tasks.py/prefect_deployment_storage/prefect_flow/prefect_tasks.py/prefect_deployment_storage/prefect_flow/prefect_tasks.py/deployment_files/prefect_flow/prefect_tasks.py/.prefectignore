@@ -1,0 +1,12 @@
+# Ignore Git-related files and directories
+.git/
+.gitignore
+
+# Ignore any other unnecessary files or directories
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+
+tests/

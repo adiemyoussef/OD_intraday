@@ -1,29 +1,35 @@
-import requests
+import asyncio
+import os
+from concurrent.futures import ThreadPoolExecutor
+
+import pandas as pd
 from aio_pika import Message, exceptions as aio_pika_exceptions
 import zipfile
-from datetime import datetime, timedelta
-import time
-import pandas_market_calendars as mcal
+import time as time_module
 from prefect import task, flow, get_run_logger
+from prefect.tasks import task_input_hash
+from prefect_dask import DaskTaskRunner
+from datetime import datetime, timedelta, time
+from zoneinfo import ZoneInfo
 from config.config import *
 import dill
 import multiprocessing as mp
 from dask import delayed, compute
 import dask
+import requests
 
 # Import your utility classes
-from utilities.sftp_utils import SFTPUtility
+from utilities.sftp_utils import *
 from utilities.db_utils import *
 from utilities.rabbitmq_utils import *
 from utilities.misc_utils import *
 from utilities.customized_logger import DailyRotatingFileHandler
+
 # Setup
 mp.set_start_method("fork", force=True)
 dill.settings['recurse'] = True
 
 
-loop = asyncio.get_event_loop()
-asyncio.set_event_loop(loop)
 def setup_custom_logger(name, log_level=logging.INFO):
     logger = logging.getLogger(name)
     logger.setLevel(log_level)
@@ -47,86 +53,25 @@ def setup_custom_logger(name, log_level=logging.INFO):
 
     return logger
 
-# Setup the NYSE calendar
-nyse = mcal.get_calendar('NYSE')
-
 DEBUG_MODE = True
+
 # Setup the main logger
 logger = setup_custom_logger("Prefect Flow", logging.DEBUG if DEBUG_MODE else logging.INFO)
-
 logger.setLevel(logging.INFO)  # Or any other level like logging.INFO, logging.WARNING, etc.
 
-# Initialize utility instances
+#-------- Initializing the Classes -------#
+db_utils = DatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, logger=logger)
+logger.debug(f"Initializing db status: {db_utils.get_status()}")
 
-rabbitmq_utils = AsyncRabbitMQUtilities(RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS, logger=logger)
+rabbitmq_utils = RabbitMQUtilities(RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS, logger=logger)
+logger.debug(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
+
 sftp_utils = SFTPUtility(SFTP_HOST,SFTP_PORT,SFTP_USERNAME,SFTP_PASSWORD, logger = logger)
-def terminate_pool(pool):
-    pool.terminate()
-    pool.join()
-    logger.debug("Multiprocessing pool terminated gracefully.")
-
-def parse_message(message):
-    if "heartbeat" in message.lower():
-        logger.debug("Heartbeat found in the message")
-        return None
-    parts = message.split(', ')
-    file_name = parts[0].split(': ')[1]
-    file_path = parts[1].split(': ')[1]
-    timestamp = parts[2].split(': ')[1]
-    return {
-        'file_name': file_name,
-        'file_path': file_path,
-        'timestamp': timestamp
-    }
-
-def process_wrapper(args):
-    return process_greek(*args)
-
-def verify_data(df):
-    missing_columns = set(INTRADAY_REQUIRED_COLUMNS) - set(df.columns)
-    if missing_columns:
-        raise ValueError(f"Missing required column(s): {missing_columns}")
-
-    expected_types = {
-        'trade_datetime': 'object',
-        'ticker': 'object',
-        'security_type': 'int64',
-        'option_symbol': 'object',
-        'expiration_date': 'object',
-        'strike_price': 'float64',
-        'call_put_flag': 'object',
-        'days_to_expire': 'int64',
-        'series_type': 'object',
-        'previous_close': 'float64'
-    }
-
-    for col, expected_type in expected_types.items():
-        if df[col].dtype != expected_type:
-            raise ValueError(f"Column {col} has incorrect data type. Expected {expected_type}, got {df[col].dtype}")
-
-    if not df['security_type'].isin(VALID_SECURITY_TYPES).all():
-        raise ValueError("Invalid security_type values found")
-
-    if not df['call_put_flag'].isin(VALID_CALL_PUT_FLAGS).all():
-        raise ValueError("Invalid call_put_flag values found")
-
-    if not df['series_type'].isin(VALID_SERIES_TYPES).all():
-        raise ValueError("Invalid series_type values found")
-
-    volume_qty_columns = [col for col in df.columns if
-                          (col.endswith('_qty') or col.endswith('_vol')) and not col.startswith('total_')]
-    for col in volume_qty_columns:
-        if not ((df[col] >= 0) & df[col].apply(
-                lambda x: isinstance(x, (int, np.integer)) or (isinstance(x, float) and x.is_integer()))).all():
-            raise ValueError(f"Column {col} contains negative or non-integer values")
-
-    if not (df['strike_price'] > 0).all():
-        raise ValueError("strike_price should be positive")
-
-    if not (df['days_to_expire'] >= 0).all():
-        raise ValueError("days_to_expire should be non-negative")
-
-    return df
+#-------------------------------------------#
+def send_notification(message: str):
+    prefect_logger = get_run_logger()
+    # Implement your notification logic here
+    prefect_logger.warning(f"Notification: {message}")
 
 def process_greek(greek_name, poly_data, book):
     latest_greek = poly_data.sort_values('time_stamp', ascending=False).groupby('contract_id').first().reset_index()
@@ -138,136 +83,121 @@ def process_greek(greek_name, poly_data, book):
         book.drop(columns=[update_col, "time_stamp_update"], inplace=True)
     return book
 
-#------------- TASKS -----------------#
 @task(retries=3, retry_delay_seconds=60)
-async def process_last_message(rabbit_utils: AsyncRabbitMQUtilities, logger: Optional[logging.Logger] = None):
-    logger = get_run_logger()
+async def process_last_message_in_queue(rabbitmq_utils:RabbitMQUtilities):
+    prefect_logger = get_run_logger()
+    prefect_logger.debug("process_last_message_in_queue")
     function_start_time = time.time()
     try:
-        await rabbitmq_utils.connect()
-
+        rabbitmq_utils.connect()
         expected_file_name = determine_expected_file_name()
 
         logger.info(f"Expected file name: {expected_file_name}")
 
-
-        RETRY_DELAY = 5  # in seconds
-        MAX_RUNTIME = 3600  # 1 hour in seconds
-
-
         start_time = datetime.now()
 
-        while (datetime.now() - start_time).total_seconds() < MAX_RUNTIME:
+        while (datetime.now() - start_time).total_seconds() < RABBITMQ_MAX_RUNTIME:
             try:
-                messages = await fetch_all_queue_messages(rabbitmq_utils, RABBITMQ_CBOE_QUEUE, logger)
+                messages = rabbitmq_utils.fetch_all_messages_in_queue(RABBITMQ_CBOE_QUEUE)
                 message_count = len(messages)
                 logger.debug(f"Messages in queue: {message_count}")
 
                 if messages:
-                    for message in reversed(messages):  # Process from newest to oldest
-                        msg_decoded = message.body.decode('utf-8')
+                    for method_frame, properties, body in reversed(messages):  # Process from newest to oldest
+                        msg_decoded = body.decode('utf-8')
                         msg_body = json.loads(msg_decoded)
                         file_name = msg_body.get("filename")
 
                         if file_name == expected_file_name:
-                            logger.info(f"Expected file {expected_file_name} found in the message.")
-                            return message, msg_body
-
-                    logger.debug(f"Expected file {expected_file_name} not found. Retrying in {RETRY_DELAY} seconds...")
+                            logger.debug(f"[FOUND]: Expected file {expected_file_name}")
+                            return (method_frame, properties, body), msg_body
+                        else:
+                            rabbitmq_utils.channel.basic_nack(delivery_tag=method_frame.delivery_tag, requeue=True)
+                            logger.debug(f"[NOT FOUND]: Expected file {expected_file_name} not found. Retrying in {PROCESS_MESSAGE_QUEUE_RETRY_DELAY} seconds...")
                 else:
-                    logger.debug(f"Queue is empty. Retrying in {RETRY_DELAY} seconds...")
+                    logger.debug(f"Queue is empty. Retrying in {PROCESS_MESSAGE_QUEUE_RETRY_DELAY} seconds...")
 
-                await asyncio.sleep(RETRY_DELAY)
+                time.sleep(PROCESS_MESSAGE_QUEUE_RETRY_DELAY)
 
             except Exception as e:
                 logger.error(f"Error occurred while checking messages: {e}")
-                await asyncio.sleep(RETRY_DELAY)
+                time.sleep(PROCESS_MESSAGE_QUEUE_RETRY_DELAY)
 
-        logger.info(f"Maximum runtime reached. Expected file {expected_file_name} not found.")
-        #send_discord_message()
+        logger.debug(f"Maximum runtime reached. Expected file {expected_file_name} not found.")
         return None, None
 
     except Exception as e:
         logger.error(f"Error in process_last_message: {e}")
         raise
+
     finally:
         # Don't close the connection here
         pass
 
 
-
-@task(retries=2)
-async def get_initial_book(msg_body, db_utils: AsyncDatabaseUtilities):
-
-    #book = pd.read_csv("/Users/youssefadiem/Downloads/book_20240716.csv")
-    # return book
-    logger = get_run_logger()
-
+@task(retries=2, cache_key_fn=task_input_hash, cache_expiration=timedelta(hours=1))
+def get_initial_book(get_unrevised_book: Callable):
+    prefect_logger = get_run_logger()
     try:
-        # Explicitly import time here to avoid conflicts
-        from datetime import time
-        file_name = msg_body['filename']
-        parts = file_name.split('_')
-        session_date_str = parts[2]
-        session_time_str = f"{parts[3]}_{parts[4]}"
+        current_time = datetime.now(ZoneInfo("America/New_York"))
+        current_date = current_time.date()
+        limit2am = current_time.replace(hour=2, minute=0, second=0, microsecond=0).time()
+        limit7pm = current_time.replace(hour=19, minute=0, second=0, microsecond=0).time()
 
-        session_date = datetime.strptime(session_date_str, '%Y-%m-%d').date()
+        #TODO: Verify that the current_date is a business date
 
-        current_time = datetime.now().time()
+        if limit2am <= current_time.time() < limit7pm:  # Between 2 AM and 7 PM
 
-        # if time(2, 0) <= current_time < time(19, 0):
-        #     logger.info(f"Getting revised book for session date: {session_date}")
-        #     query = f"SELECT * FROM intraday.new_daily_book_format WHERE effective_date = '{session_date}' AND revised = 'Y'"
-        #
-        #     book = await db_utils.execute_query(query)
-        #
-        #     breakpoint()
-        #     if book.empty:
-        #         logger.warning(f"No revised book found for session date: {session_date}")
-        #         return await get_unrevised_book(session_date, db_utils)
-        #     else:
-        #         logger.info(f"Revised book loaded for date: {session_date}")
-        #         return book
-        if time(2, 0) <= current_time < time(19, 0):
-            logger.info(f"Getting revised book for session date: {session_date}")
-            query = f"SELECT * FROM intraday.new_daily_book_format WHERE effective_date = %s AND revised = 'Y'"
+            query = f"""
+            SELECT * FROM intraday.new_daily_book_format 
+            WHERE effective_date = '{current_date}' AND revised = 'Y'
+            """
+            session_book = db_utils.execute_query(query)
 
-            try:
-                # Use asyncio.to_thread to run the database query in a separate thread
-                #book = await asyncio.to_thread(db_utils.execute_query, query, params=(session_date,))
-                book = db_utils.execute_query(query, params=(session_date,))
-                #book = await db_utils.execute_query(query, params=(session_date,))
 
-                print(f'Book is being returned')
-                #book = pd.read_csv("/Users/youssefadiem/Downloads/book_20240716.csv")
-                if book.empty:
-                    logger.warning(f"No revised book found for session date: {session_date}")
-                    return await get_unrevised_book(session_date, db_utils)
+            if session_book.empty:
+                query = f"""
+                SELECT * FROM intraday.new_daily_book_format 
+                WHERE effective_date = '{current_date}'
+                """
+                session_book = db_utils.execute_query(query)
+
+                if session_book.empty:
+                    #send_notification(f"No session_book found for {current_date}. Using unrevised session_book.")
+                    return get_unrevised_book()
                 else:
-                    logger.info(f"Revised book loaded for date: {session_date}")
-                    return book
-            except Exception as e:
-                logger.error(f"Error executing query: {e}")
-                raise
-        else:
-            logger.info("Outside of 02:00 AM - 07:00 PM window, getting unrevised book")
-            return await get_unrevised_book(session_date, db_utils)
+                    #send_notification(f"Unrevised session_book found for {current_date}. Proceeding with caution.")
+                    return session_book
+            else:
+                prefect_logger.debug(f"Revised session_book loaded for date: {current_date}")
+                return session_book
+        else:  # Between 8 PM and 2 AM
+            prefect_logger.debug("Using unrevised session_book due to time of day.")
+            return get_unrevised_book()
 
     except Exception as e:
-        logger.error(f"Error getting initial book: {e}")
+        prefect_logger.error(f"Error getting initial session_book: {e}")
         raise
+# This function will be implemented later
+def get_unrevised_book():
+
+
+    unrevised_book = pd.read_csv('/Users/youssefadiem/Downloads/intradaybook_20240723.csv')
+
+
+    return unrevised_book
 
 @task(retries=2)
-async def verify_and_process_message(sftp_utility: SFTPUtility,msg_body):
-    # Your existing verify_and_process_message task
-
-
-    file_path = msg_body["path"] #: "/subscriptions/order_000059435/item_000068201
+def get_file_from_sftp(msg_body):
+    logger.debug("get_file_from_sftp")
+    file_path = msg_body["path"]
     try:
+        sftp_utils.connect()
 
-        await sftp_utility.connect()
-        file_info = await sftp_utility.get_file_info(file_path)
-        file_data = await sftp_utility.read_file(file_path)
+        file_info = sftp_utils.get_file_info(file_path)
+        file_data = sftp_utils.read_file(file_path)
+        logger.debug(f'[verify_and_process_message]: {file_info} {file_data}')
+
 
         return file_info, file_data, file_info['mtime']
 
@@ -275,12 +205,11 @@ async def verify_and_process_message(sftp_utility: SFTPUtility,msg_body):
         logger.error(f"Error verifying and processing file {file_path}: {str(e)}")
         raise
     finally:
-        await sftp_utility.disconnect()
-
+        sftp_utils.disconnect()
 
 @task(retries=2)
-async def read_and_verify_file(file_info, file_data):
-    logger = get_run_logger()
+async def read_and_verify_sftp_file(file_info, file_data):
+    prefect_logger = get_run_logger()
     try:
         with zipfile.ZipFile(file_data, 'r') as z:
             csv_file = z.namelist()[0]
@@ -291,7 +220,7 @@ async def read_and_verify_file(file_info, file_data):
                     chunks.append(chunk)
                 df = pd.concat(chunks, ignore_index=True)
 
-        logger.info(f"File read and verified successfully: {file_info['file_name']}")
+        logger.debug(f"File read and verified successfully: {file_info['file_name']}")
 
         if 'call_or_put' in df.columns:
             df = df.rename(columns={'call_or_put': 'call_put_flag'})
@@ -312,7 +241,7 @@ async def read_and_verify_file(file_info, file_data):
 
 @task(retries=2)
 async def build_latest_book(initial_book, intraday_data):
-        logger.info('Entered update_book_intraday')
+        logger.debug('Entered update_book_intraday')
         if 'id' in initial_book.columns:
             initial_book = initial_book.drop(columns=['id'])
 
@@ -430,55 +359,49 @@ async def build_latest_book(initial_book, intraday_data):
                             'total_customers_posn']
         merged = merged.loc[(merged[position_columns] != 0).any(axis=1)]
         merged = merged.sort_values(['expiration_date_original', 'mm_posn'], ascending=[True, False])
+
+        logger.debug('Finished update_book_intraday')
+
         return merged
 
 
-@task(retries=2)
-async def update_book_with_latest_greeks(book: pd.DataFrame, db_utils: DatabaseUtilities) -> pd.DataFrame:
-    logger.info('Entered update_book_with_latest_greeks')
-    latest_datetime = book["effective_datetime"].max()
-    effective_datetime = latest_datetime
-    previous_business_day = get_previous_business_day(effective_datetime, nyse)
-    effective_date = effective_datetime.date()
-    effective_time = effective_datetime.time()
-    previous_date = previous_business_day.date()
-    start_time = time.time()  # Start the timer
-
-    # Define the start of the 24-hour rolling window
-    rolling_window_start = effective_datetime - timedelta(days=1)
-
+@task
+def fetch_poly_data(previous_date, current_date, previous_datetime, current_datetime):
+    start_time = time.time()
     query = f"""
     SELECT option_symbol, contract_type, strike_price, expiration_date, time_stamp,
            implied_volatility, delta, gamma, vega
     FROM landing.poly_options_data
     WHERE
-        date_only >= '{previous_date}'
-        AND date_only <= '{effective_date}'
-        AND (
-            date_only < '{effective_date}'
-            OR (date_only = '{effective_date}' AND time_stamp <= '{effective_datetime}')
-        )
-    ORDER BY date_only DESC, time_stamp DESC
+        date_only BETWEEN'{previous_date}' AND '{current_date}'
+        AND time_stamp BETWEEN '{previous_datetime}' AND '{current_datetime}'
+    -- ORDER BY date_only DESC, time_stamp DESC
     """
+    #breakpoint()
+    poly_data  = db_utils.execute_query(query)
+    logger.info(f'Fetched {len(poly_data)} rows in {time.time() - start_time} sec.')
 
-    query_2 = f"""
-    SELECT option_symbol, contract_type, strike_price, expiration_date, time_stamp,
-           implied_volatility, delta, gamma, vega
-    FROM landing.poly_options_data
-    WHERE
-        time_stamp >= '{rolling_window_start}'
-        AND time_stamp <= '{effective_datetime}'
-    ORDER BY time_stamp DESC
-    """
-    # breakpoint()
-    poly_data = db_utils.execute_query(query)
+    return poly_data
 
-    logger.info(f'Fetched {len(poly_data)} from poly')
+@task
+def filter_and_log_nan_values(final_book):
+    nan_rows = final_book[final_book.isna().any(axis=1)]
+    nan_contracts = nan_rows['option_symbol'].unique()
+    logger.debug(f"Filtered out {len(nan_rows)} rows with NaN values")
+    logger.debug(f"Unique contracts filtered: {nan_contracts}")
+    logger.debug(f"MM positions of filtered contracts: \n{nan_rows.groupby('option_symbol')['mm_posn'].sum()}")
 
+    return final_book.dropna()
+@task
+def update_book_with_latest_greeks(book: pd.DataFrame, poly_data: pd.DataFrame) -> pd.DataFrame:
+    logger.debug('Entered update_book_with_latest_greeks')
 
-    #poly_data = pd.concat(utils.return_query(query))  # Assuming return_query yields DataFrames
-    elapsed_time = time.time() - start_time  # End the timer
-    logger.info(f"{elapsed_time:.2f} seconds to get the greeks")
+    # Create a key for faster merge
+    book['strike_price'] = book['strike_price'].astype(int)
+    book['contract_id'] = book['option_symbol'] + '_' + \
+                          book['call_put_flag'] + '_' + \
+                          book['strike_price'].astype(str) + '_' + \
+                          pd.to_datetime(book['expiration_date_original']).dt.strftime('%Y-%m-%d')
 
     poly_data.rename(columns={'implied_volatility': 'iv'}, inplace=True)
     poly_data['contract_id'] = poly_data['option_symbol'] + '_' + \
@@ -486,121 +409,209 @@ async def update_book_with_latest_greeks(book: pd.DataFrame, db_utils: DatabaseU
                                poly_data['strike_price'].astype(str) + '_' + \
                                poly_data['expiration_date']
 
-    book['strike_price'] = book['strike_price'].astype(int)
-    book['contract_id'] = book['option_symbol'] + '_' + \
-                          book['call_put_flag'] + '_' + \
-                          book['strike_price'].astype(str) + '_' + \
-                          pd.to_datetime(book['expiration_date_original']).dt.strftime('%Y-%m-%d')
 
-    tasks = [delayed(process_greek)(greek_name, poly_data, book.copy()) for greek_name in ['iv', 'delta', 'gamma', 'vega']]
-    results = compute(*tasks)
+    # Filter and keep the rows without NaN values
+    mask = ~book.drop(columns=['time_stamp']).isna().any(axis=1)
+    book = book[mask]
 
-    final_book = results[0]
-    for result in results[1:]:
-        final_book.update(result)
+    false_count = (~mask).sum()
+    logger.debug("Number of rows with NaN values in greeks: {}".format(false_count))
 
-    book.drop(columns=['contract_id'], axis=1, inplace=True)
-    book['time_stamp'] = get_eastern_time()
-
-    elapsed_time = time.time() - start_time  # End the timer
-    logger.info(f"{elapsed_time:.2f} seconds to finalize the book")
-    return book
-
-#--------------- FLOW ------------#
-@flow(name="Intraday flow")
-async def process_intraday_data():
-    logger = get_run_logger()
-    flow_start_time = time.time()
+    start_time = time.time()
+    cpu_count = os.cpu_count()
+    logger.info(f'Got {cpu_count} CPUs')
     try:
-        # Ensure database connection pool is created
-        # db_utils = AsyncDatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME)
-        # await db_utils.create_pool()
-        db_utils = DatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME)
+        with ThreadPoolExecutor(max_workers=cpu_count) as executor:
+            futures = [executor.submit(process_greek, greek_name, poly_data, book.copy())
+                       for greek_name in ['iv', 'delta', 'gamma', 'vega']]
+            results = [future.result() for future in futures]
+
+        final_book = results[0]
+        for result in results[1:]:
+            final_book.update(result)
+
+    except Exception as e:
+        logger.error(f"Error In multi-Processing): {e}")
+
+        return pd.DataFrame()
 
 
-        # Process last message: Should give me the file to process according to the time of the day
-        message, msg_body = await process_last_message(rabbitmq_utils, logger)
-        logger.info(f"Process_last_message returned: {msg_body}")
+    final_book.drop(columns=['contract_id'], axis=1, inplace=True)
+    final_book['time_stamp'] = get_eastern_time()
+
+    elapsed_time = time.time() - start_time
+    logger.debug(f"{elapsed_time:.2f} seconds to update_book_with_latest_greeks")
+
+    logger.debug(f"[END OF update_book_with_latest_greeks] db status: {db_utils.get_status()}")
+
+    return final_book
+
+def prepare_poly_fetch(current_time=None):
+    """
+    Prepare parameters for the poly data fetch query based on the current time.
+
+    :param current_time: Optional. The current time to use for calculations.
+                         If None, uses the actual current time in New York timezone.
+    :return: Tuple of (previous_date, current_date, previous_datetime, current_datetime)
+    """
+    nyse = mcal.get_calendar('NYSE')
+
+    if current_time is None:
+        current_time = datetime.now(ZoneInfo("America/New_York"))
+
+    current_date = current_time.date()
+
+    # Find the previous business day
+    prev_5_days = current_date - timedelta(days=5)
+    business_days = nyse.valid_days(start_date=prev_5_days, end_date=current_date)
+    previous_date = business_days[-2].date()  # Second to last business day
+
+    # Determine the current datetime (rounded to nearest 10 minutes)
+    current_datetime = current_time.replace(minute=(current_time.minute // 10) * 10, second=0, microsecond=0)
+
+    # Set the previous datetime to the same time on the previous business day
+    previous_datetime = datetime.combine(previous_date, current_datetime.time())
+
+    # Format dates and datetimes for the query
+    previous_date_str = previous_date.strftime('%Y-%m-%d')
+    current_date_str = current_date.strftime('%Y-%m-%d')
+    previous_datetime_str = previous_datetime.strftime('%Y-%m-%d %H:%M:%S')
+    current_datetime_str = current_datetime.strftime('%Y-%m-%d %H:%M:%S')
+
+    logger.debug(f"Prepared poly fetch parameters: "
+                f"Previous Date: {previous_date_str}, "
+                f"Current Date: {current_date_str}, "
+                f"Previous Datetime: {previous_datetime_str}, "
+                f"Current Datetime: {current_datetime_str}")
+
+    return previous_date_str, current_date_str, previous_datetime_str, current_datetime_str
+
+@task(retries=3, retry_delay_seconds=5)
+def ensure_connections():
+    prefect_logger = get_run_logger()
+    max_attempts = 5
+    attempt = 0
+    while attempt < max_attempts:
+        db_status = db_utils.get_status()
+        rabbitmq_status = rabbitmq_utils.get_status()
+
+        if db_status['status'] == 'Connected' and rabbitmq_status['status'] == 'Connected':
+            prefect_logger.debug("Both database and RabbitMQ connections are established.")
+            return True
+
+        prefect_logger.warning(
+            f"Attempt {attempt + 1}: Connections not ready. DB: {db_status}, RabbitMQ: {rabbitmq_status}")
+        time.sleep(5)  # Wait for 5 seconds before retrying
+        attempt += 1
+
+    prefect_logger.error("Failed to establish connections after maximum attempts.")
+    return False
+
+
+#----------------- FLOWS ------------------#
+@flow(name="Optimized Intraday Flow")
+def Intraday_Flow():
+    prefect_logger = get_run_logger()
+    flow_start_time = time.time()
+
+    db_utils.connect()
+    # rabbitmq_utils.connect()
+
+    try:
+        #Fast
+        initial_book = get_initial_book(get_unrevised_book)
+
+
+        previous_date, current_date, previous_datetime, current_datetime = prepare_poly_fetch()
+
+
+        # Fetch poly data: Slow
+        poly_data = fetch_poly_data(previous_date, current_date, previous_datetime, current_datetime)
+
+        rabbitmq_utils.connect()
+
+        # Ensure connections are established
+        connections_ready = ensure_connections()
+        if not connections_ready:
+            prefect_logger.error("Unable to establish necessary connections. Aborting flow.")
+            return
+
+        prefect_logger.debug(f"[process_intraday_data] db status: {db_utils.get_status()}")
+        prefect_logger.debug(f"[process_intraday_data] rabbitmq status: {rabbitmq_utils.get_status()}")
+
+        message, msg_body = process_last_message_in_queue(rabbitmq_utils)
+        message_frame, message_properties, _ = message
 
         if message is None and msg_body is None:
-            logger.info("Expected file not found within the time limit. Ending the flow.")
+            logger.debug("No messages to process in the queue. Ending the flow.")
             return
-        # Depending on the time of the day, I should already have my initial book:
-        # It should be cached and return the same value throughout the day
-        initial_book = await get_initial_book(msg_body, db_utils)
 
-        #breakpoint()
+        if message is None:
+            logger.debug("No message to process in process_intraday_data Flow")
+            return
+
+        logger.debug(f"Process_last_message returned: {msg_body}")
+
         try:
-
-            # Once I have the file that I should read, it goes through the process
-            file_info, file_data, file_last_modified = await verify_and_process_message(sftp_utils,msg_body)
-
+            file_info, file_data, file_last_modified = get_file_from_sftp(msg_body)
             if file_info:
-                logger.info(f"FILE INFO ---> {file_info}")
-                df = await read_and_verify_file(file_info, file_data)
+                logger.debug(f"FILE INFO ---> {file_info}")
+                df = read_and_verify_sftp_file(file_info, file_data)
                 if df is not None and not df.empty:
-                    logger.info(f"Successfully processed file: {file_info['file_name']}")
-                    logger.info(f"DataFrame shape: {df.shape}")
-                    latest_book = await build_latest_book(initial_book, df)
-                    final_book = await update_book_with_latest_greeks(latest_book, db_utils)
+                    logger.debug(f"Successfully processed file: {file_info['file_name']}")
+                    logger.debug(f"DataFrame shape: {df.shape}")
+                    latest_book = build_latest_book(initial_book, df)
+                    final_book = update_book_with_latest_greeks(latest_book, poly_data)
+                    logger.debug(f"Len of final_book: {len(final_book)}")
 
-                    db_utils.insert_progress('intraday', 'intraday_books', final_book)
+                    # Filter out NaN values and log
+                    filtered_final_book = filter_and_log_nan_values(final_book)
+                    logger.debug(f"Len of filtered_final_book: {len(final_book)}")
 
-                    # Acknowledge the message
-                    await rabbitmq_utils.safe_ack(message)
-                    logger.info(f"Message acknowledged for file: {file_info['file_name']}")
+                    #TODO: Filter out the rows where there's Nan Values and log the unique contract that have been filtered out
+                    #      with also the mm_position of these contract to see which one could impact
+                    db_utils.insert_progress('intraday', 'intraday_books',filtered_final_book)
 
-                    # Add post-processing delay
-                    POST_ACK_DELAY = 5  # in seconds
-                    logger.info(f"Waiting for {POST_ACK_DELAY} seconds to allow server to update message count...")
-                    await asyncio.sleep(POST_ACK_DELAY)
+                    rabbitmq_utils.ensure_connection()
+                    logger.info(f'RabbitMQ Status: {rabbitmq_utils.get_status()}')
 
-                    # Log remaining message count
-                    queue = await rabbitmq_utils.get_queue(RABBITMQ_CBOE_QUEUE)
-                    message_count = queue.declaration_result.message_count
-                    logger.info(f"Messages remaining in the queue: {message_count}")
+                    MAX_ACK_RETRIES = 3
+                    for attempt in range(MAX_ACK_RETRIES):
+                        try:
+                            rabbitmq_utils.safe_ack(message_frame.delivery_tag,msg_body)
+                            logger.debug(f"Message acknowledged for file: {file_info['file_name']}")
+                            break
+                        except Exception as e:
+                            logger.error(f"Error acknowledging message {file_info['file_name']} (attempt {attempt + 1}/{MAX_ACK_RETRIES}): {e}")
+                            if attempt == MAX_ACK_RETRIES - 1:
+                                logger.error(f"Failed to acknowledge message {file_info['file_name']} after all retries.")
+                            time.sleep(10)  # Wait a bit before retrying
+                    logger.info(f"Finished flow in {time.time()-flow_start_time} sec.")
+                    # total_time_taken = time.time() - flow_start_time
+                    # logger.debug(f"Total time taken: {total_time_taken:.2f} seconds")
 
-                    total_time_taken = time.time() - flow_start_time
-                    logger.info(f"Total time taken: {total_time_taken:.2f} seconds")
+                    # time_difference = datetime.now() - file_last_modified
+                    # time_difference_seconds = time_difference.total_seconds()
+                    # logger.debug(
+                    #     f"Time difference between file last modified and process end: {time_difference_seconds} seconds")
 
-                    time_difference = datetime.now() - file_last_modified
-                    time_difference_seconds = time_difference.total_seconds()
-                    logger.info(
-                        f"Time difference between file last modified and process end: {time_difference_seconds} seconds")
-
-                    # Send webhook to Discord bot
-                    webhook_url = "http://localhost:8081/webhook"
-                    payload = {
-                        "event": "prefect_flow_completed",
-                        "command": "depthview",
-                        "data": {
-                            "message": f"Processing completed for file: {file_info['file_name']}",
-                            "total_time": f"{time.time() - flow_start_time:.2f} seconds",
-                        }
-                    }
-                    response = requests.post(webhook_url, json=payload)
-                    response.raise_for_status()
-                    logger.info("Webhook sent to Discord bot")
                 else:
                     logger.warning(f"DataFrame is empty or None for file: {file_info['file_name']}")
-                    await rabbitmq_utils.safe_nack(message, requeue=True)
+                    rabbitmq_utils.safe_nack(message_frame.delivery_tag, requeue=True)
             else:
                 logger.warning("File info is None")
-                await rabbitmq_utils.safe_nack(message, requeue=True)
+                rabbitmq_utils.safe_nack(message_frame.delivery_tag, requeue=True)
         except Exception as e:
             logger.error(f"Error processing message: {e}")
-            await rabbitmq_utils.safe_nack(message, requeue=True)
+            rabbitmq_utils.safe_nack(message_frame.delivery_tag, requeue=True)
 
     except Exception as e:
         logger.error(f"Error in process_intraday_data flow: {e}")
-    finally:
-        # Ensure connections are closed
-        await rabbitmq_utils.close()
-        db_utils.close()
 
-
-async def main():
-    await process_intraday_data()
 
 if __name__ == "__main__":
-    asyncio.run(process_intraday_data())
+    """
+    Synchronous Flow
+    """
+    Intraday_Flow()
+

@@ -278,7 +278,7 @@ class DatabaseUtilities:
 
                 if return_type.lower() == 'dataframe':
                     result = pd.DataFrame(results)
-                    self.logger.info(f"Executed Query: {result.head()}")
+                    self.logger.debug(f"Executed Query: {result.head()}")
                     return result
                 elif return_type.lower() == 'dict':
                     return results
@@ -299,7 +299,7 @@ class DatabaseUtilities:
             self.logger.error(f"Unexpected error occurred while executing query: {e}")
             raise
         finally:
-            self.logger.info(f"Query executed: {query[:50]}...")
+            self.logger.debug(f"Query executed: {query}...")
 
     def execute_insert(self, query: str, params: tuple) -> bool:
         if not self.connection:
