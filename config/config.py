@@ -1,4 +1,5 @@
 import os
+<<<<<<< HEAD
 import pandas_market_calendars as mcal
 
 nyse = mcal.get_calendar('NYSE')
@@ -7,17 +8,34 @@ nyse = mcal.get_calendar('NYSE')
 # # - MySQL
 DB_HOST = os.getenv('DB_HOST')
 DB_PORT = int(os.getenv('DB_PORT'))
+=======
+from dotenv import load_dotenv
+
+# Load environment variables from a .env file if it exists
+load_dotenv()
+
+#---------------- DIGITAL OCEAN ---------------------------#
+# - MySQL
+DB_HOST = os.getenv('DB_HOST')
+DB_PORT = os.getenv('DB_PORT')
+>>>>>>> 0ee2049 (changed the config files)
 DB_USER = os.getenv('DB_USER')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_NAME = os.getenv('DB_NAME')
 DB_DRIVER = os.getenv('DB_DRIVER')
+<<<<<<< HEAD
 #
 # # - Spaces configuration
+=======
+
+# - Spaces configuration
+>>>>>>> 0ee2049 (changed the config files)
 DO_SPACES_URL = os.getenv('DO_SPACES_URL')
 DO_SPACES_KEY = os.getenv('DO_SPACES_KEY')
 DO_SPACES_SECRET = os.getenv('DO_SPACES_SECRET')
 DO_SPACES_BUCKET = os.getenv('DO_SPACES_BUCKET')
 LOG_FILE_KEY = os.getenv('LOG_FILE_KEY')
+<<<<<<< HEAD
 #
 # #---------------- SFTP ---------------------------#
 # #- Server
@@ -26,6 +44,26 @@ SFTP_PORT = int(os.getenv('SFTP_PORT'))
 SFTP_USERNAME = os.getenv('SFTP_USERNAME')
 SFTP_PASSWORD = os.getenv('SFTP_PASSWORD_OD')
 SFTP_DIRECTORY = os.getenv('SFTP_DIRECTORY')
+=======
+
+#---------------- SFTP ---------------------------#
+#- Server
+SFTP_HOST = os.getenv('SFTP_HOST')
+SFTP_PORT = int(os.getenv('SFTP_PORT'))
+SFTP_USERNAME = os.getenv('SFTP_USERNAME')
+SFTP_PASSWORD = os.getenv('SFTP_PASSWORD')
+SFTP_DIRECTORY = os.getenv('SFTP_DIRECTORY')
+
+
+#---------------- SFTP ---------------------------#
+#- Server
+SFTP_HOST = os.getenv('SFTP_HOST', 'sftp.datashop.livevol.com')
+SFTP_PORT = int(os.getenv('SFTP_PORT', 22))
+SFTP_USERNAME = os.getenv('SFTP_USERNAME', 'contact_optionsdepth_com')
+SFTP_PASSWORD = os.getenv('SFTP_PASSWORD', 'Salam123+-')
+SFTP_DIRECTORY = os.getenv('SFTP_DIRECTORY', '/subscriptions/order_000059435/item_000068201')
+
+>>>>>>> 0ee2049 (changed the config files)
 
 #- Monitoring
 SFTP_BASE_SLEEP_TIME = 10                    # Base sleep time in seconds
