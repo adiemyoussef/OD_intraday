@@ -104,3 +104,6 @@ Thumbs.db
 *.bak
 *.tmp
 *.temp
+
+
+echo "prefect_deployment_storage/" >> .gitignore
