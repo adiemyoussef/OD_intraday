@@ -54,6 +54,14 @@ def setup_custom_logger(name, log_level=logging.INFO):
 logger = setup_custom_logger("Intraday Flow", logging.DEBUG if DEBUG_MODE else logging.INFO)
 logger.setLevel(LOG_LEVEL)  # Or any other level like logging.INFO, logging.WARNING, etc.
 
+# PRINTS-----
+
+print(f'DB_HOST:{DB_HOST}')
+print(f'DB_PORT:{DB_PORT}')
+print(f'DB_USER:{DB_USER}')
+print(f'DB_PASSWORD:{DB_PASSWORD}')
+print(f'DB_NAME:{DB_NAME}')
+
 #-------- Initializing the Classes -------#
 db_utils = DatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, logger=logger)
 logger.debug(f"Initializing db status: {db_utils.get_status()}")
