@@ -111,3 +111,4 @@ Thumbs.db
 echo "prefect_deployment_storage/" >> .gitignore
 echo "prefect_generated/" >> .gitignore
 
+create_github_creds.py

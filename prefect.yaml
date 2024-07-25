@@ -7,22 +7,22 @@ name: OptionsDepth_intraday
 prefect-version: 2.19.8
 
 # build section allows you to manage and build docker images
-build: null
+build:
 
 # push section allows you to manage if and how this project is uploaded to remote locations
-push: null
+push:
 
 # the deployments section allows you to provide configuration for deploying flows
 deployments:
-- name: toto_deploy
-  version: null
+- name: paperspace_deploy
+  version:
   tags: []
-  description: null
+  description:
   entrypoint: intraday_flow.py:Intraday_Flow
   parameters: {}
   work_pool:
     name: intraday-paperspace-agent
-    work_queue_name: null
+    work_queue_name:
     job_variables: {}
   schedules:
   - cron: 0,10,20,30,40,50 * * * *
@@ -48,5 +48,11 @@ deployments:
   storage:
     type: github
     repository: https://github.com/adiemyoussef/OD_intraday.git
-    reference: dev_test  # e.g., main, master, or dev_test
-    access_token: '{{ prefect.blocks.github-credentials.my-github-credentials }}'
+    reference: dev_test
+    access_token:
+      token:
+  pull:
+  - prefect.deployments.steps.git_clone:
+      repository: https://github.com/adiemyoussef/OD_intraday.git
+      branch: dev_test
+      access_token: '{{ prefect.blocks.github-credentials.my-github-credentials }}'

@@ -7,6 +7,11 @@ import time as time_module
 from zoneinfo import ZoneInfo
 import dill
 import zipfile
+import sys
+#if sys.version_info >= (3, 9):
+from zoneinfo import ZoneInfo
+#else:
+#    from backports.zoneinfo import ZoneInfo
 
 # Import your utility classes
 from config.config import *
