@@ -49,10 +49,10 @@ class S3Utilities:
         - json.JSONDecodeError: If the loaded data is not valid JSON
         """
         try:
-            self.logger.info(f"Attempting to load JSON from {key}")
+            self.logger.debug(f"Attempting to load JSON from {key}")
             response = self.s3_client.get_object(Bucket=self.bucket, Key=key)
             data = json.loads(response['Body'].read().decode('utf-8'))
-            self.logger.info(f"Successfully loaded JSON data from {key}")
+            self.logger.debug(f"Successfully loaded JSON data from {key}")
             return data
         except self.s3_client.exceptions.NoSuchKey:
             self.logger.info(f"File {key} not found in bucket. Returning empty dict.")
@@ -87,7 +87,7 @@ class S3Utilities:
         - TypeError: If the data is not JSON serializable
         """
         try:
-            self.logger.info(f"Attempting to save JSON data to {key}")
+            self.logger.debug(f"Attempting to save JSON data to {key}")
             self.s3_client.put_object(
                 Bucket=self.bucket,
                 Key=key,

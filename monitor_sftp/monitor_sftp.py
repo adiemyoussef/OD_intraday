@@ -196,12 +196,12 @@ def check_queue_status(channel):
         int: Number of messages in the queue, or None if there's an error.
     """
     try:
-        queue_info = channel.queue_declare(queue=QUEUE_NAME, passive=True)
+        queue_info = channel.queue_declare(queue=RABBITMQ_CBOE_QUEUE, passive=True)
         message_count = queue_info.method.message_count
-        logger.info(f"Current message count in queue '{QUEUE_NAME}': {message_count}")
+        logger.info(f"Current message count in queue '{RABBITMQ_CBOE_QUEUE}': {message_count}")
         if message_count > RABBITMQ_QUEUE_SIZE_ALERT_THRESHOLD:
             send_discord_notification_sync(
-                f"Queue '{QUEUE_NAME}' size ({message_count}) exceeds threshold ({RABBITMQ_QUEUE_SIZE_ALERT_THRESHOLD})")
+                f"Queue '{RABBITMQ_CBOE_QUEUE}' size ({message_count}) exceeds threshold ({RABBITMQ_QUEUE_SIZE_ALERT_THRESHOLD})")
         return message_count
     except Exception as e:
         logger.error(f"Error checking queue status: {str(e)}")
@@ -222,7 +222,7 @@ def publish_to_rabbitmq(channel, message):
     try:
         channel.basic_publish(
             exchange='',
-            routing_key=QUEUE_NAME,
+            routing_key=RABBITMQ_CBOE_QUEUE,
             body=message,
             properties=pika.BasicProperties(
                 delivery_mode=2,
@@ -230,7 +230,7 @@ def publish_to_rabbitmq(channel, message):
                 content_encoding='utf-8'
             ),
         )
-        logger.info(f"Published message to queue '{QUEUE_NAME}': {message[:100]}...")
+        logger.info(f"Published message to queue '{RABBITMQ_CBOE_QUEUE}': {message[:100]}...")
         return True
     except Exception as e:
         logger.error(f"Failed to publish message: {str(e)}")

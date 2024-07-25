@@ -8,6 +8,8 @@ import time
 import json
 import pika
 from datetime import datetime, timedelta
+import socket
+import asyncio
 
 # ------ Local Modules ------#
 from utilities.db_utils import AsyncDatabaseUtilities
@@ -16,7 +18,17 @@ from utilities.misc_utils import get_eastern_time
 from utilities.customized_logger import DailyRotatingFileHandler
 from config.config import *
 
-def setup_custom_logger(name, log_level=logging.INFO):
+
+credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
+parameters = pika.ConnectionParameters('64.225.63.198', 5672, '/', credentials)
+try:
+    connection = pika.BlockingConnection(parameters)
+    print("Connected successfully")
+    connection.close()
+except Exception as e:
+    print(f"Failed to connect: {e}")
+
+def setup_custom_logger(name, log_level=logging.DEBUG):
     logger = logging.getLogger(name)
     logger.setLevel(log_level)
 
@@ -102,16 +114,25 @@ class SFTPMonitor:
         except Exception as e:
             self.logger.error(f"Failed to send Discord notification: {str(e)}")
 
-    def get_rabbitmq_connection(self, max_retries=5, retry_delay=5):
+    def get_rabbitmq_connection(self, max_retries=5, retry_delay=5, logger=None):
+
+        credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
+        parameters = pika.ConnectionParameters(self.rabbitmq_host, 5672, '/', credentials)
         for attempt in range(max_retries):
             try:
-                connection = pika.BlockingConnection(pika.ConnectionParameters(self.rabbitmq_host))
+
+                connection = pika.BlockingConnection(parameters)
                 channel = connection.channel()
 
                 for queue in [self.rabbitmq_queue, self.heartbeat_queue]:
                     try:
                         channel.queue_declare(queue=queue, passive=True)
-                        self.logger.info(f"Queue '{queue}' exists.")
+                        if self.logger:
+                            self.logger.info(f"Queue '{queue}' exists.")
+                        else:
+                            print(f"Queue '{queue}' exists.")
+
+
                     except pika.exceptions.ChannelClosedByBroker:
                         self.logger.warning(f"Queue '{queue}' does not exist. Creating it.")
                         channel = connection.channel()
@@ -145,6 +166,14 @@ class SFTPMonitor:
             self.logger.error(f"Failed to publish message in {end_time - start_time:.4f} seconds: {str(e)}")
             return False
 
+    def test_connection(self,host, port):
+        try:
+            sock = socket.create_connection((host, port), timeout=10)
+            sock.close()
+            return True
+        except socket.error as e:
+            print(f"Connection test failed: {e}")
+            return False
     async def send_heartbeat(self):
         last_clear_time = time.time()
         while True:
@@ -175,6 +204,11 @@ class SFTPMonitor:
     async def monitor(self):
         self.logger.info("Starting SFTP monitoring...")
 
+        # Test basic connectivity
+        if not self.test_connection(self.sftp_host, self.sftp_port):
+            self.logger.error(f"Cannot establish basic connection to {self.sftp_host}:{self.sftp_port}")
+            return
+
         start_time = time.time()
         self.seen_files = set(self.s3_utils.load_json(LOG_FILE_KEY))
         end_time = time.time()
@@ -193,8 +227,14 @@ class SFTPMonitor:
             while True:
                 try:
                     connect_start = time.time()
-                    async with asyncssh.connect(self.sftp_host, port=self.sftp_port, username=self.sftp_username,
-                                                password=self.sftp_password, known_hosts=None) as conn:
+
+                    hostname = 'sftp.datashop.livevol.com'
+                    port = 22  # Default SFTP port
+                    username = 'contact_optionsdepth_com'
+                    password = 'Salam123+-'
+                    self.logger.debug(f"Attempting to connect to SFTP server at {self.sftp_host}:{self.sftp_port}")
+                    async with asyncssh.connect(hostname, port=port, username=username,
+                                                password=password, known_hosts=None, connect_timeout=30) as conn:
                         async with conn.start_sftp_client() as sftp:
                             connect_end = time.time()
                             self.logger.debug(f"SFTP connection established in {connect_end - connect_start:.4f} seconds")
@@ -219,7 +259,7 @@ class SFTPMonitor:
                                         file_mtime = datetime.fromtimestamp(file_attr.mtime)
                                         detection_time = datetime.now()
                                         detection_delay = (detection_time - file_mtime).total_seconds()
-                                        self.logger.debug(f"File {filename} detected {detection_delay:.4f} seconds after last modification")
+                                        self.logger.info(f"File {filename} detected {detection_delay:.4f} seconds after last modification")
 
                                         self.logger.info(f'{filename} not in seen files')
                                         file_info = {
@@ -235,7 +275,7 @@ class SFTPMonitor:
                                         if self.publish_to_rabbitmq(file_info_str):
                                             self.seen_files.add(filename)
                                             publish_end = time.time()
-                                            self.logger.debug(f"Message for {filename} published in {publish_end - publish_start:.4f} seconds")
+                                            self.logger.info(f"Message for {filename} published in {publish_end - publish_start:.4f} seconds")
                                         else:
                                             self.logger.warning(f"Failed to publish message for file: {filename}. Retrying...")
                                             self.connection, self.channel = self.get_rabbitmq_connection()
@@ -310,17 +350,26 @@ class SFTPMonitor:
         self.logger.info("Exiting debug mode.")
 
 
+
 if __name__ == "__main__":
     DEBUG = False
+    LOG_LEVEL = logging.DEBUG        # Could be: DEBUG, INFO, WARNING, ERROR
 
     # Setup the main logger
-    main_logger = setup_custom_logger("SFTPMonitor", logging.DEBUG if DEBUG else logging.INFO)
-
-    main_logger.setLevel(logging.INFO)  # Or any other level like logging.INFO, logging.WARNING, etc.
+    main_logger = setup_custom_logger("SFTPMonitor", logging.DEBUG if DEBUG else logging.DEBUG)
+    main_logger.setLevel(LOG_LEVEL)
 
     # Initialize utilities with the custom logger
     db_utils = AsyncDatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, logger=main_logger)
     s3_utils = S3Utilities(DO_SPACES_URL, DO_SPACES_KEY, DO_SPACES_SECRET, DO_SPACES_BUCKET, logger=main_logger)
+
+    logging.info("#------------ STARTING MONITORING SFTP----------------#")
+    logging.info(f"SFTP_HOST: {SFTP_HOST}")
+    logging.info(f"SFTP_PORT: {SFTP_PORT}")
+    logging.info(f"SFTP_USERNAME: {SFTP_USERNAME}")
+    logging.info(f"SFTP_PASSWORD: {'*' * len(SFTP_PASSWORD)}")
+    logging.info("#------------------------------------------------------#\n")
+
 
     monitor = SFTPMonitor(
         SFTP_HOST, SFTP_PORT, SFTP_USERNAME, SFTP_PASSWORD, SFTP_DIRECTORY,
@@ -332,6 +381,7 @@ if __name__ == "__main__":
         if DEBUG:
             asyncio.run(monitor.debug_mode())
         else:
+
             asyncio.run(monitor.monitor())
     except KeyboardInterrupt:
         main_logger.info("Program interrupted by user. Shutting down...")
