@@ -1,5 +1,4 @@
 import os
-from dotenv import load_dotenv
 import pandas_market_calendars as mcal
 
 nyse = mcal.get_calendar('NYSE')
