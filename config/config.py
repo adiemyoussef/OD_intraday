@@ -25,7 +25,7 @@ LOG_FILE_KEY = os.getenv('LOG_FILE_KEY')
 SFTP_HOST = os.getenv('SFTP_HOST')
 SFTP_PORT = os.getenv('SFTP_PORT')
 SFTP_USERNAME = os.getenv('SFTP_USERNAME')
-SFTP_PASSWORD = os.getenv('SFTP_PASSWORD_OD')
+SFTP_PASSWORD = os.getenv('SFTP_PASSWORD')
 SFTP_DIRECTORY = os.getenv('SFTP_DIRECTORY')
 
 

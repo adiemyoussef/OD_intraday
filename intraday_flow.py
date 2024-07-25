@@ -73,13 +73,13 @@ logger.info(f'RABBITMQ_PASS:{RABBITMQ_PASS}')
 rabbitmq_utils = RabbitMQUtilities(RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS, logger=logger)
 logger.info(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
 
-print(f'SFTP_HOST:{SFTP_HOST}')
-print(f'SFTP_PORT:{SFTP_PORT}')
-print(f'SFTP_USERNAME:{SFTP_USERNAME}')
-print(f'SFTP_PASSWORD:{SFTP_PASSWORD}')
+logger.info(f'SFTP_HOST:{SFTP_HOST}')
+logger.info(f'SFTP_PORT:{SFTP_PORT}')
+logger.info(f'SFTP_USERNAME:{SFTP_USERNAME}')
+logger.info(f'SFTP_PASSWORD:{SFTP_PASSWORD}')
 sftp_utils = SFTPUtility(SFTP_HOST,SFTP_PORT,SFTP_USERNAME,SFTP_PASSWORD, logger = logger)
 #-------------------------------------------#
-breakpoint()
+
 def send_notification(message: str):
     prefect_logger = get_run_logger()
     # Implement your notification logic here
