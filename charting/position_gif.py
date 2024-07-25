@@ -1,14 +1,32 @@
 import pandas as pd
+import multiprocessing
+from functools import partial
+import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
-from datetime import date
-import base64
 from plotly.subplots import make_subplots
-import imageio
+#import imageio
+import imageio.v2 as imageio
 import os
-from utilities.db_utils import DatabaseUtilities
+from datetime import date, datetime
+from concurrent.futures import ProcessPoolExecutor
+import multiprocessing
+from functools import partial
+import colorsys
 from config.config import *
+import requests
+import json
+from datetime import datetime
 
-db_utils = DatabaseUtilities(DB_HOST,DB_PORT,DB_USER,DB_PASSWORD,DB_NAME)
+
+def generate_frame_wrapper(args):
+    timestamp, index, generate_frame_partial = args
+    fig = generate_frame_partial(timestamp)
+    frame_path = f'temp_frames/frame_{index:03d}.png'
+    fig.write_image(frame_path)
+    return index, frame_path
+
+
 def process_single_strike(group, participant):
     date = group['effective_date'].iloc[0]
     strike = group['strike_price'].iloc[0]
@@ -42,10 +60,9 @@ def process_single_strike(group, participant):
 
     return {'date': date, 'strike_price': strike, **results}
 
-
 def generate_color_shades(base_color, num_shades=5):
     """Generate different shades of a given color."""
-    import colorsys
+
 
     # Convert hex to RGB
     rgb = tuple(int(base_color.lstrip('#')[i:i + 2], 16) for i in (0, 2, 4))
@@ -62,9 +79,9 @@ def generate_color_shades(base_color, num_shades=5):
 
     return shades
 
-
 def generate_frame(data, timestamp, participant, strike_input, expiration_input, position_type='All',
                    img_path=None, color_net='#0000FF', color_call='#00FF00', color_put='#FF0000'):
+
     daily_data = data[data['effective_datetime'] <= timestamp].copy()
 
     # Apply strike and expiration filters
@@ -78,6 +95,7 @@ def generate_frame(data, timestamp, participant, strike_input, expiration_input,
     else:
         subtitle_strike = "All Strikes"
 
+
     if expiration_input != "all":
         if isinstance(expiration_input, (list, tuple)):
             daily_data = daily_data[daily_data['expiration_date_original'].isin(expiration_input)]
@@ -85,9 +103,14 @@ def generate_frame(data, timestamp, participant, strike_input, expiration_input,
         elif isinstance(expiration_input, date):
             daily_data = daily_data[daily_data['expiration_date_original'] == expiration_input]
             subtitle_expiration = f"For expiration: {expiration_input}"
+        else:
+            daily_data = daily_data[daily_data['expiration_date_original'] == expiration_input]
+            subtitle_expiration = f"For expiration: {expiration_input}"
+
     else:
         subtitle_expiration = "All Expirations"
 
+    breakpoint()
     # Group by strike price
     grouped = daily_data.groupby('strike_price')
 
@@ -214,18 +237,26 @@ def generate_frame(data, timestamp, participant, strike_input, expiration_input,
         margin=dict(l=50, r=50, t=100, b=50)
     )
 
+    #fig.show()
     return fig
 
+def generate_gif(data, session_date, participant, strike_input, expiration_input, position_type='C',
+                 img_path=None, color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
+                 output_gif='animated_chart.gif'):
 
-def generate_animated_chart(data, date, participant, strike_input, expiration_input, position_type='All',
-                            img_path=None, color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
-                            output_gif='animated_chart.gif'):
+
+    # Filter data for the given session_date
+
+    #data = data[data['effective_date'] == session_date]
+
     # Get unique timestamps
     timestamps = data['effective_datetime'].unique()
+
 
     # Create a temporary directory to store frames
     if not os.path.exists('temp_frames'):
         os.makedirs('temp_frames')
+
 
     # Generate frames
     frames = []
@@ -238,6 +269,7 @@ def generate_animated_chart(data, date, participant, strike_input, expiration_in
         frame_path = f'temp_frames/frame_{i:03d}.png'
         fig.write_image(frame_path)
         frames.append(imageio.imread(frame_path))
+    frames.append(imageio.imread(frame_path))
 
     # Create the GIF
     imageio.mimsave(output_gif, frames, fps=5)
@@ -248,34 +280,134 @@ def generate_animated_chart(data, date, participant, strike_input, expiration_in
     os.rmdir('temp_frames')
 
     print(f"Animation saved as {output_gif}")
+    return output_gif
+
+
+
+def send_to_discord(webhook_url, file_path, content=None, title=None, description=None, fields=None,
+                    footer_text=None):
+    with open(file_path, 'rb') as f:
+        file_content = f.read()
+
+    # Prepare the embed
+    embed = {
+        "title": title or "Options Chart Analysis",
+        "description": description or "Here's the latest options chart analysis.",
+        "color": 3447003,  # A nice blue color, you can change this
+        "timestamp": datetime.utcnow().isoformat(),
+        "fields": fields or [],
+        "image": {"url": "attachment://chart.gif"},
+        "footer": {"text": footer_text or "Generated by Options Analysis Bot"},
+        "author": {
+            "name": "Options Analysis Bot",
+            "icon_url": "https://example.com/bot-icon.png"  # Replace with your bot's icon URL
+        }
+    }
+
+    # Prepare the payload
+    payload = {
+        "content": content,
+        "embeds": [embed]
+    }
+
+    # Prepare the files
+    files = {
+        "file": ("chart.gif", file_content, "image/gif"),
+        "payload_json": (None, json.dumps(payload))
+    }
+
+    # Send the request
+    response = requests.post(webhook_url, files=files)
+
+    if response.status_code == 200:
+        print("Message sent successfully to Discord!")
+    else:
+        print(f"Failed to send message. Status code: {response.status_code}")
+        print(f"Response content: {response.content}")
+
+    return response.status_code == 200
+
+def generate_and_send_gif(data, session_date, participant, strike_input, expiration,webhook_url):
+    gif_path = generate_gif(
+        data,
+        session_date,
+        participant,
+        strike_input=strike_input,
+        expiration_input=expiration,
+        position_type='C',
+        output_gif=f'animated_options_chart_{session_date}.gif'
+    )
+
+    if gif_path is None:
+        print(f"Failed to generate GIF for {session_date} with strike input {strike_input}")
+        return False
+
+    title = f"📊 Options Chart Analysis - {session_date}"
+    description = (
+        f"Detailed analysis of {participant.upper()} positions for {session_date}.\n"
+        f"This chart provides insights into market movements and positioning within the specified strike range."
+    )
+    fields = [
+        {"name": "📅 Date", "value": session_date, "inline": True},
+        {"name": "👥 Participant", "value": participant.upper(), "inline": True},
+        {"name": "🎯 Strike Range", "value": f"{strike_input[0]} - {strike_input[1]}", "inline": True},
+        {"name": "📈 Analysis Type", "value": "Intraday Movement", "inline": True},
+        {"name": "🕒 Time Range", "value": "Market Hours", "inline": True},
+        {"name": "🔄 Update Frequency", "value": "10 minutes", "inline": True},
+        {"name": "📊 Data Points", "value": str(len(data)), "inline": False},
+        {"name": "💡 Interpretation", "value": (
+            "• Green bars indicate positive positioning\n"
+            "• Red bars indicate negative positioning\n"
+            "• Bar height represents position magnitude"
+        ), "inline": False},
+    ]
+    footer_text = f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Options Analysis v1.0"
+
+    success = send_to_discord(
+        webhook_url,
+        gif_path,
+        content="🚀 New options chart analysis is ready! Check out the latest market insights below.",
+        title=title,
+        description=description,
+        fields=fields,
+        footer_text=footer_text
+    )
+
+    os.remove(gif_path)  # Clean up the gif file
+    return success
+
+
+# Function to process data in parallel
+# def parallel_generate_gif(data, session_date, participant, strike_ranges, webhook_url):
+#
+#
+#     with ProcessPoolExecutor() as executor:
+#         futures = [executor.submit(generate_and_send_gif, data, session_date, participant, strike_range, webhook_url)
+#                    for strike_range in strike_ranges]
+#         results = [future.result() for future in futures]
+#     return all(results)
 
 
 if __name__ == "__main__":
+    df = pd.read_pickle("20240716_intraday.pkl")
+    session_date = '2024-07-16'
+
+    print(f"Loaded data shape: {df.shape}")
+    print(f"Date range in data: {df['effective_date'].min()} to {df['effective_date'].max()}")
+    print(f"Unique dates in data: {df['effective_date'].nunique()}")
+
+    print(f"Data for session date {session_date}:")
+    print(df[df['effective_date'] == session_date].head())
 
 
-    #TODO: Wrap this in a function where current_date is a param, participant is a param, position_type is a param
-    # return a gif that will be sent to discord
 
-    # query = """
-    # SELECT * FROM intraday.intraday_books
-    # where date(time_stamp) = '2024-07-16'
-    # """
-    # df = db_utils.execute_query(query)
+    webhook_url = WEBHOOK_URL  # Replace with your actual webhook URL
+    strike_ranges = [5050,5500]  # Example strike ranges
 
-    # df.to_pickle("20240716_intraday.pkl")
-    df = pd.read_pickle("charting/20240716_intraday.pkl")
+    success = generate_and_send_gif(df, session_date, 'mm', strike_ranges, webhook_url)
+    #success = parallel_generate_gif(df, session_date, 'mm', strike_ranges, webhook_url)
 
-
-    generate_animated_chart(
-        df,
-        '2024-07-15',
-        'mm',
-        strike_input=[5560, 5800],
-        expiration_input='all',
-        position_type='C',  # Can be 'All', 'Net', 'C', or 'P'
-        img_path='path/to/watermark.png',  # Optional
-        color_net='#0000FF',  # Blue for Net
-        color_call='#00FF00',  # Green for Calls
-        color_put='#FF0000',  # Red for Puts
-        output_gif='animated_options_chart.gif'
-    )
+    if success:
+        print("Successfully generated and sent GIFs to Discord")
+    else:
+        print("Failed to generate or send some GIFs")

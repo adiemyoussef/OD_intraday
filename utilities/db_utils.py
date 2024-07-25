@@ -213,8 +213,6 @@ class AsyncDatabaseUtilities:
 
 
 
-
-
 class DatabaseStatus(Enum):
     DISCONNECTED = "Disconnected"
     CONNECTED = "Connected"

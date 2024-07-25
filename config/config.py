@@ -50,7 +50,7 @@ RABBITMQ_HEARTBEAT_INTERVAL = 60                    # Send heartbeat every HEART
 RABBITMQ_CLEAR_HEARTBEAT_INTERVAL = 3600            # Clear heartbeat queue every CLEAR_HEARTBEAT_INTERVAL seconds to prevent the message from accumulating
 PROCESS_MESSAGE_QUEUE_RETRY_DELAY = 5  # in seconds
 RABBITMQ_MAX_RUNTIME = 3600  # 1 hour in seconds
-
+RABBITMQ_MAX_ACK_RETRIES = 3
 # RABBITMQ_HOST = "localhost"  # Replace with your RabbitMQ host if different
 # QUEUE_NAME = "youssef_local"  # Your queue name
 
