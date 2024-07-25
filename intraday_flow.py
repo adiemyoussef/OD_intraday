@@ -64,11 +64,19 @@ print(f'DB_NAME:{DB_NAME}')
 
 #-------- Initializing the Classes -------#
 db_utils = DatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, logger=logger)
-logger.debug(f"Initializing db status: {db_utils.get_status()}")
+logger.info(f"Initializing db status: {db_utils.get_status()}")
 
+print(f'RABBITMQ_HOST:{RABBITMQ_HOST}')
+print(f'RABBITMQ_PORT:{RABBITMQ_PORT}')
+print(f'RABBITMQ_USER:{RABBITMQ_USER}')
+print(f'RABBITMQ_PASS:{RABBITMQ_PASS}')
 rabbitmq_utils = RabbitMQUtilities(RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS, logger=logger)
-logger.debug(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
+logger.info(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
 
+print(f'SFTP_HOST:{SFTP_HOST}')
+print(f'SFTP_PORT:{SFTP_PORT}')
+print(f'SFTP_USERNAME:{SFTP_USERNAME}')
+print(f'SFTP_PASSWORD:{SFTP_PASSWORD}')
 sftp_utils = SFTPUtility(SFTP_HOST,SFTP_PORT,SFTP_USERNAME,SFTP_PASSWORD, logger = logger)
 #-------------------------------------------#
 def send_notification(message: str):
