@@ -1,4 +1,3 @@
-import pandas as pd
 from prefect import task, flow, get_run_logger
 import time
 from datetime import datetime, timedelta
@@ -7,9 +6,7 @@ import asyncssh
 import io
 import requests
 
-from config import *
-from utilities import *
-from data_verification import *
+from other_files.data_verification import *
 from rabbitmq_handler import RobustRabbitMQHandler
 
 @task

@@ -10,8 +10,8 @@ import dask
 
 #------- OptionsDepth Modules -------- #
 from config.config import *
-from utilities.sftp_utils import SFTPUtility
-from utilities.db_utils import AsyncDatabaseUtilities
+from utilities.sftp_utils_async import SFTPUtility
+from utilities.db_utils_async import AsyncDatabaseUtilities
 from utilities.misc_utils import *
 #--------------------------------------#
 
@@ -32,7 +32,7 @@ console_handler.setFormatter(file_formatter)
 logger.addHandler(console_handler)
 
 
-db = AsyncDatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, logger)
+db = AsyncDatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME, logger)
 
 def process_greek(greek_name, poly_data, book):
     latest_greek = poly_data.sort_values('time_stamp', ascending=False).groupby('contract_id').first().reset_index()
@@ -82,7 +82,7 @@ async def update_book_with_latest_greeks(book: pd.DataFrame, lookback_hours=24) 
 
     logging.info('Entered update_book_with_latest_greeks')
 
-    breakpoint()
+
     debug_datetime = '2024-07-21 20:20:00'
     test_datetime = pd.to_datetime(debug_datetime, utc=True)
     #effective_datetime = test_datetime
@@ -109,15 +109,15 @@ async def update_book_with_latest_greeks(book: pd.DataFrame, lookback_hours=24) 
     """
 
     start_time = time.time()
-    logger.info(f'Starting to Fetch greeks from poly from {effective_datetime} to ')
+    logger.info(f'Starting to Fetch greeks from poly from {previous_datetime} to {current_datetime}')
 
-    poly_data = await db.execute_query(query)
-    logger.info(f'Fetched {len(poly_data)} from poly')
+    poly_data_list = await db.execute_query(query)
+    logger.info(f'Fetched {len(poly_data_list)} from poly')
+    poly_data = pd.DataFrame(poly_data_list)
 
-    #poly_data = pd.concat(utils.return_query(query))  # Assuming return_query yields DataFrames
     elapsed_time = time.time() - start_time  # End the timer
     logger.info(f"{elapsed_time:.2f} seconds to get the greeks")
-    breakpoint()
+
 
     poly_data.rename(columns={'implied_volatility': 'iv'}, inplace=True)
     poly_data['contract_id'] = poly_data['option_symbol'] + '_' + \
@@ -130,7 +130,6 @@ async def update_book_with_latest_greeks(book: pd.DataFrame, lookback_hours=24) 
                           book['call_put_flag'] + '_' + \
                           book['strike_price'].astype(str) + '_' + \
                           pd.to_datetime(book['expiration_date_original']).dt.strftime('%Y-%m-%d')
-
 
 
     tasks = [delayed(process_greek)(greek_name, poly_data, book.copy()) for greek_name in ['iv', 'delta', 'gamma', 'vega']]
@@ -147,7 +146,6 @@ async def update_book_with_latest_greeks(book: pd.DataFrame, lookback_hours=24) 
     logger.info(f"{elapsed_time:.2f} seconds to finalize the book")
     return book
 
-
 async def verify_and_process_message(sftp_utility: SFTPUtility, file_path: str):
     """Verify and process the file."""
     try:
@@ -163,7 +161,6 @@ async def read_and_verify_file(file_info, file_data):
 
     try:
 
-        #breakpoint()
         with zipfile.ZipFile(file_data, 'r') as z:
             csv_file = z.namelist()[0]
             with z.open(csv_file) as f:
@@ -310,15 +307,15 @@ async def build_latest_book(initial_book, intraday_data):
     effective_date_index = start_of_day_columns.index('effective_date')
     start_of_day_columns.insert(effective_date_index + 1, 'effective_datetime')
     merged = merged[start_of_day_columns]
-    breakpoint()
+
     merged['expiration_date'] = merged.apply(get_expiration_datetime, axis=1)
     merged['expiration_date'] = pd.to_datetime(merged['expiration_date'])
     position_columns = ['mm_posn', 'firm_posn', 'broker_posn', 'nonprocust_posn', 'procust_posn',
                         'total_customers_posn']
     merged = merged.loc[(merged[position_columns] != 0).any(axis=1)]
     merged = merged.sort_values(['expiration_date_original', 'mm_posn'], ascending=[True, False])
-    return merged
 
+    return merged
 
 def parse_file_name(file_name):
     """Parse the file_name to extract date and time information."""
@@ -354,60 +351,44 @@ async def get_session_files(sftp_utility: SFTPUtility, sftp_folder: str, session
 
     return sorted_files
 
-# async def get_session_files(sftp_utility: SFTPUtility, sftp_folder: str, session_date: str):
-#     """Get all files for a given session in chronological order."""
-#     all_files = await sftp_utility.list_directory(sftp_folder)
-#     session_datetime = datetime.strptime(session_date, "%Y-%m-%d")
-#
-#     # Filter files for the specific session date
-#     session_files = [f for f in all_files if f.startswith(f"Cboe_OpenClose_{session_date}")]
-#
-#     logger.info(f"I got {len(session_files)} to process")
-#     # Get last modified times for session files
-#     file_info_list = []
-#     for file_name in session_files:
-#         file_path = f"{sftp_folder}/{file_name}"
-#         file_info = await sftp_utility.get_file_info(file_path)
-#         file_info_list.append((file_name, file_info['mtime']))
-#
-#     # Sort files based on last modified time
-#     sorted_files = [f[0] for f in sorted(file_info_list, key=lambda x: x[1])]
-#
-#     logger.info(f"I sorted {len(session_files)} files")
-#     breakpoint()
-#
-#     return sorted_files
 
 async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_folder: str):
     """Process a single session."""
     logger.info(f"Processing session for date: {session_date}")
 
     initial_book = await get_initial_book(session_date)
+
     if initial_book is None:
         logger.error(f"Cannot process session {session_date} without an initial book.")
         return
 
     session_files = await get_session_files(sftp_utility, sftp_folder, session_date)
-
-    for file_name in session_files:
+    logger.info(f"session_files: {session_files}")
+    for file_name in session_files[68:]:
         file_path = f"{sftp_folder}/{file_name}"
         logger.info(f"Processing file: {file_name}")
 
         try:
             file_info, file_data, file_last_modified = await verify_and_process_message(sftp_utility, file_path)
 
+            file_name_ = file_info['file_name']
+
             if file_info:
                 logger.info(f"FILE INFO ---> {file_info}")
                 df = await read_and_verify_file(file_info, file_data)
 
                 if df is not None and not df.empty:
+                    start_time = time.time()
                     logger.info(f"Successfully processed file: {file_info['file_name']}")
                     logger.info(f"DataFrame shape from SFTP: {df.shape}")
 
                     latest_book = await build_latest_book(initial_book, df)
                     final_book = await update_book_with_latest_greeks(latest_book)
+
                     # Uncomment the following line when ready to insert progress
-                    # await db.insert_progress('intraday', 'intraday_books', final_book)
+                    await db.insert_progress('intraday', 'intraday_books_test', final_book)
+                    logger.info(f'It took {time.time() - start_time} sec. to process {file_name_}')
+
         except Exception as e:
             logger.error(f"Error processing file {file_name}: {str(e)}")
 
@@ -415,10 +396,11 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
 async def main():
     sftp_config = {
         "sftp_host": SFTP_HOST,
-        "sftp_port": SFTP_PORT,
+        "sftp_port": int(SFTP_PORT),
         "sftp_username": SFTP_USERNAME,
         "sftp_password": SFTP_PASSWORD
     }
+
     sftp_folder = SFTP_DIRECTORY
 
     async with SFTPUtility(**sftp_config, logger=logger) as sftp:

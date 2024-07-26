@@ -1,6 +1,7 @@
 import os
 import pandas_market_calendars as mcal
-
+import os
+from PIL import Image
 nyse = mcal.get_calendar('NYSE')
 
 
@@ -25,7 +26,7 @@ LOG_FILE_KEY = os.getenv('LOG_FILE_KEY')
 SFTP_HOST = os.getenv('SFTP_HOST')
 SFTP_PORT = os.getenv('SFTP_PORT')
 SFTP_USERNAME = os.getenv('SFTP_USERNAME')
-SFTP_PASSWORD = os.getenv('SFTP_PASSWORD')
+SFTP_PASSWORD = os.getenv('SFTP_PASSWORD_OD')
 SFTP_DIRECTORY = os.getenv('SFTP_DIRECTORY')
 
 
@@ -60,7 +61,7 @@ WEBHOOK_URL = 'https://discord.com/api/webhooks/1251013946111164436/VN55yOK-ntil
 
 
 #-------- DATA PROCESSING -----------#
-OPTION_SYMBOLS_TO_PROCESS = ['SPX', 'SPXW'] #, 'VIX', 'VIXW']
+OPTION_SYMBOLS_TO_PROCESS = ['SPX', 'SPXW']
 CSV_CHUNKSIZE = 100000
 
 
@@ -117,8 +118,38 @@ VALID_CALL_PUT_FLAGS = {'P', 'C'}
 VALID_SERIES_TYPES = {'S', 'N'}
 
 
-
 #----- SIMULATIONS ------------ #
 HEATMAP_TIME_STEPS = 10
 HEATMAP_PRICE_STEPS = 5
 HEATMAP_PRICE_RANGE = 0.02
+
+# CONSTANTES
+SPX_TICKER = 'SPX'
+HAT_SPX_TICKER = '^SPX'
+YAHOO_SPX_TICKER = "^GSPC"
+RISK_FREE_RATE = 0.055
+
+# ----------- CHARTING ---------------#
+
+#GRAPH DIMENSIONS
+IMAGE_WIDTH = 1440  # Width in pixels
+IMAGE_HEIGTH = 810  # Height in pixels
+SCALE_FACTOR = 3  # Increase for better quality, especially for raster formats
+
+# GRAPHS - Color palettes, fonts, etc.
+COLOR_SCALE = "RdBu"
+COLOR_SCALE_CUSTOM = [[0.0, "rgb(0, 59, 99)"],
+                      [0.499, "rgb(186, 227, 255)"],
+                      [0.501, "rgb(255, 236, 196)"],
+                      [1.0, "rgb(255, 148, 71)"]]
+
+BACKGROUND_COLOR = 'white'
+TEXT_COLOR = 'black'
+
+POSITION_COULORS = ['black', 'red', 'green']
+FLOW_COLORS = ['magenta', 'yellow', 'grey']
+
+#WATERMARKS
+# If your image is located relative to the script's directory, you can use:
+LOGO_dark = os.path.join('..', 'config', 'images', 'logo_dark.png')
+LOGO_light = os.path.join('..', 'config', 'images', 'logo_light.png')

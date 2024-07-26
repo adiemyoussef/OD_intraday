@@ -4,6 +4,10 @@ import aiomysql
 import pandas as pd
 import logging
 from enum import Enum
+
+from tqdm import tqdm
+
+
 class DatabaseStatus(Enum):
     DISCONNECTED = "Disconnected"
     CONNECTED = "Connected"
@@ -38,6 +42,7 @@ class AsyncDatabaseUtilities:
         self.logger = logger or logging.getLogger(__name__)
         self.status = DatabaseStatus.DISCONNECTED
         self.last_error = None
+        self.chunksize_divider = 50
 
     async def create_pool(self):
         """
@@ -52,6 +57,7 @@ class AsyncDatabaseUtilities:
         """
         if self.pool is None:
             try:
+
                 self.pool = await aiomysql.create_pool(
                     host=self.host,
                     port=self.port,
@@ -66,7 +72,7 @@ class AsyncDatabaseUtilities:
                 )
                 self.status = DatabaseStatus.CONNECTED
                 self.logger.info("Database connection created successfully.")
-            except aiomysql.connector.Error as e:
+            except aiomysql.Error as e:
                 self.status = DatabaseStatus.ERROR
                 self.last_error = str(e)
                 self.logger.error(f"MySQL error occurred while creating connection: {e}")
@@ -99,6 +105,9 @@ class AsyncDatabaseUtilities:
                     await cursor.execute(query, params)
                     results = await cursor.fetchall()
                     self.logger.info(f"Query executed successfully: {query[:50]}...")
+
+                    #results_df = pd.DataFrame(results)
+
                     return results
         except aiomysql.Error as e:
             self.logger.error(f"MySQL error occurred while executing query: {e}")
@@ -152,7 +161,7 @@ class AsyncDatabaseUtilities:
         self.logger.info(f"Query results fetched as DataFrame with shape {df.shape}")
         return df
 
-    async def get_intraday_book(self, ticker: str, active_effective_date: str) -> pd.DataFrame:
+    async def get_initial_book(self, ticker: str, active_effective_date: str) -> pd.DataFrame:
         """
         Fetch book data for a specific ticker and date.
 
@@ -167,12 +176,23 @@ class AsyncDatabaseUtilities:
         self.logger.info(f"Fetching book data for ticker {ticker} on date {active_effective_date}")
         return await self.fetch_dataframe(query, (active_effective_date, ticker))
 
-    async def insert_progress(self, dbName: str, dbTable: str, dataframe: pd.DataFrame):
+    @staticmethod
+    def chunker(seq, size):
         """
-        Insert a large DataFrame into the database in chunks.
+        Split a sequence into chunks of specified size.
 
-        :param dbName: Database name
-        :param dbTable: Table name
+        :param seq: Sequence to split
+        :param size: Size of each chunk
+        :return: Generator yielding sequence chunks
+        """
+        return (seq[pos:pos + size] for pos in range(0, len(seq), size))
+
+    async def insert_progress(self, dbname: str, dbtable: str, dataframe: pd.DataFrame):
+        """
+        Insert a large DataFrame into the database in chunks, with progress tracking.
+
+        :param dbname: Database name
+        :param dbtable: Table name
         :param dataframe: pandas DataFrame to insert
 
         This method splits the DataFrame into chunks and inserts them separately to avoid
@@ -185,22 +205,35 @@ class AsyncDatabaseUtilities:
         if not self.pool:
             await self.create_pool()
 
-        chunksize = math.ceil(len(dataframe) / 50)
+        chunksize = math.ceil(len(dataframe) / self.chunksize_divider)
         self.logger.info(
-            f"Inserting DataFrame with {len(dataframe)} rows into {dbName}.{dbTable} in chunks of {chunksize}")
+            f"Inserting DataFrame with {len(dataframe)} rows into {dbname}.{dbtable} in chunks of {chunksize}")
 
-        for i, cdf in enumerate(self.chunker(dataframe, chunksize)):
-            try:
-                async with self.pool.acquire() as conn:
-                    await conn.begin()
-                    await conn.execute(f"INSERT INTO {dbName}.{dbTable} VALUES ", cdf.to_dict('records'))
-                    await conn.commit()
-                self.logger.info(f"Inserted chunk {i + 1} ({len(cdf)} rows)")
-            except aiomysql.Error as e:
-                self.logger.error(f"MySQL error occurred while inserting chunk {i}: {e}")
-            except Exception as e:
-                self.logger.error(f"Unexpected error occurred while inserting chunk {i}: {e}")
+        with tqdm(total=len(dataframe), desc="Inserting data") as pbar:
+            for i, cdf in enumerate(self.chunker(dataframe, chunksize)):
+                try:
 
+                    #inserted = cdf.to_sql()
+                    async with self.pool.acquire() as conn:
+                        async with conn.cursor() as cursor:
+                            placeholders = ', '.join(['%s'] * len(cdf.columns))
+                            columns = ', '.join(cdf.columns)
+                            query = f"INSERT INTO {dbname}.{dbtable} ({columns}) VALUES ({placeholders})"
+                            values = [tuple(row) for row in cdf.values]
+                            await cursor.executemany(query, values)
+                            await conn.commit()
+                            pbar.update(len(cdf))
+
+                except aiomysql.Error as e:
+                    self.status = DatabaseStatus.ERROR
+                    self.last_error = str(e)
+                    self.logger.error(f"MySQL error occurred while inserting chunk {i}: {e}")
+                except Exception as e:
+                    self.status = DatabaseStatus.ERROR
+                    self.last_error = str(e)
+                    self.logger.error(f"Unexpected error occurred while inserting chunk {i}: {e}")
+
+        self.logger.info(f"Completed insertion of {len(dataframe)} rows into {dbname}.{dbtable}")
 
     async def get_status(self) -> Dict[str, str]:
         """
@@ -228,14 +261,4 @@ class AsyncDatabaseUtilities:
             "last_error": self.last_error if self.status == DatabaseStatus.ERROR else None
         }
 
-    @staticmethod
-    def chunker(df: pd.DataFrame, size: int):
-        """
-        Split a DataFrame into chunks of specified size.
-
-        :param df: pandas DataFrame to split
-        :param size: Size of each chunk
-        :return: Generator yielding DataFrame chunks
-        """
-        return (df[pos:pos + size] for pos in range(0, len(df), size))
 
