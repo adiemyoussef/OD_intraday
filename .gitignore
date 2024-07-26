@@ -112,3 +112,4 @@ echo "prefect_deployment_storage/" >> .gitignore
 echo "prefect_generated/" >> .gitignore
 
 create_github_creds.py
+heatmaps_simulation/20240725_books.pkl

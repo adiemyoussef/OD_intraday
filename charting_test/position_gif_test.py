@@ -17,23 +17,7 @@ from config.config import *
 import requests
 import json
 from datetime import datetime
-from utilities.db_utils import *
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-# Create a console handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-
-# Create a formatter and set it for the handler
-file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(file_formatter)
-
-# Add the handler to the logger
-logger.addHandler(console_handler)
-
-db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME, logger)
 
 def generate_frame_wrapper(args):
     timestamp, index, generate_frame_partial = args
@@ -42,6 +26,53 @@ def generate_frame_wrapper(args):
     fig.write_image(frame_path)
     return index, frame_path
 
+def generate_gif_par(data, session_date, participant, strike_input, expiration_input, position_type='C',
+                 img_path=None, color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
+                 output_gif='animated_chart.gif', num_frames=None):
+
+    # Get unique timestamps and sort them
+    timestamps = np.sort(data['effective_datetime'].unique())
+
+    # Sample timestamps if num_frames is specified
+    if num_frames and num_frames < len(timestamps):
+        timestamps = np.random.choice(timestamps, size=num_frames, replace=False)
+        timestamps.sort()
+
+    # Create a temporary directory to store frames
+    if not os.path.exists('temp_frames'):
+        os.makedirs('temp_frames')
+
+    # Partial function for frame generation
+    generate_frame_partial = partial(generate_frame, data=data, participant=participant,
+                                     strike_input=strike_input, expiration_input=expiration_input,
+                                     position_type=position_type, img_path=img_path,
+                                     color_net=color_net, color_call=color_call, color_put=color_put)
+
+    # Prepare arguments for multiprocessing
+    args = [(timestamp, index, generate_frame_partial) for index, timestamp in enumerate(timestamps)]
+
+    # Generate frames in parallel
+    with multiprocessing.Pool() as pool:
+        results = pool.map(generate_frame_wrapper, args)
+
+    # Sort the results based on the index to maintain order
+    sorted_results = sorted(results, key=lambda x: x[0])
+
+    # Collect frames in order
+    frames = []
+    for _, frame_path in sorted_results:
+        frames.append(imageio.imread(frame_path))
+
+    # Create the GIF
+    imageio.mimsave(output_gif, frames, fps=3)  # Adjust fps as needed
+
+    # Clean up temporary files
+    for file in os.listdir('temp_frames'):
+        os.remove(os.path.join('temp_frames', file))
+    os.rmdir('temp_frames')
+
+    print(f"Animation saved as {output_gif}")
+    return output_gif
 
 def process_single_strike(group, participant):
     date = group['effective_date'].iloc[0]
@@ -111,7 +142,6 @@ def generate_frame(data, timestamp, participant, strike_input, expiration_input,
     else:
         subtitle_strike = "All Strikes"
 
-
     if expiration_input != "all":
         if isinstance(expiration_input, (list, tuple)):
             daily_data = daily_data[daily_data['expiration_date_original'].isin(expiration_input)]
@@ -119,21 +149,8 @@ def generate_frame(data, timestamp, participant, strike_input, expiration_input,
         elif isinstance(expiration_input, date):
             daily_data = daily_data[daily_data['expiration_date_original'] == expiration_input]
             subtitle_expiration = f"For expiration: {expiration_input}"
-        else:
-
-            # Ensure expiration_input is a string in 'YYYY-MM-DD' format
-            expiration_input = pd.to_datetime(expiration_input).strftime('%Y-%m-%d')
-            # Convert the expiration_date_original column to datetime, then back to string in 'YYYY-MM-DD' format
-            daily_data['expiration_date_original'] = pd.to_datetime(daily_data['expiration_date_original']).dt.strftime(
-                '%Y-%m-%d')
-
-
-            daily_data = daily_data[daily_data['expiration_date_original'] == expiration_input]
-            subtitle_expiration = f"For expiration: {expiration_input}"
-
     else:
         subtitle_expiration = "All Expirations"
-
 
     # Group by strike price
     grouped = daily_data.groupby('strike_price')
@@ -351,17 +368,17 @@ def send_to_discord(webhook_url, file_path, content=None, title=None, descriptio
 
     return response.status_code == 200
 
-def generate_and_send_gif(data, session_date, participant, strike_input, expiration,webhook_url):
+def generate_and_send_gif(data, session_date, participant, strike_input, webhook_url):
     gif_path = generate_gif(
         data,
         session_date,
         participant,
         strike_input=strike_input,
-        expiration_input=expiration,
+        expiration_input='all',
         position_type='C',
         output_gif=f'animated_options_chart_{session_date}.gif'
     )
-    breakpoint()
+
     if gif_path is None:
         print(f"Failed to generate GIF for {session_date} with strike input {strike_input}")
         return False
@@ -413,44 +430,22 @@ def generate_and_send_gif(data, session_date, participant, strike_input, expirat
 
 
 if __name__ == "__main__":
-    # df = pd.read_pickle("20240716_intraday.pkl")
-    # session_date = '2024-07-16'
-
-   # df = pd.read_pickle("/Users/youssefadiem/PycharmProjects/OptionsDepth_intraday/heatmaps_simulation/20240725_books.pkl")
-    session_date = '2024-07-25'
-
-    query =f"""
-    SELECT * FROM intraday.intraday_books_test_posn
-    WHERE as_of_date ='2024-07-24'
-    """
-
-    df = db.execute_query(query)
-
+    df = pd.read_pickle("20240716_intraday.pkl")
+    session_date = '2024-07-16'
 
     print(f"Loaded data shape: {df.shape}")
-    print(f"Date range in data: {df['effective_datetime'].min()} to {df['effective_datetime'].max()}")
+    print(f"Date range in data: {df['effective_date'].min()} to {df['effective_date'].max()}")
     print(f"Unique dates in data: {df['effective_date'].nunique()}")
 
     print(f"Data for session date {session_date}:")
     print(df[df['effective_date'] == session_date].head())
 
-    strike_ranges = [5400,5800]  # Example strike ranges
-    expiration = '2024-07-26'
 
-    # Ensure expiration_input is a string in 'YYYY-MM-DD' format
-    expiration_input = pd.to_datetime(expiration).strftime('%Y-%m-%d')
-
-    daily_data = df.copy()
-    # Convert the expiration_date_original column to datetime, then back to string in 'YYYY-MM-DD' format
-    daily_data['expiration_date_original'] = pd.to_datetime(daily_data['expiration_date_original']).dt.strftime(
-        '%Y-%m-%d')
-
-    daily_data = daily_data[daily_data['expiration_date_original'] == expiration_input]
 
     webhook_url = WEBHOOK_URL  # Replace with your actual webhook URL
+    strike_ranges = [5050,5500]  # Example strike ranges
 
-
-    success = generate_and_send_gif(daily_data, session_date, 'mm', strike_ranges, expiration, webhook_url)
+    success = generate_and_send_gif(df, session_date, 'mm', strike_ranges, webhook_url)
     #success = parallel_generate_gif(df, session_date, 'mm', strike_ranges, webhook_url)
 
     if success:

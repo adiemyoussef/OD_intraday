@@ -448,7 +448,7 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
 
     session_files = await get_session_files(sftp_utility, sftp_folder, session_date)
     logger.info(f"session_files: {session_files}")
-    for file_name in session_files[93:]:
+    for file_name in session_files[68:]:
         file_path = f"{sftp_folder}/{file_name}"
         logger.info(f"Processing file: {file_name}")
 
@@ -467,31 +467,31 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
                     logger.info(f"DataFrame shape from SFTP: {df.shape}")
 
                     latest_book = await build_latest_book(initial_book, df)
-                    # latest_book['time_stamp'] = get_eastern_time()      #Temporaire
-                    # columns_to_drop = ['iv', 'delta', 'gamma', 'vega']
-                    # df_end = latest_book.iloc[:, :-4]
+                    latest_book['time_stamp'] = get_eastern_time()      #Temporaire
+                    columns_to_drop = ['iv', 'delta', 'gamma', 'vega']
+                    df_end = latest_book.iloc[:, :-4]
 
 
-                    final_book = await update_book_with_latest_greeks(latest_book)
+                    # final_book = await update_book_with_latest_greeks(latest_book)
 
                     # Check for NaN values
-                    nan_counts = final_book.isna().sum()
+                    nan_counts = df_end.isna().sum()
                     print("Columns with NaN values:")
                     print(nan_counts[nan_counts > 0])
 
-                    rows_with_nan = final_book.isna().any(axis=1).sum()
+                    rows_with_nan = df_end.isna().any(axis=1).sum()
                     print(f"\nTotal rows with at least one NaN: {rows_with_nan}")
-                    print(f"Percentage of rows with NaN: {rows_with_nan / len(final_book) * 100:.2f}%")
+                    print(f"Percentage of rows with NaN: {rows_with_nan / len(df_end) * 100:.2f}%")
 
                     # Drop rows with NaN values
-                    final_book_clean = final_book.dropna()
+                    final_book_clean = df_end.dropna()
 
-                    print(f"\nOriginal DataFrame shape: {final_book.shape}")
+                    print(f"\nOriginal DataFrame shape: {df_end.shape}")
                     print(f"Cleaned DataFrame shape: {final_book_clean.shape}")
-                    print(f"Rows removed: {len(final_book) - len(final_book_clean)}")
+                    print(f"Rows removed: {len(df_end) - len(final_book_clean)}")
 
                     # breakpoint()
-                    await db.insert_progress('intraday', 'intraday_books_test', final_book_clean)
+                    await db.insert_progress('intraday', 'intraday_books_test_posn', final_book_clean)
                     logger.info(f'It took {time.time() - start_time} sec. to process {file_name_}')
 
         except Exception as e:
@@ -513,7 +513,7 @@ async def main():
             distinct_sessions = await get_distinct_sessions(sftp, sftp_folder)
             logger.info(f"Distinct sessions: {distinct_sessions}")
 
-            for session_date in distinct_sessions[1:-1]:
+            for session_date in distinct_sessions[:-1]:
                 logger.info(f"Processing: {session_date}")
                 await process_session(sftp, session_date, sftp_folder)
         except Exception as e:
