@@ -448,7 +448,7 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
 
     session_files = await get_session_files(sftp_utility, sftp_folder, session_date)
     logger.info(f"session_files: {session_files}")
-    for file_name in session_files[68:]:
+    for file_name in session_files[99:]:
         file_path = f"{sftp_folder}/{file_name}"
         logger.info(f"Processing file: {file_name}")
 
@@ -503,9 +503,10 @@ async def main():
         "sftp_host": SFTP_HOST,
         "sftp_port": int(SFTP_PORT),
         "sftp_username": SFTP_USERNAME,
-        "sftp_password": SFTP_PASSWORD
+        "sftp_password": "Salam123+-"
     }
 
+    breakpoint()
     sftp_folder = SFTP_DIRECTORY
 
     async with SFTPUtility(**sftp_config, logger=logger) as sftp:

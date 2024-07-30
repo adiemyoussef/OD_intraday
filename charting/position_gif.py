@@ -417,11 +417,11 @@ if __name__ == "__main__":
     # session_date = '2024-07-16'
 
    # df = pd.read_pickle("/Users/youssefadiem/PycharmProjects/OptionsDepth_intraday/heatmaps_simulation/20240725_books.pkl")
-    session_date = '2024-07-25'
+    session_date = '2024-07-26'
 
     query =f"""
     SELECT * FROM intraday.intraday_books_test_posn
-    WHERE as_of_date ='2024-07-24'
+    WHERE effective_date = '2024-07-26'
     """
 
     df = db.execute_query(query)
@@ -434,7 +434,7 @@ if __name__ == "__main__":
     print(f"Data for session date {session_date}:")
     print(df[df['effective_date'] == session_date].head())
 
-    strike_ranges = [5400,5800]  # Example strike ranges
+    strike_ranges = [5300,5600]  # Example strike ranges
     expiration = '2024-07-26'
 
     # Ensure expiration_input is a string in 'YYYY-MM-DD' format

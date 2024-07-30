@@ -356,11 +356,11 @@ if __name__ == "__main__":
     # -----------DATA READING----------#
     query = """
     SELECT * FROM intraday.intraday_books
-    WHERE as_of_date >='2024-07-24'
+    WHERE effective_date ='2024-07-25'
     """
 
-    df_book = db.execute_query(query)
-    breakpoint()
+    df_books = db.execute_query(query)
+    #breakpoint()
     #
     # df_book.to_pickle('20240725_books.pkl')
 
@@ -404,10 +404,10 @@ if __name__ == "__main__":
         logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
 
         # Update the cumulative heatmap
-        heatmap_manager.update_heatmap(df_heatmap, datetime_object)
+        #heatmap_manager.update_heatmap(df_heatmap, datetime_object)
 
         # Get the current cumulative heatmap for plotting
-        current_cumulative_heatmap = heatmap_manager.get_current_heatmap()
+        #current_cumulative_heatmap = heatmap_manager.get_current_heatmap()
 
 
         # Filter SPX data for charting
@@ -422,9 +422,9 @@ if __name__ == "__main__":
 
         # Plot the cumulative heatmap
         #plot_heatmap_cumul(cumulative_df, spx=spx_data_chart, show_fig=True)
-        df_to_plot = current_cumulative_heatmap.drop(columns=["effective_datetime"])
-        plot_heatmap(df_to_plot,effective_datetime, spx=spx_data_chart, show_fig=False)
-        #plot_heatmap(df_heatmap, spx=spx_data_chart, show_fig=False)
+        #df_to_plot = current_cumulative_heatmap.drop(columns=["effective_datetime"])
+        #plot_heatmap(df_to_plot,effective_datetime, spx=spx_data_chart, show_fig=False)
+        plot_heatmap(df_heatmap,effective_datetime, spx=spx_data_chart, show_fig=False)
 
         logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 

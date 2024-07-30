@@ -15,6 +15,12 @@ import pytz
 import numpy as np
 import requests
 import logging
+import datetime
+import pytz
+import time
+import logging
+import pandas as pd
+import numpy as np
 
 import pandas_market_calendars as mcal
 from datetime import datetime, timedelta
@@ -326,6 +332,64 @@ def parse_message(message):
         'timestamp': timestamp
     }
 
+
+
+def get_latest_poly(client):
+    """
+    Fetches the latest options data from Polygon and returns it as a DataFrame.
+
+    :param client: The Polygon client object used to fetch data.
+    :return: A DataFrame containing the latest options data.
+    """
+    options_chain = []
+
+    # Start the timer
+    start_time = time.time()
+
+    for o in client.list_snapshot_options_chain("I:SPX", params={"limit": 250}):
+        options_chain.append(o)
+
+    end_time = time.time()
+    time_taken = end_time - start_time
+    logging.info(f"Time taken to fetch options chain: {time_taken} seconds")
+
+    df_options_chain = pd.DataFrame(options_chain)
+    df_options_chain.sort_values('open_interest', ascending=False, inplace=True)
+    df_cleaned = df_options_chain.dropna(subset=['implied_volatility']).copy()
+
+    df_cleaned['id'] = df_cleaned.index
+
+    df_expanded = pd.json_normalize(df_cleaned['details'])
+    greeks_df = df_cleaned['greeks'].apply(pd.Series)
+
+    df_expanded['id'] = df_cleaned['id'].values
+    greeks_df['id'] = df_cleaned['id'].values
+
+    df_expanded = pd.merge(df_expanded, df_cleaned[['id', 'implied_volatility', 'open_interest']], on='id')
+    df_expanded = pd.merge(df_expanded, greeks_df, on='id')
+
+    df_expanded['option_symbol'] = df_expanded['ticker'].str.extract(r':([A-Za-z]+)\d')
+
+    df = df_expanded[['option_symbol', 'contract_type', 'expiration_date', 'strike_price',
+                      'implied_volatility', 'open_interest', 'delta', 'gamma', 'vega']] #theta
+
+    df_final = df.copy()
+    df_final['contract_type'] = df_final['contract_type'].replace({'call': 'C', 'put': 'P'})
+
+    # Adjustment to be removed once Real-time data is available
+
+    timestamp = get_eastern_time()
+    logging.info(f'Timestamp: {timestamp}')
+    df_final.insert(0, 'time_stamp', timestamp)
+    df_final["time_stamp"] = pd.to_datetime(df_final['time_stamp'])
+
+    df_final.sort_values(['expiration_date', 'open_interest'], ascending=[True, False], inplace=True)
+
+    return df_final
+
+# Example usage:
+# polygon_client = ... # Initialize your Polygon client
+# latest_data = get_latest_poly(polygon_client)
 
 # Example usage within your flow
 # send_webhook_to_discord(file_info, flow_start_time)
