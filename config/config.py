@@ -153,3 +153,38 @@ FLOW_COLORS = ['magenta', 'yellow', 'grey']
 # If your image is located relative to the script's directory, you can use:
 LOGO_dark = os.path.join('..', 'config', 'images', 'logo_dark.png')
 LOGO_light = os.path.join('..', 'config', 'images', 'logo_light.png')
+
+# [All your existing imports and configurations remain unchanged]
+
+# ... [rest of your existing code] ...
+
+if __name__ == "__main__":
+
+    print("#----------- VARIABLES ------------#")
+
+    # Digital Ocean
+    print(f"DB_HOST: {DB_HOST}")
+    print(f"DB_PORT: {DB_PORT}")
+    print(f"DB_USER: {DB_USER}")
+    print(f"DB_NAME: {DB_NAME}")
+    print(f"DB_DRIVER: {DB_DRIVER}")
+    print(f"DO_SPACES_URL: {DO_SPACES_URL}")
+    print(f"DO_SPACES_KEY: {DO_SPACES_KEY}")
+    print(f"DO_SPACES_SECRET: {DO_SPACES_SECRET}")
+    print(f"DO_SPACES_BUCKET: {DO_SPACES_BUCKET}")
+    print(f"LOG_FILE_KEY: {LOG_FILE_KEY}")
+
+    # SFTP
+    print(f"SFTP_HOST: {SFTP_HOST}")
+    print(f"SFTP_PORT: {SFTP_PORT}")
+    print(f"SFTP_USERNAME: {SFTP_USERNAME}")
+    print(f"SFTP_DIRECTORY: {SFTP_DIRECTORY}")
+
+    # RabbitMQ
+    print(f"RABBITMQ_HOST: {RABBITMQ_HOST}")
+    print(f"RABBITMQ_CBOE_QUEUE: {RABBITMQ_CBOE_QUEUE}")
+    print(f"RABBITMQ_HEARTBEAT_QUEUE: {RABBITMQ_HEARTBEAT_QUEUE}")
+    print(f"RABBITMQ_PORT: {RABBITMQ_PORT}")
+    print(f"RABBITMQ_USER: {RABBITMQ_USER}")
+
+    print("#---------------------------------------#")
