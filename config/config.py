@@ -8,7 +8,7 @@ nyse = mcal.get_calendar('NYSE')
 #---------------- DIGITAL OCEAN ---------------------------#
 # # - MySQL
 DB_HOST = os.getenv('DB_HOST')
-DB_PORT = int(os.getenv('DB_PORT'))
+DB_PORT = int(os.getenv('DB_PORT',25060))
 DB_USER = os.getenv('DB_USER')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_NAME = os.getenv('DB_NAME')
@@ -24,7 +24,7 @@ LOG_FILE_KEY = os.getenv('LOG_FILE_KEY')
 # #---------------- SFTP ---------------------------#
 # #- Server
 SFTP_HOST = os.getenv('SFTP_HOST')
-SFTP_PORT = os.getenv('SFTP_PORT')
+SFTP_PORT = int(os.getenv('SFTP_PORT',22))
 SFTP_USERNAME = os.getenv('SFTP_USERNAME')
 SFTP_PASSWORD = os.getenv('SFTP_PASSWORD')
 SFTP_DIRECTORY = os.getenv('SFTP_DIRECTORY')
