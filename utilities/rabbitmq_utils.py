@@ -183,7 +183,7 @@ class RabbitMQUtilities:
                     messages.append((method_frame, properties, body))
                 else:
                     break
-            self.logger.info(f"Fetched {len(messages)} messages from queue '{queue_name}'.")
+            self.logger.debug(f"Fetched {len(messages)} messages from queue '{queue_name}'.")
         except Exception as e:
             self.logger.error(f"Error fetching messages from queue '{queue_name}': {e}")
         return messages

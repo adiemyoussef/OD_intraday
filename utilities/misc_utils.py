@@ -387,6 +387,37 @@ def get_latest_poly(client):
 
     return df_final
 
+
+def analyze_duplicates(df, df_name, key_columns, logger):
+    total_rows = len(df)
+    duplicates = df[df.duplicated(subset=key_columns, keep=False)]
+    duplicate_count = len(duplicates)
+
+    analysis = f"""
+    #-------- DUPLICATE ANALYSIS: {df_name} -------#
+    Total rows: {total_rows}
+    Duplicate rows: {duplicate_count}
+    Percentage of duplicates: {(duplicate_count / total_rows) * 100:.2f}%
+
+    Columns: {', '.join(df.columns)}
+
+    Key columns used for duplicate check: {', '.join(key_columns)}
+
+    Data types of key columns:
+    {df[key_columns].dtypes.to_string()}
+
+    Sample of duplicate rows (if any):
+    {duplicates.head().to_string() if not duplicates.empty else "No duplicates found"}
+    #------------------------------------------#
+    """
+
+    logger.debug(analysis)
+    return duplicates
+
+
+def send_notification(message: str, logger):
+    # Implement your notification logic here
+    logger.warning(f"Notification: {message}")
 # Example usage:
 # polygon_client = ... # Initialize your Polygon client
 # latest_data = get_latest_poly(polygon_client)

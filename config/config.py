@@ -64,7 +64,11 @@ WEBHOOK_URL = 'https://discord.com/api/webhooks/1251013946111164436/VN55yOK-ntil
 OPTION_SYMBOLS_TO_PROCESS = ['SPX', 'SPXW']
 CSV_CHUNKSIZE = 100000
 
-
+# Check for uniqueness in key columns
+INITAL_BOOK_KEY = ['ticker', 'option_symbol', 'call_put_flag', 'strike_price', 'expiration_date']
+INTRADAY_KEY = ['ticker', 'option_symbol', 'call_put_flag', 'strike_price', 'expiration_date']
+MERGED_BOOK_KEY = ['ticker', 'option_symbol', 'call_put_flag', 'strike_price', 'expiration_date_original']
+#FINAL_BOOK_KEY =
 # Required columns for intraday data
 INTRADAY_REQUIRED_COLUMNS = [
     'ticker',
@@ -178,6 +182,7 @@ if __name__ == "__main__":
     print_var("SFTP_HOST", SFTP_HOST)
     print_var("SFTP_PORT", SFTP_PORT)
     print_var("SFTP_USERNAME", SFTP_USERNAME)
+    print_var("SFTP_PASSWORD", SFTP_PASSWORD)
     print_var("SFTP_DIRECTORY", SFTP_DIRECTORY)
     print_var("SFTP_BASE_SLEEP_TIME", SFTP_BASE_SLEEP_TIME)
     print_var("SFTP_REDUCED_SLEEP_TIME", SFTP_REDUCED_SLEEP_TIME)
@@ -190,6 +195,7 @@ if __name__ == "__main__":
     print_var("RABBITMQ_HEARTBEAT_QUEUE", RABBITMQ_HEARTBEAT_QUEUE)
     print_var("RABBITMQ_PORT", RABBITMQ_PORT)
     print_var("RABBITMQ_USER", RABBITMQ_USER)
+    print_var("RABBITMQ_PASS", RABBITMQ_PASS)
     print_var("RABBITMQ_QUEUE_SIZE_ALERT_THRESHOLD", RABBITMQ_QUEUE_SIZE_ALERT_THRESHOLD)
     print_var("RABBITMQ_HEARTBEAT_INTERVAL", RABBITMQ_HEARTBEAT_INTERVAL)
     print_var("RABBITMQ_CLEAR_HEARTBEAT_INTERVAL", RABBITMQ_CLEAR_HEARTBEAT_INTERVAL)
@@ -200,36 +206,36 @@ if __name__ == "__main__":
     # Discord
     print_var("WEBHOOK_URL", WEBHOOK_URL)
 
-    # Data Processing
-    print_var("OPTION_SYMBOLS_TO_PROCESS", OPTION_SYMBOLS_TO_PROCESS)
-    print_var("CSV_CHUNKSIZE", CSV_CHUNKSIZE)
-    print_var("INTRADAY_REQUIRED_COLUMNS", INTRADAY_REQUIRED_COLUMNS)
-    print_var("VALID_SECURITY_TYPES", VALID_SECURITY_TYPES)
-    print_var("VALID_CALL_PUT_FLAGS", VALID_CALL_PUT_FLAGS)
-    print_var("VALID_SERIES_TYPES", VALID_SERIES_TYPES)
+    # # Data Processing
+    # print_var("OPTION_SYMBOLS_TO_PROCESS", OPTION_SYMBOLS_TO_PROCESS)
+    # print_var("CSV_CHUNKSIZE", CSV_CHUNKSIZE)
+    # print_var("INTRADAY_REQUIRED_COLUMNS", INTRADAY_REQUIRED_COLUMNS)
+    # print_var("VALID_SECURITY_TYPES", VALID_SECURITY_TYPES)
+    # print_var("VALID_CALL_PUT_FLAGS", VALID_CALL_PUT_FLAGS)
+    # print_var("VALID_SERIES_TYPES", VALID_SERIES_TYPES)
 
-    # Simulations
-    print_var("HEATMAP_TIME_STEPS", HEATMAP_TIME_STEPS)
-    print_var("HEATMAP_PRICE_STEPS", HEATMAP_PRICE_STEPS)
-    print_var("HEATMAP_PRICE_RANGE", HEATMAP_PRICE_RANGE)
-
-    # Constants
-    print_var("SPX_TICKER", SPX_TICKER)
-    print_var("HAT_SPX_TICKER", HAT_SPX_TICKER)
-    print_var("YAHOO_SPX_TICKER", YAHOO_SPX_TICKER)
-    print_var("RISK_FREE_RATE", RISK_FREE_RATE)
-
-    # Charting
-    print_var("IMAGE_WIDTH", IMAGE_WIDTH)
-    print_var("IMAGE_HEIGTH", IMAGE_HEIGTH)
-    print_var("SCALE_FACTOR", SCALE_FACTOR)
-    print_var("COLOR_SCALE", COLOR_SCALE)
-    print_var("COLOR_SCALE_CUSTOM", COLOR_SCALE_CUSTOM)
-    print_var("BACKGROUND_COLOR", BACKGROUND_COLOR)
-    print_var("TEXT_COLOR", TEXT_COLOR)
-    print_var("POSITION_COULORS", POSITION_COULORS)
-    print_var("FLOW_COLORS", FLOW_COLORS)
-    print_var("LOGO_dark", LOGO_dark)
-    print_var("LOGO_light", LOGO_light)
+    # # Simulations
+    # print_var("HEATMAP_TIME_STEPS", HEATMAP_TIME_STEPS)
+    # print_var("HEATMAP_PRICE_STEPS", HEATMAP_PRICE_STEPS)
+    # print_var("HEATMAP_PRICE_RANGE", HEATMAP_PRICE_RANGE)
+    #
+    # # Constants
+    # print_var("SPX_TICKER", SPX_TICKER)
+    # print_var("HAT_SPX_TICKER", HAT_SPX_TICKER)
+    # print_var("YAHOO_SPX_TICKER", YAHOO_SPX_TICKER)
+    # print_var("RISK_FREE_RATE", RISK_FREE_RATE)
+    #
+    # # Charting
+    # print_var("IMAGE_WIDTH", IMAGE_WIDTH)
+    # print_var("IMAGE_HEIGTH", IMAGE_HEIGTH)
+    # print_var("SCALE_FACTOR", SCALE_FACTOR)
+    # print_var("COLOR_SCALE", COLOR_SCALE)
+    # print_var("COLOR_SCALE_CUSTOM", COLOR_SCALE_CUSTOM)
+    # print_var("BACKGROUND_COLOR", BACKGROUND_COLOR)
+    # print_var("TEXT_COLOR", TEXT_COLOR)
+    # print_var("POSITION_COULORS", POSITION_COULORS)
+    # print_var("FLOW_COLORS", FLOW_COLORS)
+    # print_var("LOGO_dark", LOGO_dark)
+    # print_var("LOGO_light", LOGO_light)
 
     print("#---------------------------------------#")
