@@ -154,37 +154,82 @@ FLOW_COLORS = ['magenta', 'yellow', 'grey']
 LOGO_dark = os.path.join('..', 'config', 'images', 'logo_dark.png')
 LOGO_light = os.path.join('..', 'config', 'images', 'logo_light.png')
 
-# [All your existing imports and configurations remain unchanged]
-
-# ... [rest of your existing code] ...
 
 if __name__ == "__main__":
-
     print("#----------- VARIABLES ------------#")
 
+
+    def print_var(name, value):
+        print(f"{name}: {value} (Type: {type(value).__name__})")
+
+
     # Digital Ocean
-    print(f"DB_HOST: {DB_HOST}")
-    print(f"DB_PORT: {DB_PORT}")
-    print(f"DB_USER: {DB_USER}")
-    print(f"DB_NAME: {DB_NAME}")
-    print(f"DB_DRIVER: {DB_DRIVER}")
-    print(f"DO_SPACES_URL: {DO_SPACES_URL}")
-    print(f"DO_SPACES_KEY: {DO_SPACES_KEY}")
-    print(f"DO_SPACES_SECRET: {DO_SPACES_SECRET}")
-    print(f"DO_SPACES_BUCKET: {DO_SPACES_BUCKET}")
-    print(f"LOG_FILE_KEY: {LOG_FILE_KEY}")
+    print_var("DB_HOST", DB_HOST)
+    print_var("DB_PORT", DB_PORT)
+    print_var("DB_USER", DB_USER)
+    print_var("DB_NAME", DB_NAME)
+    print_var("DB_DRIVER", DB_DRIVER)
+    print_var("DO_SPACES_URL", DO_SPACES_URL)
+    print_var("DO_SPACES_KEY", DO_SPACES_KEY)
+    print_var("DO_SPACES_BUCKET", DO_SPACES_BUCKET)
+    print_var("LOG_FILE_KEY", LOG_FILE_KEY)
 
     # SFTP
-    print(f"SFTP_HOST: {SFTP_HOST}")
-    print(f"SFTP_PORT: {SFTP_PORT}")
-    print(f"SFTP_USERNAME: {SFTP_USERNAME}")
-    print(f"SFTP_DIRECTORY: {SFTP_DIRECTORY}")
+    print_var("SFTP_HOST", SFTP_HOST)
+    print_var("SFTP_PORT", SFTP_PORT)
+    print_var("SFTP_USERNAME", SFTP_USERNAME)
+    print_var("SFTP_DIRECTORY", SFTP_DIRECTORY)
+    print_var("SFTP_BASE_SLEEP_TIME", SFTP_BASE_SLEEP_TIME)
+    print_var("SFTP_REDUCED_SLEEP_TIME", SFTP_REDUCED_SLEEP_TIME)
+    print_var("SFTP_EXPECTATION_WINDOW", SFTP_EXPECTATION_WINDOW)
+    print_var("SFTP_MAX_RETRY_ATTEMPTS", SFTP_MAX_RETRY_ATTEMPTS)
 
     # RabbitMQ
-    print(f"RABBITMQ_HOST: {RABBITMQ_HOST}")
-    print(f"RABBITMQ_CBOE_QUEUE: {RABBITMQ_CBOE_QUEUE}")
-    print(f"RABBITMQ_HEARTBEAT_QUEUE: {RABBITMQ_HEARTBEAT_QUEUE}")
-    print(f"RABBITMQ_PORT: {RABBITMQ_PORT}")
-    print(f"RABBITMQ_USER: {RABBITMQ_USER}")
+    print_var("RABBITMQ_HOST", RABBITMQ_HOST)
+    print_var("RABBITMQ_CBOE_QUEUE", RABBITMQ_CBOE_QUEUE)
+    print_var("RABBITMQ_HEARTBEAT_QUEUE", RABBITMQ_HEARTBEAT_QUEUE)
+    print_var("RABBITMQ_PORT", RABBITMQ_PORT)
+    print_var("RABBITMQ_USER", RABBITMQ_USER)
+    print_var("RABBITMQ_QUEUE_SIZE_ALERT_THRESHOLD", RABBITMQ_QUEUE_SIZE_ALERT_THRESHOLD)
+    print_var("RABBITMQ_HEARTBEAT_INTERVAL", RABBITMQ_HEARTBEAT_INTERVAL)
+    print_var("RABBITMQ_CLEAR_HEARTBEAT_INTERVAL", RABBITMQ_CLEAR_HEARTBEAT_INTERVAL)
+    print_var("PROCESS_MESSAGE_QUEUE_RETRY_DELAY", PROCESS_MESSAGE_QUEUE_RETRY_DELAY)
+    print_var("RABBITMQ_MAX_RUNTIME", RABBITMQ_MAX_RUNTIME)
+    print_var("RABBITMQ_MAX_ACK_RETRIES", RABBITMQ_MAX_ACK_RETRIES)
+
+    # Discord
+    print_var("WEBHOOK_URL", WEBHOOK_URL)
+
+    # Data Processing
+    print_var("OPTION_SYMBOLS_TO_PROCESS", OPTION_SYMBOLS_TO_PROCESS)
+    print_var("CSV_CHUNKSIZE", CSV_CHUNKSIZE)
+    print_var("INTRADAY_REQUIRED_COLUMNS", INTRADAY_REQUIRED_COLUMNS)
+    print_var("VALID_SECURITY_TYPES", VALID_SECURITY_TYPES)
+    print_var("VALID_CALL_PUT_FLAGS", VALID_CALL_PUT_FLAGS)
+    print_var("VALID_SERIES_TYPES", VALID_SERIES_TYPES)
+
+    # Simulations
+    print_var("HEATMAP_TIME_STEPS", HEATMAP_TIME_STEPS)
+    print_var("HEATMAP_PRICE_STEPS", HEATMAP_PRICE_STEPS)
+    print_var("HEATMAP_PRICE_RANGE", HEATMAP_PRICE_RANGE)
+
+    # Constants
+    print_var("SPX_TICKER", SPX_TICKER)
+    print_var("HAT_SPX_TICKER", HAT_SPX_TICKER)
+    print_var("YAHOO_SPX_TICKER", YAHOO_SPX_TICKER)
+    print_var("RISK_FREE_RATE", RISK_FREE_RATE)
+
+    # Charting
+    print_var("IMAGE_WIDTH", IMAGE_WIDTH)
+    print_var("IMAGE_HEIGTH", IMAGE_HEIGTH)
+    print_var("SCALE_FACTOR", SCALE_FACTOR)
+    print_var("COLOR_SCALE", COLOR_SCALE)
+    print_var("COLOR_SCALE_CUSTOM", COLOR_SCALE_CUSTOM)
+    print_var("BACKGROUND_COLOR", BACKGROUND_COLOR)
+    print_var("TEXT_COLOR", TEXT_COLOR)
+    print_var("POSITION_COULORS", POSITION_COULORS)
+    print_var("FLOW_COLORS", FLOW_COLORS)
+    print_var("LOGO_dark", LOGO_dark)
+    print_var("LOGO_light", LOGO_light)
 
     print("#---------------------------------------#")
