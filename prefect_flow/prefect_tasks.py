@@ -796,10 +796,7 @@ def Intraday_Flow():
                     filtered_final_book = filter_and_log_nan_values(final_book)
                     logger.debug(f"Len of filtered_final_book: {len(final_book)}")
 
-
-                    #TODO: Filter out the rows where there's Nan Values and log the unique contract that have been filtered out
-                    #      with also the mm_position of these contract to see which one could impact
-                    #db_utils.insert_progress('intraday', 'intraday_books',filtered_final_book)
+                    db_utils.insert_progress('intraday', 'intraday_books',filtered_final_book)
 
                     # TODO: if it's the 1800 file: export as unrevised initial book for the next effective datge
 
