@@ -18,7 +18,7 @@ deployments:
   version:
   tags: []
   description:
-  entrypoint: OD_intraday/prefect_flow/prefect_tasks.py:Intraday_Flow
+  entrypoint: prefect_flow/prefect_tasks.py:Intraday_Flow
   parameters: {}
   work_pool:
     name: intraday-paperspace-agent

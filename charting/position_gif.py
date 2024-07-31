@@ -1,7 +1,6 @@
 import pandas as pd
 import multiprocessing
 from functools import partial
-import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -13,27 +12,27 @@ from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
 from functools import partial
 import colorsys
-from config.config import *
+# from config.config import *
 import requests
 import json
 from datetime import datetime
-from utilities.db_utils import *
+# from utilities.db_utils import *
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+# logger = logging.getLogger(__name__)
+# logger.setLevel(logging.INFO)
 
 # Create a console handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-
-# Create a formatter and set it for the handler
-file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(file_formatter)
-
-# Add the handler to the logger
-logger.addHandler(console_handler)
-
-db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME, logger)
+# console_handler = logging.StreamHandler()
+# console_handler.setLevel(logging.INFO)
+#
+# # Create a formatter and set it for the handler
+# file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# console_handler.setFormatter(file_formatter)
+#
+# # Add the handler to the logger
+# logger.addHandler(console_handler)
+#
+# db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME, logger)
 
 def generate_frame_wrapper(args):
     timestamp, index, generate_frame_partial = args
@@ -413,20 +412,18 @@ def generate_and_send_gif(data, session_date, participant, strike_input, expirat
 
 
 if __name__ == "__main__":
-    # df = pd.read_pickle("20240716_intraday.pkl")
-    # session_date = '2024-07-16'
+    WEBHOOK_URL = 'https://discord.com/api/webhooks/1251013946111164436/VN55yOK-ntil-PnZn1gzWHzKwzDklwIh6fVspA_I8MCCaUnG-hsRsrP1t_WsreGHIity'
 
-   # df = pd.read_pickle("/Users/youssefadiem/PycharmProjects/OptionsDepth_intraday/heatmaps_simulation/20240725_books.pkl")
     session_date = '2024-07-26'
 
-    query =f"""
-    SELECT * FROM intraday.intraday_books_test_posn
-    WHERE effective_date = '2024-07-26'
-    """
+    # query =f"""
+    # SELECT * FROM intraday.intraday_books_test_posn
+    # WHERE effective_date = '{session_date}'
+    # """
 
-    df = db.execute_query(query)
-
-
+    # df = db.execute_query(query)
+    df = pd.read_pickle("books_dataset.pkl")
+    breakpoint()
     print(f"Loaded data shape: {df.shape}")
     print(f"Date range in data: {df['effective_datetime'].min()} to {df['effective_datetime'].max()}")
     print(f"Unique dates in data: {df['effective_date'].nunique()}")

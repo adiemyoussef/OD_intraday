@@ -297,7 +297,7 @@ class DatabaseUtilities:
             self.logger.error(f"Unexpected error occurred while executing query: {e}")
             raise
         finally:
-            self.logger.debug(f"Query executed: {query}...")
+            print(f"Query executed: {query}...")
 
     def execute_insert(self, query: str, params: tuple) -> bool:
         if not self.connection:
