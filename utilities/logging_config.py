@@ -3,6 +3,11 @@ import os
 from utilities.customized_logger import DailyRotatingFileHandler
 from prefect.logging import get_run_logger
 
+
+class ConsoleFilter(logging.Filter):
+    def filter(self, record):
+        return not hasattr(record, 'no_console')
+
 class ColoredFormatter(logging.Formatter):
     COLORS = {
         'DEBUG': '\033[94m',  # Blue
@@ -17,37 +22,41 @@ class ColoredFormatter(logging.Formatter):
         log_message = super().format(record)
         return f"{self.COLORS.get(record.levelname, self.COLORS['ENDC'])}{log_message}{self.COLORS['ENDC']}"
 
-class ConsoleFilter(logging.Filter):
-    def filter(self, record):
-        return not hasattr(record, 'no_console')
-
 def setup_custom_logger(name, log_level=logging.INFO, log_dir='logs'):
     logger = logging.getLogger(name)
-    logger.setLevel(log_level)
+    logger.setLevel(logging.DEBUG)  # Set to DEBUG to capture all levels
     logger.propagate = False  # Prevent propagation to avoid double logging
 
     # Ensure log directory exists
     os.makedirs(log_dir, exist_ok=True)
 
-    # File handler with DailyRotatingFileHandler
+    # File handler with DailyRotatingFileHandler (DEBUG level)
     file_handler = DailyRotatingFileHandler(
         base_filename=os.path.join(log_dir, name),
         when="midnight",
         interval=1,
         backupCount=7
     )
+    file_handler.setLevel(logging.DEBUG)
     file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(file_formatter)
     logger.addHandler(file_handler)
 
-    # Console handler with colored output
+    # Console handler with colored output (INFO level)
     console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
     console_formatter = ColoredFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
 
     return logger
 
+def get_logger(debug_mode=False):
+    """
+    Returns the custom logger.
+    debug_mode parameter is kept for backward compatibility but doesn't affect the logging levels anymore.
+    """
+    return setup_custom_logger("Prefect_Flow")
 # def get_logger(debug_mode=False):
 #     """
 #     Returns the appropriate logger based on the context.
