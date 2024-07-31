@@ -54,10 +54,10 @@ client = RESTClient("sOqWsfC0sRZpjEpi7ppjWsCamGkvjpHw")
 #     return logger
 
 DEBUG_MODE = False
-LOG_LEVEL = logging.INFO
+LOG_LEVEL = logging.DEBUG
 
 # Get the appropriate logger
-logger = get_logger(DEBUG_MODE)
+logger = get_logger(debug_mode=False)
 # # Setup the main logger
 # logger = setup_custom_logger("Prefect Flow", logging.DEBUG if DEBUG_MODE else logging.INFO)
 # logger.setLevel(LOG_LEVEL)  # Or any other level like logging.INFO, logging.WARNING, etc.
@@ -572,9 +572,9 @@ async def build_latest_book(initial_book, intraday_data):
 
         merged_duplicates = analyze_duplicates(merged, "merged", MERGED_BOOK_KEY, logger)
 
-        breakpoint()
 
-        logger.debug('Finished update_book_intraday')
+
+        logger.info('Finished update_book_intraday')
 
         return merged
 
@@ -707,14 +707,33 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
 
     return merged_book
 
-
-
 #----------------- FLOWS ------------------#
-@flow(name="Intraday Flow")
+@flow(
+    name="Intraday Flow",
+    description="""
+    This flow processes intraday financial data for options trading.
+    It performs the following main steps:
+    1. Loads the initial book of contracts
+    2. Fetches historical poly data
+    3. Processes the latest message from the queue
+    4. Retrieves and verifies SFTP file data
+    5. Builds the latest book with updated contract information
+    6. Updates the book with the latest Greeks values
+    7. Filters out invalid entries and logs the results
+    8. Acknowledges the processed message in RabbitMQ
+
+    The flow handles various edge cases and exceptions, ensuring robust
+    data processing and connection management throughout its execution.
+    """,
+    version="1.0.0",
+    retries=3,
+    retry_delay_seconds=300,  # 5 minutes
+    timeout_seconds=3600,  # 1 hour
+    #validate_parameters=True
+)
 def Intraday_Flow():
 
-    logger.info("Test for Terminal")
-    logger.debug("Test for log file")
+
     flow_start_time = time.time()
 
     expected_file_override = None #'/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-07-30_18_00_1.csv.zip'
