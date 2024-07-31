@@ -24,41 +24,43 @@ from utilities.db_utils import *
 from utilities.rabbitmq_utils import *
 from utilities.misc_utils import *
 from utilities.customized_logger import DailyRotatingFileHandler
-
+from utilities.logging_config import *
 # Setup
 mp.set_start_method("fork", force=True)
 dill.settings['recurse'] = True
 client = RESTClient("sOqWsfC0sRZpjEpi7ppjWsCamGkvjpHw")
 
-def setup_custom_logger(name, log_level=logging.INFO):
-    logger = logging.getLogger(name)
-    logger.setLevel(log_level)
+# def setup_custom_logger(name, log_level=logging.INFO):
+#     logger = logging.getLogger(name)
+#     logger.setLevel(log_level)
+#
+#     # File handler with DailyRotatingFileHandler
+#     file_handler = DailyRotatingFileHandler(
+#         base_filename=f"logs/{name}",
+#         when="midnight",
+#         interval=1,
+#         backupCount=7
+#     )
+#     file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+#     file_handler.setFormatter(file_formatter)
+#     logger.addHandler(file_handler)
+#
+#     # Console handler
+#     console_handler = logging.StreamHandler()
+#     console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+#     console_handler.setFormatter(console_formatter)
+#     logger.addHandler(console_handler)
+#
+#     return logger
 
-    # File handler with DailyRotatingFileHandler
-    file_handler = DailyRotatingFileHandler(
-        base_filename=f"logs/{name}",
-        when="midnight",
-        interval=1,
-        backupCount=7
-    )
-    file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(file_formatter)
-    logger.addHandler(file_handler)
+DEBUG_MODE = False
+LOG_LEVEL = logging.INFO
 
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
-
-    return logger
-
-DEBUG_MODE = True
-LOG_LEVEL = logging.DEBUG
-
-# Setup the main logger
-logger = setup_custom_logger("Prefect Flow", logging.DEBUG if DEBUG_MODE else logging.INFO)
-logger.setLevel(LOG_LEVEL)  # Or any other level like logging.INFO, logging.WARNING, etc.
+# Get the appropriate logger
+logger = get_logger(DEBUG_MODE)
+# # Setup the main logger
+# logger = setup_custom_logger("Prefect Flow", logging.DEBUG if DEBUG_MODE else logging.INFO)
+# logger.setLevel(LOG_LEVEL)  # Or any other level like logging.INFO, logging.WARNING, etc.
 
 #-------- Initializing the Classes -------#
 polygon_client = RESTClient("sOqWsfC0sRZpjEpi7ppjWsCamGkvjpHw")
@@ -71,24 +73,6 @@ logger.debug(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
 
 sftp_utils = SFTPUtility(SFTP_HOST,SFTP_PORT,SFTP_USERNAME,SFTP_PASSWORD, logger = logger)
 #-------------------------------------------#
-def send_notification(message: str):
-    prefect_logger = get_run_logger()
-    # Implement your notification logic here
-    prefect_logger.warning(f"Notification: {message}")
-
-def process_greek_og(greek_name, poly_data, book):
-    latest_greek = poly_data.sort_values('time_stamp', ascending=False).groupby('contract_id').first().reset_index()
-    latest_greek = latest_greek[['contract_id', greek_name, 'time_stamp']]
-    book = pd.merge(book, latest_greek, on='contract_id', how='left', suffixes=('', '_update'))
-    print(book.columns)
-    update_col = f"{greek_name}_update"
-    if update_col in book.columns:
-        book[greek_name] = book[update_col].combine_first(book[greek_name])
-        book.drop(columns=[update_col, "time_stamp_update"], inplace=True)
-
-
-    return book
-
 def process_greek(greek_name, poly_data, book):
     latest_greek = poly_data.sort_values('time_stamp', ascending=False).groupby('contract_id').first().reset_index()
     latest_greek = latest_greek[['contract_id', greek_name, 'time_stamp']]
@@ -178,7 +162,7 @@ def filter_and_log_nan_values(final_book: pd.DataFrame) -> pd.DataFrame:
     return final_book.dropna()
 
 def ensure_all_connections_are_open():
-    prefect_logger = get_run_logger()
+
     max_attempts = 5
     attempt = 0
     while attempt < max_attempts:
@@ -186,15 +170,15 @@ def ensure_all_connections_are_open():
         rabbitmq_status = rabbitmq_utils.get_status()
 
         if db_status['status'] == 'Connected' and rabbitmq_status['status'] == 'Connected':
-            prefect_logger.debug("Both database and RabbitMQ connections are established.")
+            logger.debug("Both database and RabbitMQ connections are established.")
             return True
 
-        prefect_logger.warning(
+        logger.warning(
             f"Attempt {attempt + 1}: Connections not ready. DB: {db_status}, RabbitMQ: {rabbitmq_status}")
         time.sleep(5)  # Wait for 5 seconds before retrying
         attempt += 1
 
-    prefect_logger.error("Failed to establish connections after maximum attempts.")
+    logger.error("Failed to establish connections after maximum attempts.")
     return False
 
 #------------------ TASKS ------------------#
@@ -209,16 +193,16 @@ def fetch_historical_poly_data(previous_date, current_date, previous_datetime, c
         date_only BETWEEN'{previous_date}' AND '{current_date}'
         AND time_stamp BETWEEN '{previous_datetime}' AND '{current_datetime}'
     """
-    #breakpoint()
+
     poly_data  = db_utils.execute_query(query)
     logger.info(f'Fetched {len(poly_data)} rows in {time.time() - start_time} sec.')
 
     return poly_data
 @task(retries=3, retry_delay_seconds=60, name= "process_last_message_in_queue", task_run_name= "Processing last message in queue...")
 async def process_last_message_in_queue(rabbitmq_utils:RabbitMQUtilities, expected_file_override = None):
-    prefect_logger = get_run_logger()
-    prefect_logger.debug("process_last_message_in_queue")
-    function_start_time = time.time()
+
+    logger.info("Processing last message in queue...")
+
     try:
         rabbitmq_utils.connect()
 
@@ -272,7 +256,7 @@ async def process_last_message_in_queue(rabbitmq_utils:RabbitMQUtilities, expect
         # Don't close the connection here
         pass
 
-@task(name="update_book_with_latest_greeks",
+@task(name="Get initial book",
       task_run_name= "Getting initial book...",
       description="Updates the book of financial options contracts with the latest Greek values.",
       retries=2,
@@ -283,7 +267,7 @@ async def process_last_message_in_queue(rabbitmq_utils:RabbitMQUtilities, expect
 
       )
 def get_initial_book(get_unrevised_book: Callable):
-    prefect_logger = get_run_logger()
+
     try:
         current_time = datetime.now(ZoneInfo("America/New_York"))
         current_date = current_time.date()
@@ -316,7 +300,7 @@ def get_initial_book(get_unrevised_book: Callable):
                     #send_notification(f"Unrevised session_book found for {current_date}. Proceeding with caution.")
                     return session_book
             else:
-                prefect_logger.debug(f"Revised session_book loaded for date: {current_date}")
+                logger.debug(f"Revised session_book loaded for date: {current_date}")
                 # TODO: verify it makes sense
                 return session_book
 
@@ -325,20 +309,20 @@ def get_initial_book(get_unrevised_book: Callable):
             #TODO:
             # if it's sunday, get revised book since it runs Friday-Saturday
             # else;
-            prefect_logger.debug("Using unrevised session_book due to time of day.")
+            logger.debug("Using unrevised session_book due to time of day.")
             return get_unrevised_book()
 
     except Exception as e:
-        prefect_logger.error(f"Error getting initial session_book: {e}")
+        logger.error(f"Error getting initial session_book: {e}")
         raise
 # This function will be implemented later
 
 @task
 def get_unrevised_book():
-    prefect_logger = get_run_logger()
+
 
     logger.info(f"Operating during Unrevised book hours")
-    prefect_logger.info(f"Operating during Unrevised book hours")
+    logger.info(f"Operating during Unrevised book hours")
 
     unrevised_book = pd.read_pickle("unrevised_book_20240730.pkl")
     unrevised_book.drop(columns =['effective_datetime'], inplace = True)
@@ -365,12 +349,12 @@ def get_unrevised_book():
     #         #TODO: verify it makes sens
     #         #unrevised_book
     #     else:
-    #         prefect_logger.debug(f"Revised session_book loaded for date: {current_date}")
+    #         logger.debug(f"Revised session_book loaded for date: {current_date}")
     #         #TODO: verify it makes sense
     #         return unrevised_book
     #
     # except Exception as e:
-    #     prefect_logger.error(f"Error getting initial session_book: {e}")
+    #     logger.error(f"Error getting initial session_book: {e}")
     #     raise
 
 @task(retries=2)
@@ -402,7 +386,7 @@ def get_file_from_sftp(msg_body, override_path = None):
 
 @task(retries=2)
 async def read_and_verify_sftp_file(file_info, file_data):
-    prefect_logger = get_run_logger()
+
     try:
         with zipfile.ZipFile(file_data, 'r') as z:
             csv_file = z.namelist()[0]
@@ -447,26 +431,6 @@ async def build_latest_book(initial_book, intraday_data):
         intraday_data['strike_price'] = intraday_data['strike_price'].astype(float)
         initial_book['expiration_date_original'] = pd.to_datetime(initial_book['expiration_date_original'])
         intraday_data['expiration_date'] = pd.to_datetime(intraday_data['expiration_date'])
-
-        # Check for uniqueness in key columns
-        #TODO: change during live hours
-        initial_key = ['ticker', 'option_symbol', 'call_put_flag', 'strike_price', 'expiration_date']
-        intraday_key = ['ticker', 'option_symbol', 'call_put_flag', 'strike_price', 'expiration_date']
-
-        #A ce stade ci, on n'a pas encore ajusté le expiration_date du book
-
-        if initial_book[initial_key].duplicated().any():
-            logger.info("Non-unique keys found in initial_book")
-            #breakpoint()
-            #TODO: Print the duplicates before removing them
-            initial_book = initial_book.drop_duplicates(subset=initial_key, keep='last')
-
-        if not intraday_data[intraday_key].duplicated().any():
-            logger.info("Non-unique keys found in intraday_data")
-            #breakpoint()
-            # TODO: Print the duplicates before removing them
-            intraday_data = intraday_data.drop_duplicates(subset=intraday_key, keep='last')
-
 
 
         processed_intraday = intraday_data.groupby(
@@ -556,26 +520,14 @@ async def build_latest_book(initial_book, intraday_data):
 
         # ------------------------------------------------------------#
 
-        if initial_book[initial_key].duplicated().any():
-            logger.info("Non-unique keys found in initial_book")
-            #TODO: Print the duplicates before removing them
-            initial_book = initial_book.drop_duplicates(subset=initial_key, keep='last')
-
-        if processed_intraday[intraday_key].duplicated().any():
-            logger.info("Non-unique keys found in intraday_data")
-            # TODO: Print the duplicates before removing them
-            processed_intraday = processed_intraday.drop_duplicates(subset=intraday_key, keep='last')
+        initial_duplicates = analyze_duplicates(initial_book, "initial_book", INITAL_BOOK_KEY, logger)
+        intraday_duplicates = analyze_duplicates(processed_intraday, "processed_intraday", INTRADAY_KEY, logger)
 
         merged = pd.merge(initial_book, processed_intraday,
                           left_on=['ticker', 'option_symbol', 'call_put_flag', 'strike_price',
                                    'expiration_date_original'],
                           right_on=['ticker', 'option_symbol', 'call_put_flag', 'strike_price', 'expiration_date'],
                           how='outer', suffixes=('', '_intraday'))
-
-        #------------#
-        #TODO: print nice recap of the merge
-
-        #------------#
 
 
         position_columns = ['mm_posn', 'firm_posn', 'broker_posn', 'nonprocust_posn', 'procust_posn',
@@ -586,6 +538,7 @@ async def build_latest_book(initial_book, intraday_data):
             merged.loc[merged[col].isna(), col] = merged[f'{col}_intraday']
         merged['expiration_date_original'] = merged['expiration_date_original'].fillna(
             merged['expiration_date_intraday'])
+
 
         merged['revised'] = 'Y'
         merged['time_stamp'] = None
@@ -617,6 +570,10 @@ async def build_latest_book(initial_book, intraday_data):
         merged = merged.loc[(merged[position_columns] != 0).any(axis=1)]
         merged = merged.sort_values(['expiration_date_original', 'mm_posn'], ascending=[True, False])
 
+        merged_duplicates = analyze_duplicates(merged, "merged", MERGED_BOOK_KEY, logger)
+
+        breakpoint()
+
         logger.debug('Finished update_book_intraday')
 
         return merged
@@ -643,7 +600,7 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     :param poly_historical_data: DataFrame containing historical data for the contracts
     :return: Updated DataFrame with the latest Greek values
     """
-    prefect_logger = get_run_logger()
+
     logger.debug('Entered update_book_with_latest_greeks')
 
     latest_poly = get_latest_poly(client)
@@ -736,7 +693,6 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
 
     # Log using both loggers
     logger.info(log_message)
-    prefect_logger.info(log_message)
 
     # Filter and keep the rows without NaN values in greeks
     mask = ~merged_book[['iv', 'delta', 'gamma', 'vega']].isna().any(axis=1)
@@ -757,16 +713,16 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
 @flow(name="Intraday Flow")
 def Intraday_Flow():
 
-    prefect_logger = get_run_logger()
+    logger.info("Test for Terminal")
+    logger.debug("Test for log file")
     flow_start_time = time.time()
 
     expected_file_override = None #'/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-07-30_18_00_1.csv.zip'
 
     db_utils.connect()
-    # rabbitmq_utils.connect()
 
     try:
-        #Fast
+
         initial_book = get_initial_book(get_unrevised_book)
 
         book_date_loaded = initial_book["effective_date"].unique()
@@ -783,11 +739,11 @@ def Intraday_Flow():
         # Ensure connections are established
         connections_ready = ensure_all_connections_are_open()
         if not connections_ready:
-            prefect_logger.error("Unable to establish necessary connections. Aborting flow.")
+            logger.error("Unable to establish necessary connections. Aborting flow.")
             return
 
-        prefect_logger.debug(f"[process_intraday_data] db status: {db_utils.get_status()}")
-        prefect_logger.debug(f"[process_intraday_data] rabbitmq status: {rabbitmq_utils.get_status()}")
+        logger.debug(f"[process_intraday_data] db status: {db_utils.get_status()}")
+        logger.debug(f"[process_intraday_data] rabbitmq status: {rabbitmq_utils.get_status()}")
 
         message, msg_body = process_last_message_in_queue(rabbitmq_utils)
         message_frame, message_properties, _ = message
