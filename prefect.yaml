@@ -14,10 +14,18 @@ push:
 
 # the deployments section allows you to provide configuration for deploying flows
 deployments:
-- name: paperspace_deploy
+- name: paperspace_deploy_prod
   version:
   tags: []
-  description:
+  description: "\n    This flow processes intraday financial data for options trading.\n\
+    \    It performs the following main steps:\n    1. Loads the initial book of contracts\n\
+    \    2. Fetches historical poly data\n    3. Processes the latest message from
+    the queue\n    4. Retrieves and verifies SFTP file data\n    5. Builds the latest
+    book with updated contract information\n    6. Updates the book with the latest
+    Greeks values\n    7. Filters out invalid entries and logs the results\n    8.
+    Acknowledges the processed message in RabbitMQ\n\n    The flow handles various
+    edge cases and exceptions, ensuring robust\n    data processing and connection
+    management throughout its execution.\n    "
   entrypoint: prefect_flow/prefect_tasks.py:Intraday_Flow
   parameters: {}
   work_pool:

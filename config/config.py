@@ -1,163 +1,134 @@
-import os
 import pandas_market_calendars as mcal
 import os
-from PIL import Image
+from prefect.blocks.system import JSON, Secret
+
 nyse = mcal.get_calendar('NYSE')
 
+def load_db_config():
+    return JSON.load("database-credentials").value
 
-#---------------- DIGITAL OCEAN ---------------------------#
-# # - MySQL
-DB_HOST = os.getenv('DB_HOST')
-DB_PORT = int(os.getenv('DB_PORT',25060))
-DB_USER = os.getenv('DB_USER')
-DB_PASSWORD = os.getenv('DB_PASSWORD')
-DB_NAME = os.getenv('DB_NAME')
-DB_DRIVER = os.getenv('DB_DRIVER')
-#
-# # - Spaces configuration
-DO_SPACES_URL = os.getenv('DO_SPACES_URL')
-DO_SPACES_KEY = os.getenv('DO_SPACES_KEY')
-DO_SPACES_SECRET = os.getenv('DO_SPACES_SECRET')
-DO_SPACES_BUCKET = os.getenv('DO_SPACES_BUCKET')
-LOG_FILE_KEY = os.getenv('LOG_FILE_KEY')
-#
-# #---------------- SFTP ---------------------------#
-# #- Server
-SFTP_HOST = os.getenv('SFTP_HOST')
-SFTP_PORT = int(os.getenv('SFTP_PORT',22))
-SFTP_USERNAME = os.getenv('SFTP_USERNAME')
-SFTP_PASSWORD = os.getenv('SFTP_PASSWORD')
-SFTP_DIRECTORY = os.getenv('SFTP_DIRECTORY')
+def load_sftp_config():
+    return JSON.load("sftp-credentials").value
 
+def load_rabbitmq_config():
+    return JSON.load("rabbitmq-config").value
 
-#- Monitoring
-SFTP_BASE_SLEEP_TIME = 10                    # Base sleep time in seconds
-SFTP_REDUCED_SLEEP_TIME = 5                  # Reduced sleep time when expecting a file
-SFTP_EXPECTATION_WINDOW = 120                # Time window in seconds when expecting a file (2 minutes)
-SFTP_MAX_RETRY_ATTEMPTS = 3                  # Maximum number of retry attempts for SFTP operations
+def load_do_spaces_config():
+    return JSON.load("do-spaces-config").value
 
+def load_discord_webhook():
+    return Secret.load("discord-webhook-url").get()
 
-#---------------- RABBITMQ ---------------------------#
-# Heartbeat configurations
-RABBITMQ_HOST = "64.225.63.198"                         # Replace with your RabbitMQ host if different
-RABBITMQ_CBOE_QUEUE = "youssef_local"              # Your queue name
-RABBITMQ_HEARTBEAT_QUEUE = 'heartbeats'             # Name of the queue that receives the hearbeats - Work around to prevent Broken Pipe Error (https://stackoverflow.com/questions/45064662/rabbitmq-broken-pipe-error-or-lost-messages)
-RABBITMQ_PORT = 5672
-RABBITMQ_USER = "optionsdepth"
-RABBITMQ_PASS = "Salam123+"
+def load_other_config():
+    return JSON.load("other-config").value
 
-RABBITMQ_QUEUE_SIZE_ALERT_THRESHOLD = 1000          # Alert when queue size exceeds this number
-RABBITMQ_HEARTBEAT_INTERVAL = 60                    # Send heartbeat every HEARTBEAT_INTERVAL seconds to keep the connection alive
-RABBITMQ_CLEAR_HEARTBEAT_INTERVAL = 3600            # Clear heartbeat queue every CLEAR_HEARTBEAT_INTERVAL seconds to prevent the message from accumulating
-PROCESS_MESSAGE_QUEUE_RETRY_DELAY = 5  # in seconds
-RABBITMQ_MAX_RUNTIME = 3600  # 1 hour in seconds
-RABBITMQ_MAX_ACK_RETRIES = 3
-# RABBITMQ_HOST = "localhost"  # Replace with your RabbitMQ host if different
-# QUEUE_NAME = "youssef_local"  # Your queue name
+# Load configurations
+db_config = load_db_config()
+sftp_config = load_sftp_config()
+rabbitmq_config = load_rabbitmq_config()
+do_spaces_config = load_do_spaces_config()
+discord_webhook = load_discord_webhook()
+other_config = load_other_config()
 
-#---------------- DISCORD ---------------------------#
-# Bot
-WEBHOOK_URL = 'https://discord.com/api/webhooks/1251013946111164436/VN55yOK-ntil-PnZn1gzWHzKwzDklwIh6fVspA_I8MCCaUnG-hsRsrP1t_WsreGHIity'
+# Database Configuration
+DB_HOST = db_config['host']
+DB_PORT = db_config['port']
+DB_USER = db_config['user']
+DB_PASSWORD = db_config['password']
+DB_NAME = db_config['database']
+DB_DRIVER = db_config['driver']
 
+# Digital Ocean Spaces Configuration
+DO_SPACES_URL = do_spaces_config['url']
+DO_SPACES_KEY = do_spaces_config['key']
+DO_SPACES_SECRET = do_spaces_config['secret']
+DO_SPACES_BUCKET = do_spaces_config['bucket']
+LOG_FILE_KEY = other_config.get('log_file_key', 'seen_files_log.json')
 
-#-------- DATA PROCESSING -----------#
-OPTION_SYMBOLS_TO_PROCESS = ['SPX', 'SPXW']
-CSV_CHUNKSIZE = 100000
+# SFTP Configuration
+SFTP_HOST = sftp_config['host']
+SFTP_PORT = sftp_config['port']
+SFTP_USERNAME = sftp_config['username']
+SFTP_PASSWORD = sftp_config['password']
+SFTP_DIRECTORY = sftp_config['directory']
 
-# Check for uniqueness in key columns
+# SFTP Monitoring
+SFTP_BASE_SLEEP_TIME = other_config.get('sftp_base_sleep_time', 10)
+SFTP_REDUCED_SLEEP_TIME = other_config.get('sftp_reduced_sleep_time', 5)
+SFTP_EXPECTATION_WINDOW = other_config.get('sftp_expectation_window', 120)
+SFTP_MAX_RETRY_ATTEMPTS = other_config.get('sftp_max_retry_attempts', 3)
+
+# RabbitMQ Configuration
+RABBITMQ_HOST = rabbitmq_config['host']
+RABBITMQ_CBOE_QUEUE = rabbitmq_config['cboe_queue']
+RABBITMQ_HEARTBEAT_QUEUE = rabbitmq_config['heartbeat_queue']
+RABBITMQ_PORT = rabbitmq_config['port']
+RABBITMQ_USER = rabbitmq_config['user']
+RABBITMQ_PASS = rabbitmq_config['password']
+RABBITMQ_QUEUE_SIZE_ALERT_THRESHOLD = rabbitmq_config['queue_size_alert_threshold']
+RABBITMQ_HEARTBEAT_INTERVAL = rabbitmq_config['heartbeat_interval']
+RABBITMQ_CLEAR_HEARTBEAT_INTERVAL = rabbitmq_config['clear_heartbeat_interval']
+RABBITMQ_MAX_RUNTIME = rabbitmq_config['max_runtime']
+RABBITMQ_MAX_ACK_RETRIES = rabbitmq_config['max_ack_retries']
+PROCESS_MESSAGE_QUEUE_RETRY_DELAY = other_config.get('process_message_queue_retry_delay', 5)
+
+# Discord Configuration
+WEBHOOK_URL = discord_webhook
+
+# Data Processing
+OPTION_SYMBOLS_TO_PROCESS = other_config.get('option_symbols_to_process', ['SPX', 'SPXW'])
+CSV_CHUNKSIZE = other_config.get('csv_chunksize', 100000)
+
+# Keep the rest of your configuration as is
 INITAL_BOOK_KEY = ['ticker', 'option_symbol', 'call_put_flag', 'strike_price', 'expiration_date']
 INTRADAY_KEY = ['ticker', 'option_symbol', 'call_put_flag', 'strike_price', 'expiration_date']
 MERGED_BOOK_KEY = ['ticker', 'option_symbol', 'call_put_flag', 'strike_price', 'expiration_date_original']
-#FINAL_BOOK_KEY =
-# Required columns for intraday data
+
 INTRADAY_REQUIRED_COLUMNS = [
-    'ticker',
-    'option_symbol',
-    'call_put_flag',  # Note: This was 'call_or_put' in your original list
-    'expiration_date',
-    'strike_price',
-    'mm_buy_vol',
-    'mm_sell_vol',
-    'firm_open_buy_vol',
-    'firm_close_buy_vol',
-    'firm_open_sell_vol',
-    'firm_close_sell_vol',
-    'bd_open_buy_vol',
-    'bd_close_buy_vol',
-    'bd_open_sell_vol',
-    'bd_close_sell_vol',
-    'cust_lt_100_open_buy_vol',
-    'cust_lt_100_close_buy_vol',
-    'cust_lt_100_open_sell_vol',
-    'cust_lt_100_close_sell_vol',
-    'cust_100_199_open_buy_vol',
-    'cust_100_199_close_buy_vol',
-    'cust_100_199_open_sell_vol',
-    'cust_100_199_close_sell_vol',
-    'cust_gt_199_open_buy_vol',
-    'cust_gt_199_close_buy_vol',
-    'cust_gt_199_open_sell_vol',
-    'cust_gt_199_close_sell_vol',
-    'procust_lt_100_open_buy_vol',
-    'procust_lt_100_close_buy_vol',
-    'procust_lt_100_open_sell_vol',
-    'procust_lt_100_close_sell_vol',
-    'procust_100_199_open_buy_vol',
-    'procust_100_199_close_buy_vol',
-    'procust_100_199_open_sell_vol',
-    'procust_100_199_close_sell_vol',
-    'procust_gt_199_open_buy_vol',
-    'procust_gt_199_close_buy_vol',
-    'procust_gt_199_open_sell_vol',
-    'procust_gt_199_close_sell_vol'
+    'ticker', 'option_symbol', 'call_put_flag', 'expiration_date', 'strike_price',
+    'mm_buy_vol', 'mm_sell_vol',
+    'firm_open_buy_vol', 'firm_close_buy_vol', 'firm_open_sell_vol', 'firm_close_sell_vol',
+    'bd_open_buy_vol', 'bd_close_buy_vol', 'bd_open_sell_vol', 'bd_close_sell_vol',
+    'cust_lt_100_open_buy_vol', 'cust_lt_100_close_buy_vol', 'cust_lt_100_open_sell_vol', 'cust_lt_100_close_sell_vol',
+    'cust_100_199_open_buy_vol', 'cust_100_199_close_buy_vol', 'cust_100_199_open_sell_vol', 'cust_100_199_close_sell_vol',
+    'cust_gt_199_open_buy_vol', 'cust_gt_199_close_buy_vol', 'cust_gt_199_open_sell_vol', 'cust_gt_199_close_sell_vol',
+    'procust_lt_100_open_buy_vol', 'procust_lt_100_close_buy_vol', 'procust_lt_100_open_sell_vol', 'procust_lt_100_close_sell_vol',
+    'procust_100_199_open_buy_vol', 'procust_100_199_close_buy_vol', 'procust_100_199_open_sell_vol', 'procust_100_199_close_sell_vol',
+    'procust_gt_199_open_buy_vol', 'procust_gt_199_close_buy_vol', 'procust_gt_199_open_sell_vol', 'procust_gt_199_close_sell_vol'
 ]
 
-# Valid security types
 VALID_SECURITY_TYPES = {1, 2, 3, 4}
-
-# Valid call/put flags
 VALID_CALL_PUT_FLAGS = {'P', 'C'}
-
-# Valid series types
 VALID_SERIES_TYPES = {'S', 'N'}
 
-
-#----- SIMULATIONS ------------ #
+# Simulations
 HEATMAP_TIME_STEPS = 10
 HEATMAP_PRICE_STEPS = 5
 HEATMAP_PRICE_RANGE = 0.015
 
-# CONSTANTES
+# Constants
 SPX_TICKER = 'SPX'
 HAT_SPX_TICKER = '^SPX'
 YAHOO_SPX_TICKER = "^GSPC"
 RISK_FREE_RATE = 0.055
 
-# ----------- CHARTING ---------------#
-
-#GRAPH DIMENSIONS
-IMAGE_WIDTH = 1440  # Width in pixels
-IMAGE_HEIGTH = 810  # Height in pixels
-SCALE_FACTOR = 3  # Increase for better quality, especially for raster formats
-
-# GRAPHS - Color palettes, fonts, etc.
+# Charting
+IMAGE_WIDTH = 1440
+IMAGE_HEIGTH = 810
+SCALE_FACTOR = 3
 COLOR_SCALE = "RdBu"
 COLOR_SCALE_CUSTOM = [[0.0, "rgb(0, 59, 99)"],
                       [0.499, "rgb(186, 227, 255)"],
                       [0.501, "rgb(255, 236, 196)"],
                       [1.0, "rgb(255, 148, 71)"]]
-
 BACKGROUND_COLOR = 'white'
 TEXT_COLOR = 'black'
-
 POSITION_COULORS = ['black', 'red', 'green']
 FLOW_COLORS = ['magenta', 'yellow', 'grey']
 
-#WATERMARKS
-# If your image is located relative to the script's directory, you can use:
+# Watermarks
 LOGO_dark = os.path.join('..', 'config', 'images', 'logo_dark.png')
 LOGO_light = os.path.join('..', 'config', 'images', 'logo_light.png')
-
 
 if __name__ == "__main__":
     print("#----------- VARIABLES ------------#")
