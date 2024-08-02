@@ -30,37 +30,12 @@ mp.set_start_method("fork", force=True)
 dill.settings['recurse'] = True
 client = RESTClient("sOqWsfC0sRZpjEpi7ppjWsCamGkvjpHw")
 
-# def setup_custom_logger(name, log_level=logging.INFO):
-#     logger = logging.getLogger(name)
-#     logger.setLevel(log_level)
-#
-#     # File handler with DailyRotatingFileHandler
-#     file_handler = DailyRotatingFileHandler(
-#         base_filename=f"logs/{name}",
-#         when="midnight",
-#         interval=1,
-#         backupCount=7
-#     )
-#     file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-#     file_handler.setFormatter(file_formatter)
-#     logger.addHandler(file_handler)
-#
-#     # Console handler
-#     console_handler = logging.StreamHandler()
-#     console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-#     console_handler.setFormatter(console_formatter)
-#     logger.addHandler(console_handler)
-#
-#     return logger
 
 DEBUG_MODE = False
 LOG_LEVEL = logging.DEBUG
 
 # Get the appropriate logger
 logger = get_logger(debug_mode=False)
-# # Setup the main logger
-# logger = setup_custom_logger("Prefect Flow", logging.DEBUG if DEBUG_MODE else logging.INFO)
-# logger.setLevel(LOG_LEVEL)  # Or any other level like logging.INFO, logging.WARNING, etc.
 
 #-------- Initializing the Classes -------#
 polygon_client = RESTClient("sOqWsfC0sRZpjEpi7ppjWsCamGkvjpHw")
@@ -600,6 +575,11 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     :param poly_historical_data: DataFrame containing historical data for the contracts
     :return: Updated DataFrame with the latest Greek values
     """
+    custom_logger = get_logger()
+    prefect_logger = get_run_logger()
+
+    custom_logger.info('Entered update_book_with_latest_greeks')
+    prefect_logger.info('Entered update_book_with_latest_greeks')
 
     logger.debug('Entered update_book_with_latest_greeks')
 
@@ -680,7 +660,7 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     mm_posn_sum = contracts_without_greeks_df['mm_posn'].sum()
 
     # Prepare log message
-    log_message = f"""
+    log_data = f"""
     #---------- Greeks Updates Summary ----------#
     Total contracts: {total_contracts}
     Contracts updated with latest market data: {merged_contracts}
@@ -692,7 +672,13 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     """
 
     # Log using both loggers
-    logger.info(log_message)
+    logger.info(log_data)
+    # Log using custom logger
+    log_greeks_update_summary(custom_logger, log_data)
+
+    # Log using Prefect's logger
+    log_message = "\n".join([f"{key}: {value}" for key, value in log_data.items()])
+    prefect_logger.info(f"Greeks Updates Summary:\n{log_message}")
 
     # Filter and keep the rows without NaN values in greeks
     mask = ~merged_book[['iv', 'delta', 'gamma', 'vega']].isna().any(axis=1)
@@ -790,7 +776,7 @@ def Intraday_Flow():
 
 
                     final_book = update_book_with_latest_greeks(latest_book, poly_data)
-                    logger.debug(f"Len of final_book: {len(final_book)}")
+
 
                     # Filter out NaN values and log
                     filtered_final_book = filter_and_log_nan_values(final_book)
