@@ -606,33 +606,42 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     merged_contracts = merged_book['iv_update'].notna().sum()
     unmerged_contracts = total_contracts - merged_contracts
 
+    historical_updates = 0
     if unmerged_contracts > 0:
-        # Isolating the contracts that haven't been updated with the latest poly fetch
-        mask = merged_book['iv_update'].isna()
-        unmerged_contracts_df = merged_book[mask]
 
-        # Creating a key for merging purposes
-        poly_historical_data.rename(columns={'implied_volatility': 'iv'}, inplace=True)
-        poly_historical_data['contract_id'] = poly_historical_data['option_symbol'] + '_' + \
-                                              poly_historical_data['contract_type'] + '_' + \
-                                              poly_historical_data['strike_price'].astype(str) + '_' + \
-                                              poly_historical_data['expiration_date']
+        if poly_historical_data.empty:
+            error_message = "poly_historical_data is empty. Skipping historical data updates."
+            custom_logger.warning(error_message)
+            prefect_logger.warning(error_message)
+            print("EMPTYYYYYYYYY")
+            #send_discord_message(error_message)  # Assuming you have this function defined
 
-        # Get the latest historical data for unmerged contracts.
-        latest_historical = poly_historical_data.sort_values('time_stamp', ascending=False).groupby(
-            'contract_id').first().reset_index()
+        else:
+            # Isolating the contracts that haven't been updated with the latest poly fetch
+            mask = merged_book['iv_update'].isna()
+            unmerged_contracts_df = merged_book[mask]
 
-        # Merge unmerged contracts with latest historical data
-        updated_unmerged = pd.merge(unmerged_contracts_df,
-                                    latest_historical[['contract_id', 'iv', 'delta', 'gamma', 'vega']],
-                                    on='contract_id', how='left', suffixes=('', '_historical'))
+            # Creating a key for merging purposes
+            poly_historical_data.rename(columns={'implied_volatility': 'iv'}, inplace=True)
+            poly_historical_data['contract_id'] = poly_historical_data['option_symbol'] + '_' + \
+                                                  poly_historical_data['contract_type'] + '_' + \
+                                                  poly_historical_data['strike_price'].astype(str) + '_' + \
+                                                  poly_historical_data['expiration_date']
 
-        # Update the merged_book with historical data
-        merged_book.update(updated_unmerged)
+            # Get the latest historical data for unmerged contracts.
+            latest_historical = poly_historical_data.sort_values('time_stamp', ascending=False).groupby(
+                'contract_id').first().reset_index()
 
-        historical_updates = updated_unmerged['iv_historical'].notna().sum()
-    else:
-        historical_updates = 0
+            # Merge unmerged contracts with latest historical data
+            updated_unmerged = pd.merge(unmerged_contracts_df,
+                                        latest_historical[['contract_id', 'iv', 'delta', 'gamma', 'vega']],
+                                        on='contract_id', how='left', suffixes=('', '_historical'))
+
+            # Update the merged_book with historical data
+            merged_book.update(updated_unmerged)
+
+            historical_updates = updated_unmerged['iv_historical'].notna().sum()
+
 
 
     # Clean up the merged book
@@ -673,12 +682,20 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
 
     # Log using both loggers
     logger.info(log_data)
+    prefect_logger.info(log_data)
     # Log using custom logger
-    log_greeks_update_summary(custom_logger, log_data)
+    #log_greeks_update_summary(custom_logger, log_data)
 
+    breakpoint()
     # Log using Prefect's logger
-    log_message = "\n".join([f"{key}: {value}" for key, value in log_data.items()])
-    prefect_logger.info(f"Greeks Updates Summary:\n{log_message}")
+    #log_message = "\n".join([f"{key}: {value}" for key, value in log_data.items()])
+    #
+    # formatted_log = f"""
+    # #---------- Greeks Updates Summary ----------#
+    # {log_message}
+    # #-------------------------------------------------#
+    # """
+    # print(formatted_log)
 
     # Filter and keep the rows without NaN values in greeks
     mask = ~merged_book[['iv', 'delta', 'gamma', 'vega']].isna().any(axis=1)
