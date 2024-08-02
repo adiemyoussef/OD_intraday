@@ -12,27 +12,27 @@ from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
 from functools import partial
 import colorsys
-# from config.config import *
+from config.config import *
 import requests
 import json
 from datetime import datetime
-# from utilities.db_utils import *
+from utilities.db_utils import *
 
-# logger = logging.getLogger(__name__)
-# logger.setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-# Create a console handler
-# console_handler = logging.StreamHandler()
-# console_handler.setLevel(logging.INFO)
-#
-# # Create a formatter and set it for the handler
-# file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-# console_handler.setFormatter(file_formatter)
-#
-# # Add the handler to the logger
-# logger.addHandler(console_handler)
-#
-# db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME, logger)
+## Create a console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+# Create a formatter and set it for the handler
+file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(file_formatter)
+
+# Add the handler to the logger
+logger.addHandler(console_handler)
+
+db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME, logger)
 
 def generate_frame_wrapper(args):
     timestamp, index, generate_frame_partial = args
@@ -95,7 +95,25 @@ def generate_color_shades(base_color, num_shades=5):
     return shades
 
 def generate_frame(data, timestamp, participant, strike_input, expiration_input, position_type='All',
-                   img_path=None, color_net='#0000FF', color_call='#00FF00', color_put='#FF0000'):
+                   img_path='config/images/logo_light.png', color_net='#0000FF', color_call='#00FF00', color_put='#FF0000'):
+
+    # Load the image file
+    from PIL import Image
+    import base64
+    from io import BytesIO
+
+    try:
+        img = Image.open(img_path)
+        buffered = BytesIO()
+        img.save(buffered, format="PNG")
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        img_src = f"data:image/png;base64,{img_str}"
+        print(f"Image loaded successfully from {img_path}")
+    except Exception as e:
+        print(f"Error loading image: {e}")
+        img_src = None
+
+
 
     daily_data = data[data['effective_datetime'] <= timestamp].copy()
 
@@ -257,14 +275,42 @@ def generate_frame(data, timestamp, participant, strike_input, expiration_input,
         ),
         width=1000,
         height=1200,
-        margin=dict(l=50, r=50, t=100, b=50)
+        margin=dict(l=50, r=50, t=100, b=50),
+        images=[dict(
+            source=img_src,
+            xref="paper", yref="paper",
+            x=0.15, y=0.6,
+            sizex=0.75, sizey=0.75,
+            sizing="contain",
+            opacity=0.1,  # Increased opacity for better visibility
+            layer="below"
+        )] if img_src else []
     )
 
-    #fig.show()
+    # Add copyright sign at bottom left
+    fig.add_annotation(
+        text="© OptionsDepth Inc.",
+        xref="paper", yref="paper",
+        x=-0.05, y=-0.05,
+        showarrow=False,
+        font=dict(size=10, color="gray")
+    )
+
+    # Add "Powered by OptionsDepth inc." at bottom right
+    fig.add_annotation(
+        text="Powered by OptionsDepth Inc.",
+        xref="paper", yref="paper",
+        x=0.99, y=-0.05,
+        showarrow=False,
+        font=dict(size=10, color="gray"),
+        xanchor="right"
+    )
+
+
     return fig
 
 def generate_gif(data, session_date, participant, strike_input, expiration_input, position_type='C',
-                 img_path=None, color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
+                 img_path='/Users/youssefadiem/PycharmProjects/OptionsDepth_intraday/config/images/logo_light.png', color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
                  output_gif='animated_chart.gif'):
 
 
@@ -283,6 +329,7 @@ def generate_gif(data, session_date, participant, strike_input, expiration_input
 
     # Generate frames
     frames = []
+
     for i, timestamp in enumerate(timestamps):
         print(f"Generating Graph for {timestamp}")
         fig = generate_frame(data, timestamp, participant, strike_input, expiration_input, position_type,
@@ -292,6 +339,8 @@ def generate_gif(data, session_date, participant, strike_input, expiration_input
         frame_path = f'temp_frames/frame_{i:03d}.png'
         fig.write_image(frame_path)
         frames.append(imageio.imread(frame_path))
+
+
     frames.append(imageio.imread(frame_path))
 
     # Create the GIF
@@ -357,7 +406,7 @@ def generate_and_send_gif(data, session_date, participant, strike_input, expirat
         participant,
         strike_input=strike_input,
         expiration_input=expiration,
-        position_type='C',
+        position_type='P',
         output_gif=f'animated_options_chart_{session_date}.gif'
     )
     breakpoint()
@@ -414,16 +463,16 @@ def generate_and_send_gif(data, session_date, participant, strike_input, expirat
 if __name__ == "__main__":
     WEBHOOK_URL = 'https://discord.com/api/webhooks/1251013946111164436/VN55yOK-ntil-PnZn1gzWHzKwzDklwIh6fVspA_I8MCCaUnG-hsRsrP1t_WsreGHIity'
 
-    session_date = '2024-07-26'
+    session_date = '2024-08-02'
 
-    # query =f"""
-    # SELECT * FROM intraday.intraday_books_test_posn
-    # WHERE effective_date = '{session_date}'
-    # """
+    query =f"""
+    SELECT * FROM intraday.intraday_books_test_posn
+    WHERE effective_date = '{session_date}'
+    """
 
-    # df = db.execute_query(query)
-    df = pd.read_pickle("books_dataset.pkl")
-    breakpoint()
+    df = db.execute_query(query)
+    #df = pd.read_pickle("books_20240801.pkl")
+    #breakpoint()
     print(f"Loaded data shape: {df.shape}")
     print(f"Date range in data: {df['effective_datetime'].min()} to {df['effective_datetime'].max()}")
     print(f"Unique dates in data: {df['effective_date'].nunique()}")
@@ -431,8 +480,8 @@ if __name__ == "__main__":
     print(f"Data for session date {session_date}:")
     print(df[df['effective_date'] == session_date].head())
 
-    strike_ranges = [5300,5600]  # Example strike ranges
-    expiration = '2024-07-26'
+    strike_ranges = [5300,5550]  # Example strike ranges
+    expiration = '2024-08-02'
 
     # Ensure expiration_input is a string in 'YYYY-MM-DD' format
     expiration_input = pd.to_datetime(expiration).strftime('%Y-%m-%d')
@@ -447,7 +496,8 @@ if __name__ == "__main__":
     webhook_url = WEBHOOK_URL  # Replace with your actual webhook URL
 
 
-    success = generate_and_send_gif(daily_data, session_date, 'mm', strike_ranges, expiration, webhook_url)
+
+    success = generate_and_send_gif(daily_data, session_date, 'nonprocust', strike_ranges, expiration, webhook_url)
     #success = parallel_generate_gif(df, session_date, 'mm', strike_ranges, webhook_url)
 
     if success:

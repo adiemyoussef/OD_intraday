@@ -105,7 +105,7 @@ def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=N
     max_val = np.max([abs(max_val), abs(min_val)])
 
     fig = go.Figure()
-
+    # breakpoint()
     heatmap = go.Contour(
         name="Gamma",
         showlegend=True,
@@ -180,7 +180,7 @@ def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=N
         )
 
     )
-    #fig.show()
+    # fig.show()
     #breakpoint()
     # if not spx empty
     #----- Adding OHLC -----
@@ -264,7 +264,8 @@ def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=N
         maxima_traces = get_traces(result_df, 'maxima_values', 'prices_of_maxima', "green")
         for trace in maxima_traces:
             fig.add_trace(trace)
-
+            # breakpoint()
+    # fig.show()
     fig.add_layout_image(
         dict(
             source=img,

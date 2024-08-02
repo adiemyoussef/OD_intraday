@@ -448,7 +448,8 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
 
     session_files = await get_session_files(sftp_utility, sftp_folder, session_date)
     logger.info(f"session_files: {session_files}")
-    for file_name in session_files[99:]:
+    breakpoint()
+    for file_name in session_files[79:] :
         file_path = f"{sftp_folder}/{file_name}"
         logger.info(f"Processing file: {file_name}")
 
@@ -490,7 +491,7 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
                     print(f"Cleaned DataFrame shape: {final_book_clean.shape}")
                     print(f"Rows removed: {len(df_end) - len(final_book_clean)}")
 
-                    # breakpoint()
+
                     await db.insert_progress('intraday', 'intraday_books_test_posn', final_book_clean)
                     logger.info(f'It took {time.time() - start_time} sec. to process {file_name_}')
 
@@ -506,7 +507,7 @@ async def main():
         "sftp_password": "Salam123+-"
     }
 
-    breakpoint()
+
     sftp_folder = SFTP_DIRECTORY
 
     async with SFTPUtility(**sftp_config, logger=logger) as sftp:
@@ -515,6 +516,7 @@ async def main():
             logger.info(f"Distinct sessions: {distinct_sessions}")
 
             for session_date in distinct_sessions[:-1]:
+                breakpoint()
                 logger.info(f"Processing: {session_date}")
                 await process_session(sftp, session_date, sftp_folder)
         except Exception as e:
