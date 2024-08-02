@@ -525,7 +525,7 @@ async def main():
             logger.info(f"Distinct sessions: {distinct_sessions}")
 
             for session_date in distinct_sessions[8:-1]:
-
+                session_date = '2024-07-26'
                 logger.info(f"Processing: {session_date}")
                 await process_session(sftp, session_date, sftp_folder)
         except Exception as e:
