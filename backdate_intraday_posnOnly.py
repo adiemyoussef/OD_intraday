@@ -146,7 +146,9 @@ async def update_book_with_latest_greeks(book: pd.DataFrame, lookback_hours=24) 
     WHERE
         date_only >= '{previous_date}'
         AND date_only <= '{current_date}'
-        AND time_stamp BETWEEN '{previous_datetime}' AND '{current_datetime}'
+        AND time_stamp BETWEEN '2024-07-23 08:01:19' AND '{current_datetime}'
+        -- AND time_stamp BETWEEN '{previous_datetime}' AND '{current_datetime}'
+        
     ORDER BY date_only DESC, time_stamp DESC
     """
 
@@ -449,7 +451,7 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
     session_files = await get_session_files(sftp_utility, sftp_folder, session_date)
     logger.info(f"session_files: {session_files}")
     breakpoint()
-    for file_name in session_files[79:] :
+    for file_name in session_files[76:] :
         file_path = f"{sftp_folder}/{file_name}"
         logger.info(f"Processing file: {file_name}")
 
@@ -473,8 +475,9 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
                     df_end = latest_book.iloc[:, :-4]
 
 
-                    # final_book = await update_book_with_latest_greeks(latest_book)
+                    final_book = await update_book_with_latest_greeks(latest_book)
 
+                    breakpoint()
                     # Check for NaN values
                     nan_counts = df_end.isna().sum()
                     print("Columns with NaN values:")
@@ -491,8 +494,9 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
                     print(f"Cleaned DataFrame shape: {final_book_clean.shape}")
                     print(f"Rows removed: {len(df_end) - len(final_book_clean)}")
 
+                    breakpoint()
 
-                    await db.insert_progress('intraday', 'intraday_books_test_posn', final_book_clean)
+                    await db.insert_progress('intraday', 'intraday_books_test', final_book)
                     logger.info(f'It took {time.time() - start_time} sec. to process {file_name_}')
 
         except Exception as e:
@@ -515,7 +519,7 @@ async def main():
             distinct_sessions = await get_distinct_sessions(sftp, sftp_folder)
             logger.info(f"Distinct sessions: {distinct_sessions}")
 
-            for session_date in distinct_sessions[:-1]:
+            for session_date in distinct_sessions[8:-1]:
                 breakpoint()
                 logger.info(f"Processing: {session_date}")
                 await process_session(sftp, session_date, sftp_folder)

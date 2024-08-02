@@ -1,5 +1,4 @@
 import time
-
 import pandas as pd
 import pytz
 from cupy_numba.main import compute_all
@@ -85,7 +84,7 @@ heatmap_manager = CumulativeHeatmapManager()
 
 def insert_heatmap_simulation(df, minima, maxima, ticker):
 
-    breakpoint()
+    # breakpoint()
     df_long = df.reset_index().melt(id_vars=['index'], var_name='price', value_name='value')
     df_long['minima'] = minima.reset_index().melt(id_vars=['index'], var_name='price', value_name='value').value
     df_long['maxima'] = maxima.reset_index().melt(id_vars=['index'], var_name='price', value_name='value').value
@@ -217,7 +216,7 @@ def resample_and_convert_timezone(df, datetime_column='effective_datetime', resa
     df_resampled[datetime_column] = df_resampled[datetime_column].dt.tz_localize(None)
 
     return df_resampled
-    return df_resampled
+
 
 def generate_gamma_heatmap(sim_times: list, prices: list, deltas:np.ndarray, trade_date:datetime.date, hour_start:datetime.date):
     print("Generating heatmap results")
@@ -248,12 +247,26 @@ def compute_heatmap(args, type:str, df_book: pd.DataFrame, start_time:datetime, 
     args.proc = num_processors
     args.mode = type
 
+    #TODO: Friday AM TEST
+    df_book['iv'] = df_book['iv'].astype(float)
+
+    # breakpoint()
     prices = price_matrix(price, steps, range).tolist()
+
     sim_times = simulation_times(start_time)
+
     book = book_to_list(df_book,sim_times)
-    heatmap_array = compute_all(args,book,prices)
+
+    breakpoint()
+
+    delta_array = compute_all(args,book,prices)
+
+    breakpoint()
     df_heatmap_to_plot = generate_gamma_heatmap(
-        sim_times, prices, heatmap_array, start_time.date(), start_time.time())
+        sim_times, prices, delta_array, start_time.date(), start_time.time())
+
+    breakpoint()
+
     return df_heatmap_to_plot
 
 def append_time(row):
@@ -290,59 +303,6 @@ def filter_datetimes_specific_date(datetimes, target_date='2024-07-25', start_ho
     return datetimes[mask].tolist()
 
 
-def plot_heatmap_cumul(cumulative_df, spx=None, show_fig=False, min_max=True):
-
-    breakpoint()
-    # Get the latest effective_datetime
-    current_datetime = cumulative_df.index.get_level_values(1).max()
-
-    # Reshape the data for plotting
-    df_reshaped = cumulative_df.unstack(level=1)
-
-    x = df_reshaped.index.get_level_values(0).unique()
-    y = df_reshaped.columns.levels[1]
-    z = df_reshaped.values
-
-    # Create the figure
-    fig = go.Figure()
-
-    # Add the heatmap
-    heatmap = go.Contour(
-        z=z,
-        x=x,
-        y=y,
-        colorscale="RdBu",
-        zmax=1600,
-        zmin=-1600,
-        colorbar=dict(title='Gamma (Delta / 2.5 Points)')
-    )
-    fig.add_trace(heatmap)
-
-    # Add SPX data if provided
-    if spx is not None:
-        candlestick = go.Candlestick(
-            x=spx.index,
-            open=spx['open'],
-            high=spx['high'],
-            low=spx['low'],
-            close=spx['close'],
-            name='SPX'
-        )
-        fig.add_trace(candlestick)
-
-    # Update layout
-    fig.update_layout(
-        title=f"Dealer's Gamma Exposure Map Evolution (Up to {current_datetime})",
-        xaxis_title="Time",
-        yaxis_title="Price",
-        yaxis=dict(side='right')
-    )
-
-    if show_fig:
-        fig.show()
-
-    return fig
-
 if __name__ == "__main__":
     spx = {"steps": HEATMAP_PRICE_STEPS, "range": HEATMAP_PRICE_RANGE}
 
@@ -359,7 +319,8 @@ if __name__ == "__main__":
     # -----------DATA READING----------#
     query = """
     SELECT * FROM intraday.intraday_books
-    WHERE effective_date ='2024-08-01'
+    WHERE effective_date ='2024-08-02'
+    and effective_datetime >= '2024-08-02 09:00:00'
     """
 
     df_books = db.execute_query(query)
@@ -383,11 +344,11 @@ if __name__ == "__main__":
     spx_data = resample_and_convert_timezone(spx_data_raw)
     spx_data.set_index('effective_datetime', inplace=True)
     #spx_data_chart = spx_data[spx_data.index.time >= pd.Timestamp('07:00').time()]
-    target_date = pd.Timestamp('2024-07-31').date()
-    start_time = pd.Timestamp('12:00').time()
+    # target_date = pd.Timestamp('2024-07-31').date()
+    # start_time = pd.Timestamp('12:00').time()
 
 
-    open_price = 5300
+    open_price = 5350
 
     unique_effective_datetimes = df_books['effective_datetime'].unique()
     cumulative_df = pd.DataFrame()
@@ -395,11 +356,11 @@ if __name__ == "__main__":
         logger.info(f"Processing effective_datetime: {effective_datetime}")
 
         effective_datetime = pd.to_datetime(effective_datetime)
-        spx_data_chart = spx_data[
-            (spx_data.index.date == target_date) &
-            (spx_data.index.time >= start_time) &
-            (spx_data.index <= effective_datetime)
-            ]
+        # spx_data_chart = spx_data[
+        #     (spx_data.index.date == target_date) &
+        #     (spx_data.index.time >= start_time) &
+        #     (spx_data.index <= effective_datetime)
+        #     ]
 
 
         datetime_object = pd.to_datetime(effective_datetime)
@@ -407,6 +368,8 @@ if __name__ == "__main__":
         df_subset = df_books[df_books['effective_datetime'] == effective_datetime].copy()
 
         start_heatmap_computations = time.time()
+
+        #def compute_heatmap(args, type:str, df_book: pd.DataFrame, start_time:datetime, price:float, steps:float, range:float):
         df_heatmap = compute_heatmap(args, type='delta', df_book=df_subset,
                                               start_time=datetime_object, price=open_price,
                                               steps=spx['steps'], range=spx['range'])
@@ -429,6 +392,7 @@ if __name__ == "__main__":
         #plot_heatmap_cumul(cumulative_df, spx=spx_data_chart, show_fig=True)
         #df_to_plot = current_cumulative_heatmap.drop(columns=["effective_datetime"])
         #plot_heatmap(df_to_plot,effective_datetime, spx=spx_data_chart, show_fig=False)
+        breakpoint()
         plot_heatmap(df_heatmap,effective_datetime, spx=None, show_fig=True)
 
         logger.info(f"{effective_datetime} heatmap has been processed and plotted.")

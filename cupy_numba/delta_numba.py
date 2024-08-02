@@ -32,7 +32,7 @@ def d1( s : np.float64, k : np.float64, t : np.float64, r : np.float64, v : np.f
     return (np.log(s/(k+1e-18)) + (r + v * v / 2) * t / 365) / (v * np.sqrt(t / 365)+1e-18)
 
 @njit(cache=True, fastmath=FAST_MATH)
-def delta( flag, s, k, t, r, v):
+def delta(flag, s, k, t, r, v):
     d_1 = d1(s, k, t, r, v)
     #return norm.cdf(d_1)-flag
     return ndtr_numba(d_1)-flag
@@ -60,7 +60,10 @@ def compute(contract0 , contract1 : np.float64, contract2 : np.float64, contract
     return list_deltas_prices
 
 def pool_sol(book, list_prices, num_processes):
+
+    # breakpoint()
     with Pool(num_processes) as pool:
+
         async_results = [pool.apply_async(compute, args=(np.int32(b[0]=="P"), np.float64(b[1]), np.float64(b[2]), np.array(b[3], dtype=np.float64), np.float64(b[4]), list_prices)) for b in book]
         results = [ar.get() for ar in async_results]
         deltas_arr = np.array(results).sum(axis=0)

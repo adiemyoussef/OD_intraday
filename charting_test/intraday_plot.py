@@ -49,6 +49,7 @@ def create_gif(folder_path:str, output_filename:str):
     # imageio.mimsave(os.path.join(folder_path, output_filename), images, duration=0.3)
     #[os.remove(file) for file in glob.glob(os.path.join(folder_path, '*.png'))]
 def get_traces(result_df, key_values, key_prices, line_color):
+    print("Getting traces")
     traces = []
 
     previous_num_points = len(result_df[key_prices].iloc[0])
@@ -83,6 +84,8 @@ def get_traces(result_df, key_values, key_prices, line_color):
     # Add the remaining traces
     add_traces(x_vals, y_vals)
 
+    print(f'Traces: {traces}')
+
     return traces
 
 def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=None,show_fig = False, min_max = True):
@@ -104,6 +107,7 @@ def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=N
     min_val = np.min(z)
     max_val = np.max([abs(max_val), abs(min_val)])
 
+    # breakpoint()
     fig = go.Figure()
     # breakpoint()
     heatmap = go.Contour(
@@ -202,6 +206,7 @@ def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=N
     #------- Interpolations --------
 
     if min_max == True:
+        print("Entering Min Maxs")
         df = df_heatmap.copy()
         results = []
         for _, row in df.iterrows():
@@ -218,6 +223,7 @@ def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=N
             y = y[mask]
 
             if len(x) < 2 or len(y) < 2:
+                print("not enough valid data points")
                 continue  # Skip this row if not enough valid data points
 
             # Compute discrete gradient (approximating the first derivative)
@@ -251,6 +257,7 @@ def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=N
                 'maxima_values': max_values,
                 'prices_of_maxima': maxima_locations
             })
+            print(f'Results:{results}')
 
         result_df = pd.DataFrame(results, index=df.index)
 
@@ -266,6 +273,7 @@ def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=N
             fig.add_trace(trace)
             # breakpoint()
     # fig.show()
+
     fig.add_layout_image(
         dict(
             source=img,
@@ -337,9 +345,9 @@ def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=N
         fig.show()
 
     #----------- SAVING GRAPH ---------------#
-    # y_min = 5300  # Replace with your desired minimum value
-    # y_max = 5550  # Replace with your desired maximum value
-    # fig.update_yaxes(range=[y_min, y_max])
+    y_min = 5370  # Replace with your desired minimum value
+    y_max = 5630  # Replace with your desired maximum value
+    fig.update_yaxes(range=[y_min, y_max])
 
 
     image_width = 1440  # Width in pixels

@@ -341,6 +341,9 @@ def get_latest_poly(client):
     :param client: The Polygon client object used to fetch data.
     :return: A DataFrame containing the latest options data.
     """
+
+    logger.info("Getting latest Poly Data...")
+
     options_chain = []
 
     # Start the timer

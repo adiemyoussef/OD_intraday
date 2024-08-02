@@ -11,6 +11,7 @@ from cupy_numba.vanna_cupy import compute_all as compute_all_CPU_vanna
 
 
 def compute_all(args, book, prices):
+    # breakpoint()
     if args.mode == "vanna":
         if torch.cuda.is_available() and torch.cuda.device_count()>0:
             result=compute_all_GPU_vanna(book, prices)
