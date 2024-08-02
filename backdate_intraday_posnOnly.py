@@ -62,10 +62,16 @@ def process_greek_og(greek_name, poly_data, book):
         book.drop(columns=[update_col, "time_stamp_update"], inplace=True)
     return book
 
-def process_greek(greek_name, poly_data, book):
+def process_greek(greek_name, poly_data, df_book):
     latest_greek = poly_data.sort_values('time_stamp', ascending=False).groupby('contract_id').first().reset_index()
     latest_greek = latest_greek[['contract_id', greek_name, 'time_stamp']]
-    book = pd.merge(book, latest_greek, on='contract_id', how='left', suffixes=('', '_update'))
+    book = pd.merge(df_book, latest_greek, on='contract_id', how='left', suffixes=('', '_update'))
+
+    # Log merge results
+    # total_contracts = len(df_book)
+    # merged_contracts = book['iv_update'].notna().sum()
+    # unmerged_contracts = total_contracts - merged_contracts
+
 
     update_col = f"{greek_name}_update"
     if update_col in book.columns:
@@ -450,8 +456,8 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
 
     session_files = await get_session_files(sftp_utility, sftp_folder, session_date)
     logger.info(f"session_files: {session_files}")
-    breakpoint()
-    for file_name in session_files[76:] :
+
+    for file_name in session_files[78:] :
         file_path = f"{sftp_folder}/{file_name}"
         logger.info(f"Processing file: {file_name}")
 
@@ -477,26 +483,25 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
 
                     final_book = await update_book_with_latest_greeks(latest_book)
 
-                    breakpoint()
+
                     # Check for NaN values
-                    nan_counts = df_end.isna().sum()
+                    nan_counts = final_book.isna().sum()
                     print("Columns with NaN values:")
                     print(nan_counts[nan_counts > 0])
 
-                    rows_with_nan = df_end.isna().any(axis=1).sum()
+                    rows_with_nan = final_book.isna().any(axis=1).sum()
                     print(f"\nTotal rows with at least one NaN: {rows_with_nan}")
-                    print(f"Percentage of rows with NaN: {rows_with_nan / len(df_end) * 100:.2f}%")
+                    print(f"Percentage of rows with NaN: {rows_with_nan / len(final_book) * 100:.2f}%")
 
                     # Drop rows with NaN values
-                    final_book_clean = df_end.dropna()
+                    final_book_clean = final_book.dropna()
 
-                    print(f"\nOriginal DataFrame shape: {df_end.shape}")
+                    print(f"\nOriginal DataFrame shape: {final_book.shape}")
                     print(f"Cleaned DataFrame shape: {final_book_clean.shape}")
                     print(f"Rows removed: {len(df_end) - len(final_book_clean)}")
 
-                    breakpoint()
 
-                    await db.insert_progress('intraday', 'intraday_books_test', final_book)
+                    await db.insert_progress('intraday', 'intraday_books_test', final_book_clean)
                     logger.info(f'It took {time.time() - start_time} sec. to process {file_name_}')
 
         except Exception as e:
@@ -520,7 +525,7 @@ async def main():
             logger.info(f"Distinct sessions: {distinct_sessions}")
 
             for session_date in distinct_sessions[8:-1]:
-                breakpoint()
+
                 logger.info(f"Processing: {session_date}")
                 await process_session(sftp, session_date, sftp_folder)
         except Exception as e:
