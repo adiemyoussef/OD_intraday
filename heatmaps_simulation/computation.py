@@ -257,15 +257,15 @@ def compute_heatmap(args, type:str, df_book: pd.DataFrame, start_time:datetime, 
 
     book = book_to_list(df_book,sim_times)
 
-    breakpoint()
+    # breakpoint()
 
     delta_array = compute_all(args,book,prices)
 
-    breakpoint()
+    # breakpoint()
     df_heatmap_to_plot = generate_gamma_heatmap(
         sim_times, prices, delta_array, start_time.date(), start_time.time())
 
-    breakpoint()
+    # breakpoint()
 
     return df_heatmap_to_plot
 
@@ -392,7 +392,7 @@ if __name__ == "__main__":
         #plot_heatmap_cumul(cumulative_df, spx=spx_data_chart, show_fig=True)
         #df_to_plot = current_cumulative_heatmap.drop(columns=["effective_datetime"])
         #plot_heatmap(df_to_plot,effective_datetime, spx=spx_data_chart, show_fig=False)
-        breakpoint()
+        # breakpoint()
         plot_heatmap(df_heatmap,effective_datetime, spx=None, show_fig=True)
 
         logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
