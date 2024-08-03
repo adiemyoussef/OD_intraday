@@ -18,7 +18,10 @@ def compute_all(args, book, prices):
         else:
             result=compute_all_CPU_vanna(book, prices, args.proc)
     elif args.mode == "delta":
+
         if torch.cuda.is_available() and torch.cuda.device_count()>0:
+            print(f'Cuda is available: {torch.cuda.is_available()}')
+            print(f'Cuda device count: {torch.cuda.device_count()}')
             result=compute_all_GPU_delta(book, prices)
         else:
             result=compute_all_CPU_delta(book, prices, args.proc)
