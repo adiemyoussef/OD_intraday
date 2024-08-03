@@ -375,7 +375,7 @@ if __name__ == "__main__":
                                               steps=spx['steps'], range=spx['range'])
 
         logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
-
+        print(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
         # Update the cumulative heatmap
         #heatmap_manager.update_heatmap(df_heatmap, datetime_object)
 
@@ -393,7 +393,7 @@ if __name__ == "__main__":
         #df_to_plot = current_cumulative_heatmap.drop(columns=["effective_datetime"])
         #plot_heatmap(df_to_plot,effective_datetime, spx=spx_data_chart, show_fig=False)
         # breakpoint()
-        plot_heatmap(df_heatmap,effective_datetime, spx=None, show_fig=True)
+        #plot_heatmap(df_heatmap,effective_datetime, spx=None, show_fig=True)
 
         logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
