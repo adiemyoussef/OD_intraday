@@ -319,8 +319,8 @@ if __name__ == "__main__":
     # -----------DATA READING----------#
     query = """
     SELECT * FROM intraday.intraday_books
-    WHERE effective_date ='2024-08-02'
-    and effective_datetime >= '2024-08-02 09:00:00'
+    WHERE effective_date ='2024-07-26'
+    -- and effective_datetime >= '2024-08-02 09:00:00'
     """
 
     df_books = db.execute_query(query)
