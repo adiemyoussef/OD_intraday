@@ -311,9 +311,9 @@ if __name__ == "__main__":
 
 
     EXPIRATIONS_TO_KEEP = 100         # Allows to filter on expirations for positionning
-    trading_view_file = "SPREADEX_SPX_5_20240731.csv"
-    spx_data_raw = pd.read_csv(trading_view_file)
-    spx_data_raw.rename(columns={'time': 'effective_datetime'}, inplace = True)
+    # trading_view_file = "SPREADEX_SPX_5_20240731.csv"
+    # spx_data_raw = pd.read_csv(trading_view_file)
+    # spx_data_raw.rename(columns={'time': 'effective_datetime'}, inplace = True)
 
     #----------------------------------#
     # -----------DATA READING----------#
@@ -334,15 +334,15 @@ if __name__ == "__main__":
 
     #------- TRADINGVIEW DATA-------- #
 
-    all_datetimes = spx_data_raw['effective_datetime'].unique()
-
-
-    filtered_datetimes = filter_datetimes_specific_date(all_datetimes)
-    spx_data_raw_filtered = spx_data_raw[spx_data_raw['effective_datetime'].isin(filtered_datetimes)]
-
-
-    spx_data = resample_and_convert_timezone(spx_data_raw)
-    spx_data.set_index('effective_datetime', inplace=True)
+    # all_datetimes = spx_data_raw['effective_datetime'].unique()
+    #
+    #
+    # filtered_datetimes = filter_datetimes_specific_date(all_datetimes)
+    # spx_data_raw_filtered = spx_data_raw[spx_data_raw['effective_datetime'].isin(filtered_datetimes)]
+    #
+    #
+    # spx_data = resample_and_convert_timezone(spx_data_raw)
+    # spx_data.set_index('effective_datetime', inplace=True)
     #spx_data_chart = spx_data[spx_data.index.time >= pd.Timestamp('07:00').time()]
     # target_date = pd.Timestamp('2024-07-31').date()
     # start_time = pd.Timestamp('12:00').time()
