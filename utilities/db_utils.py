@@ -12,6 +12,8 @@ import asyncio
 import mysql.connector
 from enum import Enum
 from tqdm import tqdm
+from psycopg2 import sql,errors
+
 class AsyncDatabaseUtilities:
     """
     A utility class for asynchronous database operations.
@@ -527,52 +529,57 @@ class PostGreData:
     def chunker(self, seq, size):
         return (seq[pos:pos + size] for pos in range(0, len(seq), size))
 
-    def insert_progress(self, dbName: str, dbTable: str, dataframe: pd.DataFrame):
-        if not self.connection:
+    def table_exists(self, schema: str, table: str) -> bool:
+        query = sql.SQL("SELECT to_regclass({})").format(
+            sql.Literal(f"{schema}.{table}")
+        )
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute(query)
+                return cursor.fetchone()[0] is not None
+        except errors.Error as e:
+            self.logger.error(f"Error checking table existence: {e}")
+            breakpoint()
+            return False
 
+    def insert_progress(self, schema: str, table: str, dataframe: pd.DataFrame):
+        if not self.connection:
             self.connect()
 
+        full_table_name = f"{schema}.{table}"
+
+        if not self.table_exists(schema, table):
+            self.logger.error(f"Table {full_table_name} does not exist.")
+            breakpoint()
+            return
+
         chunksize = math.ceil(len(dataframe) / self.chunksize_divider)
-        self.logger.info(
-            f"Inserting DataFrame with {len(dataframe)} rows into {dbName}.{dbTable} in chunks of {chunksize}")
+        self.logger.info(f"Inserting DataFrame with {len(dataframe)} rows into {full_table_name} in chunks of {chunksize}")
 
         with tqdm(total=len(dataframe), desc="Inserting data") as pbar:
             for i, cdf in enumerate(self.chunker(dataframe, chunksize)):
                 try:
                     with self.connection.cursor() as cursor:
-                        # Create a string buffer
                         buffer = StringIO()
-                        # Write the dataframe to the buffer
                         cdf.to_csv(buffer, index=False, header=False, quoting=csv.QUOTE_MINIMAL)
-                        # Reset the buffer position to the start
                         buffer.seek(0)
 
+                        copy_sql = sql.SQL("COPY {} ({}) FROM STDIN WITH CSV").format(
+                            sql.Identifier(schema, table),
+                            sql.SQL(', ').join(map(sql.Identifier, cdf.columns))
+                        )
+                        cursor.copy_expert(copy_sql, buffer)
 
-                        # Use COPY FROM for bulk insert
-                        cursor.copy_from(buffer, dbTable, sep=',', null='', columns=cdf.columns)
-
-                        # Commit after each chunk
                         self.connection.commit()
                         pbar.update(len(cdf))
-                        # # Use COPY FROM for bulk insert
-                        # cursor.copy_from(buffer, f"{dbName}.{dbTable}", sep=',', null='', columns=cdf.columns)
-                        #
-                        # # Commit after each chunk
-                        # self.connection.commit()
-                        # pbar.update(len(cdf))
 
-                except psycopg2.Error as e:
-                    self.status = DatabaseStatus.ERROR
-                    self.last_error = str(e)
-                    self.logger.error(f"PostgreSQL error occurred while inserting chunk {i}: {e}")
-                    self.connection.rollback()
                 except Exception as e:
                     self.status = DatabaseStatus.ERROR
                     self.last_error = str(e)
-                    self.logger.error(f"Unexpected error occurred while inserting chunk {i}: {e}")
+                    self.logger.error(f"Error occurred while inserting chunk {i}: {str(e)}")
                     self.connection.rollback()
 
-        self.logger.info(f"Completed insertion of {len(dataframe)} rows into {dbName}.{dbTable}")
+        self.logger.info(f"Completed insertion of {len(dataframe)} rows into {full_table_name}")
 
     @staticmethod
     def chunker_(df: pd.DataFrame, size: int):

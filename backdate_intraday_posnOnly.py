@@ -32,7 +32,7 @@ if not logger.handlers:
     # Add the handler to the logger
     logger.addHandler(console_handler)
 else:
-    print("Logger already has handlers. Skipping handler creation.")
+    logger.info("Logger already has handlers. Skipping handler creation.")
 
 # Prevent the logger from propagating messages to the root logger
 logger.propagate = False
@@ -51,7 +51,7 @@ pg_data = PostGreData(
 )
 
 pg_data.connect()
-print(f'Connected ? -- > {pg_data.check_connection()}')
+logger.info(f'Connected ? -- > {pg_data.check_connection()}')
 status = pg_data.get_status()
 
 
@@ -100,17 +100,17 @@ def process_greek(greek_name, poly_data, df_book):
         updated_contracts = book[book[update_col].notnull()]
         unique_update_times = updated_contracts['time_stamp_update'].unique()
 
-        print(f"\nUnique update times for {greek_name}:")
+        logger.debug(f"\nUnique update times for {greek_name}:")
         for time in sorted(unique_update_times):
-            print(time)
+            logger.debug(time)
 
-        print(f"\nNumber of unique update times: {len(unique_update_times)}")
+        logger.info(f"\nNumber of unique update times: {len(unique_update_times)}")
 
         # Update the greek values and clean up
         book[greek_name] = book[update_col].combine_first(book[greek_name])
         book.drop(columns=[update_col, "time_stamp_update"], inplace=True)
     else:
-        print(f"\nWarning: {update_col} not found in merged DataFrame. No updates performed.")
+        logger.info(f"\nWarning: {update_col} not found in merged DataFrame. No updates performed.")
 
     return book
 async def get_distinct_sessions(sftp_utility: SFTPUtility, sftp_folder: str) -> list:
@@ -482,7 +482,7 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
         return
 
     session_files = await get_session_files(sftp_utility, sftp_folder, session_date)
-    logger.info(f"session_files: {session_files}")
+    logger.debug(f"session_files: {session_files}")
     # breakpoint()
     for file_name in session_files[64:] :
         file_path = f"{sftp_folder}/{file_name}"
@@ -494,13 +494,13 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
             file_name_ = file_info['file_name']
 
             if file_info:
-                logger.info(f"FILE INFO ---> {file_info}")
+                logger.debug(f"FILE INFO ---> {file_info}")
                 df = await read_and_verify_file(file_info, file_data)
 
                 if df is not None and not df.empty:
                     start_time = time.time()
                     logger.info(f"Successfully processed file: {file_info['file_name']}")
-                    logger.info(f"DataFrame shape from SFTP: {df.shape}")
+                    logger.debug(f"DataFrame shape from SFTP: {df.shape}")
 
                     latest_book = await build_latest_book(initial_book, df)
                     latest_book['time_stamp'] = get_eastern_time()      #Temporaire
@@ -513,22 +513,21 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
 
                     # Check for NaN values
                     nan_counts = final_book.isna().sum()
-                    print("Columns with NaN values:")
-                    print(nan_counts[nan_counts > 0])
+                    logger.info(f"Columns with NaN values:{nan_counts[nan_counts > 0]}")
 
                     rows_with_nan = final_book.isna().any(axis=1).sum()
-                    print(f"\nTotal rows with at least one NaN: {rows_with_nan}")
-                    print(f"Percentage of rows with NaN: {rows_with_nan / len(final_book) * 100:.2f}%")
+                    logger.debug(f"\nTotal rows with at least one NaN: {rows_with_nan}")
+                    logger.debug(f"Percentage of rows with NaN: {rows_with_nan / len(final_book) * 100:.2f}%")
 
                     # Drop rows with NaN values
                     final_book_clean = final_book.dropna()
 
-                    print(f"\nOriginal DataFrame shape: {final_book.shape}")
-                    print(f"Cleaned DataFrame shape: {final_book_clean.shape}")
-                    print(f"Rows removed: {len(df_end) - len(final_book_clean)}")
+                    logger.info(f"\nOriginal DataFrame shape: {final_book.shape}")
+                    logger.info(f"Cleaned DataFrame shape: {final_book_clean.shape}")
+                    logger.info(f"Rows removed: {len(df_end) - len(final_book_clean)}")
 
                     status = pg_data.get_status()
-                    print(status)
+                    logger.info(status)
 
 
                     if status['status'] == 'Error':
@@ -536,7 +535,6 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
                         pg_data.rollback()  # Ensure the transaction is rolled back
                         pg_data.connect()  # Reconnect if necessary
 
-                    breakpoint()
                     # Identify columns that contain '_posn' in their names
                     posn_columns = [col for col in final_book_clean.columns if '_posn' in col]
 
@@ -548,17 +546,16 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
                     final_book_clean_insert[posn_columns] = final_book_clean_insert[posn_columns].apply(lambda x: x.astype(int))
 
 
-                    breakpoint()
                     # Check if all values are indeed integers
                     all_integers = all(final_book_clean_insert[col].dtype == 'int64' for col in posn_columns)
-                    print(f"\nAll '_posn' columns converted to integers: {all_integers}")
+                    logger.debug(f"\nAll '_posn' columns converted to integers: {all_integers}")
 
                     # Print total number of NaN values filled
                     total_nan_filled = sum(final_book_clean_insert[col].isna().sum() for col in posn_columns)
-                    print(f"\nTotal number of NaN values filled across all '_posn' columns: {total_nan_filled}")
+                    logger.info(f"\nTotal number of NaN values filled across all '_posn' columns: {total_nan_filled}")
 
-                    breakpoint()
-                    pg_data.insert_progress('public', 'intraday_books_test', final_book_clean_insert)
+
+                    pg_data.insert_progress('intraday', 'intraday_books_test', final_book_clean_insert)
                     # breakpoint()
                     await db.insert_progress('intraday', 'intraday_books_test', final_book_clean_insert)
                     # query = f"""
@@ -598,7 +595,7 @@ async def main():
     async with SFTPUtility(**sftp_config, logger=logger) as sftp:
         try:
             distinct_sessions = await get_distinct_sessions(sftp, sftp_folder)
-            logger.info(f"Distinct sessions: {distinct_sessions}")
+            logger.debug(f"Distinct sessions: {distinct_sessions}")
             # breakpoint()
             for session_date in distinct_sessions[:-1]:
                 #session_date = '2024-07-26'
