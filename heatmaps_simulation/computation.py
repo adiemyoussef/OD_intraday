@@ -33,54 +33,7 @@ parser.add_argument("--mode", help="Calculation mode", choices=['delta', 'vanna'
 parser.add_argument("--proc", help="Number of processors to use", default=32)
 args = parser.parse_args()
 
-class CumulativeHeatmapManager:
-    def __init__(self):
-        self.cumulative_df = pd.DataFrame()
 
-    def update_heatmap(self, new_heatmap: pd.DataFrame, current_datetime: pd.Timestamp):
-        print(f"Updating heatmap for {current_datetime}")
-        print(f"New heatmap shape: {new_heatmap.shape}")
-
-        # Convert index to datetime if it's not already
-        new_heatmap.index = pd.to_datetime(new_heatmap.index)
-
-        # Add the current_datetime as a column
-        new_heatmap['effective_datetime'] = current_datetime
-
-        # If cumulative_df is empty, initialize it with the new_heatmap
-        if self.cumulative_df.empty:
-            self.cumulative_df = new_heatmap
-            print("Initialized cumulative_df")
-            return
-
-        # Get the latest simulation time from the previous heatmap
-        last_sim_time = self.cumulative_df.index.max()
-        print(f"Last simulation time: {last_sim_time}")
-
-        # Find rows in new_heatmap that are after the last simulation time
-        new_rows = new_heatmap[new_heatmap.index > last_sim_time]
-        print(f"Number of new rows: {len(new_rows)}")
-
-        # Append these new rows to cumulative_df
-        self.cumulative_df = pd.concat([self.cumulative_df, new_rows])
-
-        # Update existing rows with the latest data
-        existing_times = self.cumulative_df.index.isin(new_heatmap.index)
-        self.cumulative_df.loc[existing_times, new_heatmap.columns] = new_heatmap.loc[
-            self.cumulative_df.index[existing_times]]
-
-
-        # # Sort the dataframe by effective_datetime and index
-        # self.cumulative_df = self.cumulative_df.sort_values(['effective_datetime', self.cumulative_df.index])
-
-        print(f"Updated cumulative_df shape: {self.cumulative_df.shape}")
-        print(f"Unique effective_datetimes: {self.cumulative_df['effective_datetime'].unique()}")
-
-    def get_current_heatmap(self):
-        return self.cumulative_df
-
-# Usage in main loop
-heatmap_manager = CumulativeHeatmapManager()
 
 def insert_heatmap_simulation(df, minima, maxima, ticker):
 
@@ -224,21 +177,36 @@ def generate_gamma_heatmap(sim_times: list, prices: list, deltas:np.ndarray, tra
     for (i, time) in enumerate(sim_times):
         simtime_number.append(i)
 
-    x = simtime_number
-    y = prices
 
-    # charm = np.gradient(deltas, axis=1, edge_order=2)
-    # df_charm = pd.DataFrame(charm.transpose(), columns=prices)
-    # df_charm.index = sim_times
-
+    charm = np.gradient(deltas, axis=1, edge_order=2)
     gamma = np.gradient(deltas, axis=0, edge_order=2)
+    gamma_der = np.gradient(gamma, axis=0, edge_order=2)
+    gamma_2der = np.gradient(gamma_der, axis=0, edge_order=2)
+
+
+    df_charm = pd.DataFrame(charm.transpose(), columns=prices)
     df_gamma = pd.DataFrame(gamma.transpose(), columns=prices)
-    df_gamma.index = sim_times
+    df_gamma_der = pd.DataFrame(gamma_der.transpose(), columns=prices)
+    df_gamma_2der = pd.DataFrame(gamma_2der.transpose(), columns=prices)
 
-    #test = add_blank_section_to_heatmap(df_gamma, '09:30')
+    hm_time_index = []
+    for i in range(0, len(df_charm), 1):
+        hour_string = str(hour_start)
+        begin_time = datetime.strptime(hour_string, '%H:%M:%S')
+        t = (begin_time + timedelta(minutes=i * 5)).time()
+        full_date_time = datetime.combine(trade_date, t)
+        hm_time_index.append(full_date_time)
 
-    #breakpoint()
-    return df_gamma
+    # Format
+    df_charm.index = hm_time_index
+    df_gamma.index = hm_time_index
+    df_gamma_der.index = hm_time_index
+    df_gamma_2der.index = hm_time_index
+
+
+    return df_charm, df_gamma, df_gamma_der, df_gamma_2der
+
+
 
 def compute_heatmap(args, type:str, df_book: pd.DataFrame, start_time:datetime, price:float, steps:float, range:float):
 
@@ -257,17 +225,22 @@ def compute_heatmap(args, type:str, df_book: pd.DataFrame, start_time:datetime, 
 
     book = book_to_list(df_book,sim_times)
 
-    breakpoint()
-
     delta_array = compute_all(args,book,prices)
 
-    breakpoint()
-    df_heatmap_to_plot = generate_gamma_heatmap(
-        sim_times, prices, delta_array, start_time.date(), start_time.time())
+    df_charm, df_gamma, df_gammader, df_gamma2der = generate_gamma_heatmap(sim_times, prices, delta_array, start_time.date(), start_time.time())
 
-    breakpoint()
+    mask_maxima = df_gamma2der > 0
+    mask_minima = df_gamma2der < 0
 
-    return df_heatmap_to_plot
+    maxima_df = df_gammader.copy()
+    maxima_df[mask_maxima] = np.nan
+
+    minima_df = df_gammader.copy()
+    minima_df[mask_minima] = np.nan
+
+
+    return df_charm, df_gamma, minima_df, maxima_df
+
 
 def append_time(row):
     if row['option_symbol'] == 'SPX':
@@ -311,16 +284,16 @@ if __name__ == "__main__":
 
 
     EXPIRATIONS_TO_KEEP = 100         # Allows to filter on expirations for positionning
-    trading_view_file = "SPREADEX_SPX_5_20240731.csv"
-    spx_data_raw = pd.read_csv(trading_view_file)
-    spx_data_raw.rename(columns={'time': 'effective_datetime'}, inplace = True)
+    # trading_view_file = "SPREADEX_SPX_5_20240731.csv"
+    # spx_data_raw = pd.read_csv(trading_view_file)
+    # spx_data_raw.rename(columns={'time': 'effective_datetime'}, inplace = True)
 
     #----------------------------------#
     # -----------DATA READING----------#
     query = """
-    SELECT * FROM intraday.intraday_books
-    WHERE effective_date ='2024-08-02'
-    and effective_datetime >= '2024-08-02 09:00:00'
+    SELECT * FROM intraday.intraday_books_test
+    WHERE effective_date ='2024-07-26'
+    and effective_datetime >= '2024-07-26 09:00:00'
     """
 
     df_books = db.execute_query(query)
@@ -334,21 +307,21 @@ if __name__ == "__main__":
 
     #------- TRADINGVIEW DATA-------- #
 
-    all_datetimes = spx_data_raw['effective_datetime'].unique()
+    # all_datetimes = spx_data_raw['effective_datetime'].unique()
+    #
+    #
+    # filtered_datetimes = filter_datetimes_specific_date(all_datetimes)
+    # spx_data_raw_filtered = spx_data_raw[spx_data_raw['effective_datetime'].isin(filtered_datetimes)]
 
 
-    filtered_datetimes = filter_datetimes_specific_date(all_datetimes)
-    spx_data_raw_filtered = spx_data_raw[spx_data_raw['effective_datetime'].isin(filtered_datetimes)]
-
-
-    spx_data = resample_and_convert_timezone(spx_data_raw)
-    spx_data.set_index('effective_datetime', inplace=True)
+    # spx_data = resample_and_convert_timezone(spx_data_raw)
+    # spx_data.set_index('effective_datetime', inplace=True)
     #spx_data_chart = spx_data[spx_data.index.time >= pd.Timestamp('07:00').time()]
     # target_date = pd.Timestamp('2024-07-31').date()
     # start_time = pd.Timestamp('12:00').time()
 
 
-    open_price = 5350
+    open_price = 5450
 
     unique_effective_datetimes = df_books['effective_datetime'].unique()
     cumulative_df = pd.DataFrame()
@@ -370,7 +343,7 @@ if __name__ == "__main__":
         start_heatmap_computations = time.time()
 
         #def compute_heatmap(args, type:str, df_book: pd.DataFrame, start_time:datetime, price:float, steps:float, range:float):
-        df_heatmap = compute_heatmap(args, type='delta', df_book=df_subset,
+        df_charm, df_gamma, minima_df, maxima_df = compute_heatmap(args, type='delta', df_book=df_subset,
                                               start_time=datetime_object, price=open_price,
                                               steps=spx['steps'], range=spx['range'])
 
@@ -392,8 +365,9 @@ if __name__ == "__main__":
         #plot_heatmap_cumul(cumulative_df, spx=spx_data_chart, show_fig=True)
         #df_to_plot = current_cumulative_heatmap.drop(columns=["effective_datetime"])
         #plot_heatmap(df_to_plot,effective_datetime, spx=spx_data_chart, show_fig=False)
-        breakpoint()
-        plot_heatmap(df_heatmap,effective_datetime, spx=None, show_fig=True)
+
+
+        plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df, effective_datetime=effective_datetime, spx=None)
 
         logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
