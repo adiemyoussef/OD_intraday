@@ -739,7 +739,7 @@ def Intraday_Flow():
 
     flow_start_time = time.time()
 
-    expected_file_override = None #'/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-07-30_18_00_1.csv.zip'
+    expected_file_override = '/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-02_14_00_1.csv.zip'
 
     db_utils.connect()
 
@@ -800,6 +800,12 @@ def Intraday_Flow():
                     logger.debug(f"Len of filtered_final_book: {len(final_book)}")
 
                     db_utils.insert_progress('intraday', 'intraday_books',filtered_final_book)
+
+                    # # Get the current price (you'll need to implement this function)
+                    # current_price = get_current_price()
+                    #
+                    # # Generate and store the heatmap
+                    # heatmap = generate_and_store_heatmap(filtered_final_book, db_utils, current_price)
 
                     # TODO: if it's the 1800 file: export as unrevised initial book for the next effective datge
 
