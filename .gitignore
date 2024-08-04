@@ -107,6 +107,10 @@ Thumbs.db
 *.tmp
 *.temp
 
+*.pkl
+*.gif
+*.png
+*.csv.
 
 create_github_creds.py
 heatmaps_simulation/20240725_books.pkl

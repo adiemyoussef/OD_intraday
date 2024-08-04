@@ -12,27 +12,48 @@ import dask
 from config.config import *
 from utilities.sftp_utils_async import SFTPUtility
 from utilities.db_utils_async import AsyncDatabaseUtilities
+from utilities.db_utils import PostGreData
 from utilities.misc_utils import *
 #--------------------------------------#
-
-
 # Configure logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Create a console handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
+# Check if the logger already has handlers to avoid duplicates
+if not logger.handlers:
+    # Create a console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
 
-# Create a formatter and set it for the handler
-file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(file_formatter)
+    # Create a formatter and set it for the handler
+    file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(file_formatter)
 
-# Add the handler to the logger
-logger.addHandler(console_handler)
+    # Add the handler to the logger
+    logger.addHandler(console_handler)
+else:
+    print("Logger already has handlers. Skipping handler creation.")
+
+# Prevent the logger from propagating messages to the root logger
+logger.propagate = False
+
+logging.getLogger("asyncio").setLevel(logging.WARNING)
+logging.getLogger("aiomysql").setLevel(logging.WARNING)
 
 
 db = AsyncDatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME, logger)
+pg_data = PostGreData(
+    host=POSGRE_DB_HOST,
+    port=POSGRE_DB_PORT,  # Default PostgreSQL port
+    user=POSGRE_DB_USER,
+    password=POSGRE_DB_PASSWORD,
+    database=POSGRE_DB_NAME
+)
+
+pg_data.connect()
+print(f'Connected ? -- > {pg_data.check_connection()}')
+status = pg_data.get_status()
+
 
 def process_greek_og(greek_name, poly_data, book):
     latest_greek = poly_data.sort_values('time_stamp', ascending=False).groupby('contract_id').first().reset_index()
@@ -163,6 +184,12 @@ async def update_book_with_latest_greeks(book: pd.DataFrame, lookback_hours=24) 
 
     poly_data_list = await db.execute_query(query)
     logger.info(f'Fetched {len(poly_data_list)} from poly')
+
+    # Check if poly_data_list is empty
+    if not poly_data_list:
+        logger.warning("No data fetched from poly_options_data. Returning original book without modifications.")
+        return book
+
     poly_data = pd.DataFrame(poly_data_list)
 
     elapsed_time = time.time() - start_time  # End the timer
@@ -456,8 +483,8 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
 
     session_files = await get_session_files(sftp_utility, sftp_folder, session_date)
     logger.info(f"session_files: {session_files}")
-    breakpoint()
-    for file_name in session_files[78:] :
+    # breakpoint()
+    for file_name in session_files[64:] :
         file_path = f"{sftp_folder}/{file_name}"
         logger.info(f"Processing file: {file_name}")
 
@@ -500,12 +527,61 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
                     print(f"Cleaned DataFrame shape: {final_book_clean.shape}")
                     print(f"Rows removed: {len(df_end) - len(final_book_clean)}")
 
+                    status = pg_data.get_status()
+                    print(status)
 
-                    await db.insert_progress('intraday', 'intraday_books_test', final_book_clean)
+
+                    if status['status'] == 'Error':
+                        print('Error in Posgre DataClass')
+                        pg_data.rollback()  # Ensure the transaction is rolled back
+                        pg_data.connect()  # Reconnect if necessary
+
+                    breakpoint()
+                    # Identify columns that contain '_posn' in their names
+                    posn_columns = [col for col in final_book_clean.columns if '_posn' in col]
+
+
+
+                    # Convert these columns to integer type
+                    final_book_clean_insert = final_book_clean.copy()
+                    # Convert these columns to integer type
+                    final_book_clean_insert[posn_columns] = final_book_clean_insert[posn_columns].apply(lambda x: x.astype(int))
+
+
+                    breakpoint()
+                    # Check if all values are indeed integers
+                    all_integers = all(final_book_clean_insert[col].dtype == 'int64' for col in posn_columns)
+                    print(f"\nAll '_posn' columns converted to integers: {all_integers}")
+
+                    # Print total number of NaN values filled
+                    total_nan_filled = sum(final_book_clean_insert[col].isna().sum() for col in posn_columns)
+                    print(f"\nTotal number of NaN values filled across all '_posn' columns: {total_nan_filled}")
+
+                    breakpoint()
+                    pg_data.insert_progress('public', 'intraday_books_test', final_book_clean_insert)
+                    # breakpoint()
+                    await db.insert_progress('intraday', 'intraday_books_test', final_book_clean_insert)
+                    # query = f"""
+                    # SELECT * FROM public.intraday_books_test;
+                    # """
+                    # start = time.time()
+                    # data = pg_data.execute_query(query)
+
+
+                    #TODO: Insert to
+
+                    #TODO:
+                    # # Get the current price (you'll need to implement this function)
+                    # current_price = get_current_price()
+                    #
+                    # # Generate and store the heatmap
+                    # heatmap = generate_and_store_heatmap(filtered_final_book, db_utils, current_price)
+
                     logger.info(f'It took {time.time() - start_time} sec. to process {file_name_}')
 
         except Exception as e:
             logger.error(f"Error processing file {file_name}: {str(e)}")
+            breakpoint()
 
 
 async def main():
@@ -523,9 +599,9 @@ async def main():
         try:
             distinct_sessions = await get_distinct_sessions(sftp, sftp_folder)
             logger.info(f"Distinct sessions: {distinct_sessions}")
-
-            for session_date in distinct_sessions[8:-1]:
-                session_date = '2024-07-26'
+            # breakpoint()
+            for session_date in distinct_sessions[:-1]:
+                #session_date = '2024-07-26'
                 logger.info(f"Processing: {session_date}")
                 await process_session(sftp, session_date, sftp_folder)
         except Exception as e:

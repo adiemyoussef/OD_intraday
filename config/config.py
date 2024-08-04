@@ -7,6 +7,9 @@ nyse = mcal.get_calendar('NYSE')
 def load_db_config():
     return JSON.load("database-credentials").value
 
+def load_postgre_db_config():
+    return JSON.load("postgre-credentials").value
+
 def load_sftp_config():
     return JSON.load("sftp-credentials").value
 
@@ -22,7 +25,10 @@ def load_discord_webhook():
 def load_other_config():
     return JSON.load("other-config").value
 
+
+
 # Load configurations
+postgresql_config = load_postgre_db_config()
 db_config = load_db_config()
 sftp_config = load_sftp_config()
 rabbitmq_config = load_rabbitmq_config()
@@ -30,13 +36,21 @@ do_spaces_config = load_do_spaces_config()
 discord_webhook = load_discord_webhook()
 other_config = load_other_config()
 
-# Database Configuration
+# MySQL Database Configuration
 DB_HOST = db_config['host']
 DB_PORT = db_config['port']
 DB_USER = db_config['user']
 DB_PASSWORD = db_config['password']
 DB_NAME = db_config['database']
 DB_DRIVER = db_config['driver']
+
+# Posgre Database Configuration
+POSGRE_DB_HOST = postgresql_config['host']
+POSGRE_DB_PORT = postgresql_config['port']
+POSGRE_DB_USER = postgresql_config['user']
+POSGRE_DB_PASSWORD = postgresql_config['password']
+POSGRE_DB_NAME = postgresql_config['database']
+POSGRE_DB_DRIVER = postgresql_config['driver']
 
 # Digital Ocean Spaces Configuration
 DO_SPACES_URL = do_spaces_config['url']

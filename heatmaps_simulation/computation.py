@@ -395,6 +395,8 @@ if __name__ == "__main__":
         # breakpoint()
         #plot_heatmap(df_heatmap,effective_datetime, spx=None, show_fig=True)
 
+        #TODO: Export Heatmap values for minima maxima and for website
+
         logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
 

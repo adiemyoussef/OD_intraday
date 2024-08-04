@@ -24,7 +24,7 @@ if use_cuda:
 
 if not use_cuda:
     xp = np
-    #print("Using NumPy. No GPU acceleration.")
+    print("Using NumPy. No GPU acceleration.")
 
 # Now use `xp` instead of `cp` or `np` throughout your code.
 

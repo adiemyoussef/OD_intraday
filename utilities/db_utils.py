@@ -1,6 +1,11 @@
+import csv
 import math
+from io import StringIO
 from typing import Optional, Union, List, Dict
 import aiomysql
+import psycopg2
+import psycopg2.extras
+from contextlib import contextmanager
 import pandas as pd
 import logging
 import asyncio
@@ -391,6 +396,215 @@ class DatabaseUtilities:
         """
         try:
             if self.connection is None or not self.connection.is_connected():
+                self.connect()
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to check/reconnect to database: {e}")
+            return False
+
+
+class PostGreData:
+    """
+    A utility class for synchronous PostgreSQL database operations with status tracking.
+    """
+
+    def __init__(self, host: str, port: int, user: str, password: str, database: str,
+                 logger: Optional[logging.Logger] = None):
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.database = database
+        self.connection = None
+        self.logger = logger or logging.getLogger(__name__)
+        self.status = DatabaseStatus.DISCONNECTED
+        self.last_error = None
+        self.chunksize_divider = 50
+
+    def connect(self):
+        if self.connection is None:
+            try:
+                self.connection = psycopg2.connect(
+                    host=self.host,
+                    port=self.port,
+                    user=self.user,
+                    password=self.password,
+                    database=self.database
+                )
+                self.status = DatabaseStatus.CONNECTED
+                self.logger.info("Database connection created successfully.")
+            except psycopg2.Error as e:
+                self.status = DatabaseStatus.ERROR
+                self.last_error = str(e)
+                self.logger.error(f"PostgreSQL error occurred while creating connection: {e}")
+                raise
+            except Exception as e:
+                self.status = DatabaseStatus.ERROR
+                self.last_error = str(e)
+                self.logger.error(f"Unexpected error occurred while creating connection: {e}")
+                raise
+
+    @contextmanager
+    def transaction(self):
+        try:
+            yield
+            self.connection.commit()
+        except Exception as e:
+            self.connection.rollback()
+            self.logger.error(f"Transaction failed: {e}")
+            raise
+
+    def rollback(self):
+        if self.connection:
+            self.connection.rollback()
+            self.logger.info("Transaction rolled back.")
+    def execute_query(
+            self,
+            query: str,
+            params: Optional[tuple] = None,
+            return_type: str = 'dataframe'
+    ) -> Union[pd.DataFrame, List[Dict], List[tuple]]:
+        if not self.connection:
+            self.connect()
+
+        try:
+            with self.connection.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                cursor.execute(query, params)
+                results = cursor.fetchall()
+                columns = [desc[0] for desc in cursor.description]
+
+                if return_type.lower() == 'dataframe':
+                    result = pd.DataFrame(results, columns=columns)
+                    self.logger.debug(f"Executed Query: {result.head()}")
+                    return result
+                elif return_type.lower() == 'dict':
+                    return [dict(row) for row in results]
+                elif return_type.lower() == 'tuple':
+                    return [tuple(row) for row in results]
+                else:
+                    raise ValueError(
+                        f"Invalid return_type: {return_type}. Valid options are 'dataframe', 'dict', or 'tuple'.")
+
+        except psycopg2.Error as e:
+            self.status = DatabaseStatus.ERROR
+            self.last_error = str(e)
+            self.logger.error(f"PostgreSQL error occurred while executing query: {e}")
+            raise
+        except Exception as e:
+            self.status = DatabaseStatus.ERROR
+            self.last_error = str(e)
+            self.logger.error(f"Unexpected error occurred while executing query: {e}")
+            raise
+        finally:
+            print(f"Query executed: {query}...")
+
+    def execute_insert(self, query: str, params: tuple) -> bool:
+        if not self.connection:
+            self.connect()
+
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, params)
+                self.connection.commit()
+                self.logger.info(f"Insert query executed successfully: {query[:50]}...")
+                return True
+        except psycopg2.Error as e:
+            self.status = DatabaseStatus.ERROR
+            self.last_error = str(e)
+            self.logger.error(f"PostgreSQL error occurred while executing insert: {e}")
+            return False
+        except Exception as e:
+            self.status = DatabaseStatus.ERROR
+            self.last_error = str(e)
+            self.logger.error(f"Unexpected error occurred while executing insert: {e}")
+            return False
+
+    def get_initial_book(self, ticker: str, active_effective_date: str) -> pd.DataFrame:
+        query = f"""SELECT * FROM intraday.new_daily_book_format WHERE effective_date = %s AND ticker = %s;"""
+        self.logger.info(f"Fetching book data for ticker {ticker} on date {active_effective_date}")
+        return self.execute_query(query, (active_effective_date, ticker))
+
+    def chunker(self, seq, size):
+        return (seq[pos:pos + size] for pos in range(0, len(seq), size))
+
+    def insert_progress(self, dbName: str, dbTable: str, dataframe: pd.DataFrame):
+        if not self.connection:
+
+            self.connect()
+
+        chunksize = math.ceil(len(dataframe) / self.chunksize_divider)
+        self.logger.info(
+            f"Inserting DataFrame with {len(dataframe)} rows into {dbName}.{dbTable} in chunks of {chunksize}")
+
+        with tqdm(total=len(dataframe), desc="Inserting data") as pbar:
+            for i, cdf in enumerate(self.chunker(dataframe, chunksize)):
+                try:
+                    with self.connection.cursor() as cursor:
+                        # Create a string buffer
+                        buffer = StringIO()
+                        # Write the dataframe to the buffer
+                        cdf.to_csv(buffer, index=False, header=False, quoting=csv.QUOTE_MINIMAL)
+                        # Reset the buffer position to the start
+                        buffer.seek(0)
+
+
+                        # Use COPY FROM for bulk insert
+                        cursor.copy_from(buffer, dbTable, sep=',', null='', columns=cdf.columns)
+
+                        # Commit after each chunk
+                        self.connection.commit()
+                        pbar.update(len(cdf))
+                        # # Use COPY FROM for bulk insert
+                        # cursor.copy_from(buffer, f"{dbName}.{dbTable}", sep=',', null='', columns=cdf.columns)
+                        #
+                        # # Commit after each chunk
+                        # self.connection.commit()
+                        # pbar.update(len(cdf))
+
+                except psycopg2.Error as e:
+                    self.status = DatabaseStatus.ERROR
+                    self.last_error = str(e)
+                    self.logger.error(f"PostgreSQL error occurred while inserting chunk {i}: {e}")
+                    self.connection.rollback()
+                except Exception as e:
+                    self.status = DatabaseStatus.ERROR
+                    self.last_error = str(e)
+                    self.logger.error(f"Unexpected error occurred while inserting chunk {i}: {e}")
+                    self.connection.rollback()
+
+        self.logger.info(f"Completed insertion of {len(dataframe)} rows into {dbName}.{dbTable}")
+
+    @staticmethod
+    def chunker_(df: pd.DataFrame, size: int):
+        return (df[pos:pos + size] for pos in range(0, len(df), size))
+
+    def close(self):
+        if self.connection:
+            self.connection.close()
+            self.logger.info("Database connection closed.")
+            self.connection = None
+        self.status = DatabaseStatus.DISCONNECTED
+
+    def get_status(self) -> Dict[str, str]:
+        """
+        Get the current status of the database connection.
+
+        :return: A dictionary containing the status and last error (if any)
+        """
+        return {
+            "status": self.status.value,
+            "last_error": self.last_error if self.status == DatabaseStatus.ERROR else None
+        }
+
+    def check_connection(self) -> bool:
+        """
+        Check if the database connection is still alive and reconnect if necessary.
+
+        :return: True if the connection is alive (or successfully reconnected), False otherwise
+        """
+        try:
+            if self.connection is None or self.connection.closed:
+
                 self.connect()
             return True
         except Exception as e:
