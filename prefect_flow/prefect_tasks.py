@@ -685,8 +685,8 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     prefect_logger.info(log_data)
     # Log using custom logger
     #log_greeks_update_summary(custom_logger, log_data)
-
-    breakpoint()
+    #
+    # breakpoint()
     # Log using Prefect's logger
     #log_message = "\n".join([f"{key}: {value}" for key, value in log_data.items()])
     #
