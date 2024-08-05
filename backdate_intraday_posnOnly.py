@@ -597,7 +597,7 @@ async def main():
             distinct_sessions = await get_distinct_sessions(sftp, sftp_folder)
             logger.debug(f"Distinct sessions: {distinct_sessions}")
             # breakpoint()
-            for session_date in distinct_sessions[:-1]:
+            for session_date in distinct_sessions[1:-1]:
                 #session_date = '2024-07-26'
                 logger.info(f"Processing: {session_date}")
                 await process_session(sftp, session_date, sftp_folder)

@@ -89,7 +89,7 @@ def get_traces(result_df, key_values, key_prices, line_color):
     return traces
 
 
-def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None):
+def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None, save_fig=True, fig_show = True):
 
     x = df_heatmap.index
     y = df_heatmap.columns.values
@@ -276,14 +276,29 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
 
     stamp = df_heatmap.index[0].strftime("%Y-%m-%d_%H-%M")
 
+    if fig_show:
+        fig.show()
 
-    fig.write_image(
-        os.path.join(rf"C:\Users\ilias\PycharmProjects\OD_intraday\heatmaps_simulation\20240726_heatmaps",f"heatmap_{stamp}.png"),  # Saving as PNG for high resolution
-        width=image_width,
-        height=image_height,
-        scale=scale_factor
-    )
+    if save_fig:
+        # Create a directory for saving images
+        save_dir = os.path.join(os.path.expanduser("~"), "heatmap_images")
+        os.makedirs(save_dir, exist_ok=True)
 
+        # Generate the filename
+        stamp = df_heatmap.index[0].strftime("%Y-%m-%d_%H-%M")
+        filename = f"heatmap_{stamp}.png"
+
+        # Full path for saving the image
+        save_path = os.path.join(save_dir, filename)
+
+        # Save the image
+        fig.write_image(
+            save_path,
+            width=image_width,
+            height=image_height,
+            scale=scale_factor
+        )
+        print(f"Image saved to: {save_path}")
 
 def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=None,show_fig = False):
 

@@ -347,15 +347,9 @@ if __name__ == "__main__":
                                               start_time=datetime_object, price=open_price,
                                               steps=spx['steps'], range=spx['range'])
 
+
         logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
-
-        # Update the cumulative heatmap
-        #heatmap_manager.update_heatmap(df_heatmap, datetime_object)
-
-        # Get the current cumulative heatmap for plotting
-        #current_cumulative_heatmap = heatmap_manager.get_current_heatmap()
-
-
+        breakpoint()
         # Filter SPX data for charting
         # spx_data_chart = spx_data[(spx_data.index <= effective_datetime) &
         #                           (spx_data.index.date == datetime_object.date())]
@@ -368,7 +362,7 @@ if __name__ == "__main__":
 
 
         plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df, effective_datetime=effective_datetime, spx=None)
-
+        breakpoint()
         logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
 
