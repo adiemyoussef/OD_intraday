@@ -246,7 +246,7 @@ def get_initial_book(get_unrevised_book: Callable):
     try:
         current_time = datetime.now(ZoneInfo("America/New_York"))
         current_date = current_time.date()
-        limit2am = current_time.replace(hour=2, minute=0, second=0, microsecond=0).time()
+        limit2am = current_time.replace(hour=0, minute=15, second=0, microsecond=0).time()
         limit7pm = current_time.replace(hour=19, minute=0, second=0, microsecond=0).time()
 
         #TODO: Verify that the current_date is a business date
