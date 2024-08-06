@@ -285,15 +285,18 @@ if __name__ == "__main__":
 
     EXPIRATIONS_TO_KEEP = 100         # Allows to filter on expirations for positionning
     # trading_view_file = "SPREADEX_SPX_5_20240731.csv"
-    # spx_data_raw = pd.read_csv(trading_view_file)
-    # spx_data_raw.rename(columns={'time': 'effective_datetime'}, inplace = True)
+    spx_data_raw = pd.read_csv('spx_20240806.csv')
+    spx_data_raw.rename(columns={'time': 'effective_datetime'}, inplace = True)
+    spx_data_raw['effective_datetime'] = pd.to_datetime(spx_data_raw['effective_datetime'], unit='s')
+    spx_data_raw['effective_datetime'] = spx_data_raw['effective_datetime'].dt.tz_localize('UTC').dt.tz_convert(
+        'US/Eastern')
 
     #----------------------------------#
     # -----------DATA READING----------#
     query = """
-    SELECT * FROM intraday.intraday_books_test
-    WHERE effective_date ='2024-07-26'
-    and effective_datetime >= '2024-07-26 09:00:00'
+    SELECT * FROM intraday.intraday_books
+    WHERE effective_date ='2024-08-06'
+    and effective_datetime >= '2024-08-06 09:00:00'
     """
 
     df_books = db.execute_query(query)
@@ -303,25 +306,25 @@ if __name__ == "__main__":
 
 
     #df_books = pd.read_pickle('20240725_books.pkl')
-    #spx_data_raw_db = pd.read_csv('spx_20240725.csv')
+    # spx_data_raw_db = pd.read_csv('spx_20240725.csv')
 
     #------- TRADINGVIEW DATA-------- #
 
-    # all_datetimes = spx_data_raw['effective_datetime'].unique()
-    #
-    #
-    # filtered_datetimes = filter_datetimes_specific_date(all_datetimes)
-    # spx_data_raw_filtered = spx_data_raw[spx_data_raw['effective_datetime'].isin(filtered_datetimes)]
+    all_datetimes = spx_data_raw['effective_datetime'].unique()
 
 
-    # spx_data = resample_and_convert_timezone(spx_data_raw)
-    # spx_data.set_index('effective_datetime', inplace=True)
-    #spx_data_chart = spx_data[spx_data.index.time >= pd.Timestamp('07:00').time()]
-    # target_date = pd.Timestamp('2024-07-31').date()
-    # start_time = pd.Timestamp('12:00').time()
+    filtered_datetimes = filter_datetimes_specific_date(all_datetimes)
+    spx_data_raw_filtered = spx_data_raw[spx_data_raw['effective_datetime'].isin(filtered_datetimes)]
 
 
-    open_price = 5450
+    spx_data = resample_and_convert_timezone(spx_data_raw)
+    spx_data.set_index('effective_datetime', inplace=True)
+    spx_data_chart = spx_data[spx_data.index.time >= pd.Timestamp('07:00').time()]
+    target_date = pd.Timestamp('2024-08-06').date()
+    start_time = pd.Timestamp('9:00').time()
+
+
+    open_price = 5250
 
     unique_effective_datetimes = df_books['effective_datetime'].unique()
     cumulative_df = pd.DataFrame()
@@ -329,11 +332,11 @@ if __name__ == "__main__":
         logger.info(f"Processing effective_datetime: {effective_datetime}")
 
         effective_datetime = pd.to_datetime(effective_datetime)
-        # spx_data_chart = spx_data[
-        #     (spx_data.index.date == target_date) &
-        #     (spx_data.index.time >= start_time) &
-        #     (spx_data.index <= effective_datetime)
-        #     ]
+        spx_data_chart = spx_data[
+            (spx_data.index.date == target_date) &
+            (spx_data.index.time >= start_time) &
+            (spx_data.index <= effective_datetime)
+            ]
 
 
         datetime_object = pd.to_datetime(effective_datetime)
@@ -367,7 +370,7 @@ if __name__ == "__main__":
         #plot_heatmap(df_to_plot,effective_datetime, spx=spx_data_chart, show_fig=False)
 
 
-        plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df, effective_datetime=effective_datetime, spx=None)
+        plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df, effective_datetime=effective_datetime, spx=spx_data_chart)
 
         logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
