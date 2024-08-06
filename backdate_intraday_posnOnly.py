@@ -631,8 +631,6 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
                     # Identify columns that contain '_posn' in their names
                     posn_columns = [col for col in final_book_clean.columns if '_posn' in col]
 
-
-
                     # Convert these columns to integer type
                     final_book_clean_insert = final_book_clean.copy()
                     # Convert these columns to integer type
