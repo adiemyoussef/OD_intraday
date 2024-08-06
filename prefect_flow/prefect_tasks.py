@@ -829,7 +829,7 @@ def Intraday_Flow():
                     total_nan_filled = sum(final_book_clean_insert[col].isna().sum() for col in posn_columns)
                     logger.info(f"\nTotal number of NaN values filled across all '_posn' columns: {total_nan_filled}")
 
-                    breakpoint()
+
                     db_utils.insert_progress('intraday', 'intraday_books',final_book_clean_insert)
                     pg_data.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
 
