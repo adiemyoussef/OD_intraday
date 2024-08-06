@@ -41,10 +41,21 @@ logger = get_logger(debug_mode=False)
 polygon_client = RESTClient("sOqWsfC0sRZpjEpi7ppjWsCamGkvjpHw")
 
 db_utils = DatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, logger=logger)
-logger.debug(f"Initializing db status: {db_utils.get_status()}")
+logger.info(f"Initializing db status: {db_utils.get_status()}")
+
+pg_data = PostGreData(
+    host=POSGRE_DB_HOST,
+    port=POSGRE_DB_PORT,  # Default PostgreSQL port
+    user=POSGRE_DB_USER,
+    password=POSGRE_DB_PASSWORD,
+    database=POSGRE_DB_NAME
+)
+logger.info(f'Postgre Status -- > {pg_data.get_status()}')
+
+
 
 rabbitmq_utils = RabbitMQUtilities(RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS, logger=logger)
-logger.debug(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
+logger.info(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
 
 sftp_utils = SFTPUtility(SFTP_HOST,SFTP_PORT,SFTP_USERNAME,SFTP_PASSWORD, logger = logger)
 #-------------------------------------------#
@@ -247,7 +258,7 @@ def get_initial_book(get_unrevised_book: Callable):
         current_time = datetime.now(ZoneInfo("America/New_York"))
         current_date = current_time.date()
         limit2am = current_time.replace(hour=0, minute=15, second=0, microsecond=0).time()
-        limit7pm = current_time.replace(hour=19, minute=0, second=0, microsecond=0).time()
+        limit7pm = current_time.replace(hour=23, minute=0, second=0, microsecond=0).time()
 
         #TODO: Verify that the current_date is a business date
 
@@ -530,6 +541,8 @@ async def build_latest_book(initial_book, intraday_data):
 
         merged['effective_date'] = effective_date
         merged['effective_datetime'] = effective_datetime
+
+        #TODO: Not TRUE for Unrevised
         as_of_date = initial_book['as_of_date'].max()
         merged['as_of_date'] = as_of_date
 
@@ -739,7 +752,7 @@ def Intraday_Flow():
 
     flow_start_time = time.time()
 
-    expected_file_override = '/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-02_14_00_1.csv.zip'
+    expected_file_override = '/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-05_18_00_1.csv.zip'
 
     db_utils.connect()
 
@@ -799,7 +812,25 @@ def Intraday_Flow():
                     filtered_final_book = filter_and_log_nan_values(final_book)
                     logger.debug(f"Len of filtered_final_book: {len(final_book)}")
 
-                    db_utils.insert_progress('intraday', 'intraday_books',filtered_final_book)
+                    # Identify columns that contain '_posn' in their names
+                    posn_columns = [col for col in filtered_final_book.columns if '_posn' in col]
+
+                    # Convert these columns to integer type
+                    final_book_clean_insert = filtered_final_book.copy()
+                    # Convert these columns to integer type
+                    final_book_clean_insert[posn_columns] = final_book_clean_insert[posn_columns].apply(lambda x: x.astype(int))
+
+
+                    # Check if all values are indeed integers
+                    all_integers = all(final_book_clean_insert[col].dtype == 'int64' for col in posn_columns)
+                    logger.debug(f"\nAll '_posn' columns converted to integers: {all_integers}")
+
+                    # Print total number of NaN values filled
+                    total_nan_filled = sum(final_book_clean_insert[col].isna().sum() for col in posn_columns)
+                    logger.info(f"\nTotal number of NaN values filled across all '_posn' columns: {total_nan_filled}")
+
+                    db_utils.insert_progress('intraday', 'intraday_books',final_book_clean_insert)
+                    pg_data.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
 
                     # # Get the current price (you'll need to implement this function)
                     # current_price = get_current_price()
