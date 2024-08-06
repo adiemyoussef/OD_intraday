@@ -752,7 +752,7 @@ def Intraday_Flow():
 
     flow_start_time = time.time()
 
-    expected_file_override = '/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-05_18_00_1.csv.zip'
+    expected_file_override = None '/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-05_18_00_1.csv.zip'
 
     db_utils.connect()
 
@@ -829,6 +829,7 @@ def Intraday_Flow():
                     total_nan_filled = sum(final_book_clean_insert[col].isna().sum() for col in posn_columns)
                     logger.info(f"\nTotal number of NaN values filled across all '_posn' columns: {total_nan_filled}")
 
+                    breakpoint()
                     db_utils.insert_progress('intraday', 'intraday_books',final_book_clean_insert)
                     pg_data.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
 
