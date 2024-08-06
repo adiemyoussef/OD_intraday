@@ -133,7 +133,7 @@ async def get_initial_book(session_date: str):
     initial_book = await db.get_initial_book('SPX', session_date)
     return initial_book
 
-async def update_book_with_latest_greeks(book: pd.DataFrame, lookback_hours=24) -> pd.DataFrame:
+async def update_book_with_latest_greeks_og(book: pd.DataFrame, lookback_hours=24) -> pd.DataFrame:
 
     """
     #TODO:
@@ -223,6 +223,93 @@ async def update_book_with_latest_greeks(book: pd.DataFrame, lookback_hours=24) 
     logger.info(f"{elapsed_time:.2f} seconds to finalize the book")
     return book
 
+
+async def update_book_with_latest_greeks(book: pd.DataFrame, lookback_hours=24) -> pd.DataFrame:
+    """
+    Update the book with the latest Greek values from poly_options_data.
+
+    TODO:
+    In the case of backdate, optimize this to avoid losing 50 sec on the query every time.
+    Run it asynchronously?
+    Live: Load the query with the expected datetime and reload it only if the expected doesn't arrive on time and I need to process the newest.
+
+    :param book: DataFrame containing the current book of contracts
+    :param lookback_hours: Number of hours to look back for Greek data (default: 24)
+    :return: Updated DataFrame with the latest Greek values
+    """
+    latest_datetime = book["effective_datetime"].max()
+    effective_datetime = pd.Timestamp(latest_datetime)
+
+    logging.info('Entered update_book_with_latest_greeks')
+
+    previous_business_day = get_previous_business_day(effective_datetime, nyse)
+
+    current_date = effective_datetime.date()
+    current_datetime = effective_datetime.strftime('%Y-%m-%d %H:%M:%S')
+
+    previous_date = previous_business_day.date()
+    previous_datetime = pd.Timestamp.combine(previous_date, effective_datetime.time()).strftime('%Y-%m-%d %H:%M:%S')
+
+    start_time = time.time()  # Start the timer
+
+    query = f"""
+    SELECT option_symbol, contract_type, strike_price, expiration_date, time_stamp,
+           implied_volatility, delta, gamma, vega
+    FROM landing.poly_options_data
+    WHERE
+        date_only >= '{previous_date}'
+        AND date_only <= '{current_date}'
+        AND time_stamp BETWEEN '{previous_datetime}' AND '{current_datetime}'
+    ORDER BY date_only DESC, time_stamp DESC
+    """
+
+    logger.info(f'Starting to fetch Greeks from poly from {previous_datetime} to {current_datetime}')
+
+    try:
+        poly_data_list = await db.execute_query(query)
+        logger.info(f'Fetched {len(poly_data_list)} rows from poly_options_data')
+
+        if not poly_data_list:
+            logger.warning("No data fetched from poly_options_data. Returning original book without modifications.")
+            return book
+
+        poly_data = pd.DataFrame(poly_data_list)
+
+        elapsed_time = time.time() - start_time
+        logger.info(f"{elapsed_time:.2f} seconds to get the Greeks")
+
+        # Rest of the function remains the same
+        poly_data.rename(columns={'implied_volatility': 'iv'}, inplace=True)
+        poly_data['contract_id'] = poly_data['option_symbol'] + '_' + \
+                                   poly_data['contract_type'] + '_' + \
+                                   poly_data['strike_price'].astype(str) + '_' + \
+                                   poly_data['expiration_date']
+
+        book['strike_price'] = book['strike_price'].astype(int)
+        book['contract_id'] = book['option_symbol'] + '_' + \
+                              book['call_put_flag'] + '_' + \
+                              book['strike_price'].astype(str) + '_' + \
+                              pd.to_datetime(book['expiration_date_original']).dt.strftime('%Y-%m-%d')
+
+        tasks = [delayed(process_greek)(greek_name, poly_data, book.copy()) for greek_name in
+                 ['iv', 'delta', 'gamma', 'vega']]
+        results = compute(*tasks)
+
+        final_book = results[0]
+        for result in results[1:]:
+            final_book.update(result)
+
+        book.drop(columns=['contract_id'], axis=1, inplace=True)
+        book['time_stamp'] = get_eastern_time()
+
+        elapsed_time = time.time() - start_time
+        logger.info(f"{elapsed_time:.2f} seconds to finalize the book")
+        return book
+
+    except Exception as e:
+        logger.error(f"Error fetching or processing data from poly_options_data: {str(e)}")
+        logger.warning("Returning original book without modifications due to error.")
+        return book
 async def verify_and_process_message(sftp_utility: SFTPUtility, file_path: str):
     """Verify and process the file."""
     try:
@@ -483,8 +570,14 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
 
     session_files = await get_session_files(sftp_utility, sftp_folder, session_date)
     logger.debug(f"session_files: {session_files}")
-    # breakpoint()
-    for file_name in session_files[64:] :
+
+    if session_date == '2024-08-05':
+        start = 42
+    else:
+        start = 64
+
+
+    for file_name in session_files[start:] :
         file_path = f"{sftp_folder}/{file_name}"
         logger.info(f"Processing file: {file_name}")
 
