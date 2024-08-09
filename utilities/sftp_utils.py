@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 import time
 
+
 class SFTPUtility:
     def __init__(self, sftp_host: str, sftp_port: int, sftp_username: str, sftp_password: str, logger: Optional[logging.Logger] = None):
         self.sftp_host = sftp_host
@@ -15,7 +16,7 @@ class SFTPUtility:
         self.ssh_client = None
         self.sftp_client = None
 
-    def connect(self) -> None:
+    def connect(self, time_out=60) -> None:
         """Establish a connection to the SFTP server."""
         try:
             self.ssh_client = paramiko.SSHClient()
@@ -24,7 +25,8 @@ class SFTPUtility:
                 self.sftp_host,
                 port=self.sftp_port,
                 username=self.sftp_username,
-                password=self.sftp_password
+                password=self.sftp_password,
+                timeout=time_out
             )
             self.sftp_client = self.ssh_client.open_sftp()
             self.logger.info("SFTP connection established successfully.")
@@ -32,6 +34,18 @@ class SFTPUtility:
             self.logger.error(f"Failed to establish SFTP connection: {str(e)}")
             raise
 
+    def is_connected(self):
+        if self.ssh_client is None or self.sftp_client is None:
+            return False
+        try:
+            self.sftp_client.listdir('.')
+            return True
+        except:
+            return False
+
+    def ensure_connection(self):
+        if not self.is_connected():
+            self.connect()
     def disconnect(self) -> None:
         """Close the SFTP connection."""
         if self.sftp_client:

@@ -65,7 +65,7 @@ SFTP_PORT = sftp_config['port']
 SFTP_USERNAME = sftp_config['username']
 SFTP_PASSWORD = sftp_config['password']
 SFTP_DIRECTORY = sftp_config['directory']
-
+SFTP_TIME_OUT = 600
 # SFTP Monitoring
 SFTP_BASE_SLEEP_TIME = other_config.get('sftp_base_sleep_time', 10)
 SFTP_REDUCED_SLEEP_TIME = other_config.get('sftp_reduced_sleep_time', 5)
