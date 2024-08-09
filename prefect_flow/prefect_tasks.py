@@ -345,6 +345,7 @@ def get_unrevised_book():
 
 @task(retries=2)
 def get_file_from_sftp(msg_body, override_path = None):
+    prefect_logger = get_run_logger()
     logger.debug("get_file_from_sftp")
     file_path = msg_body["path"]
     if override_path:
@@ -355,10 +356,17 @@ def get_file_from_sftp(msg_body, override_path = None):
         file_path = msg_body["path"]
         logger.info(f'[NO OVERRIDE]: Getting {file_path}')
     try:
-        sftp_utils.connect()
 
+        #sftp_utils.ensure_connection()  # Ensure connection before SFTP operation
+
+        start = time.time()
+        sftp_utils.connect()
+        prefect_logger.info(f'It took {time.time() - start} sec. to connect')
+
+        read_time = time.time()
         file_info = sftp_utils.get_file_info(file_path)
         file_data = sftp_utils.read_file(file_path)
+        prefect_logger.info(f'It took {time.time() - read_time} sec. to read to file')
         logger.debug(f'[verify_and_process_message]: {file_info} {file_data}')
 
 
@@ -755,7 +763,7 @@ def Intraday_Flow():
     expected_file_override = None # '/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-05_18_00_1.csv.zip'
 
     db_utils.connect()
-
+    # sftp_utils.connect()
     try:
 
         initial_book = get_initial_book(get_unrevised_book)
@@ -795,6 +803,7 @@ def Intraday_Flow():
         logger.debug(f"Process_last_message returned: {msg_body}")
 
         try:
+            #sftp_utils.ensure_connection()  # Ensure connection before SFTP operation
             file_info, file_data, file_last_modified = get_file_from_sftp(msg_body, expected_file_override)
             if file_info:
                 logger.debug(f"FILE INFO ---> {file_info}")
@@ -870,6 +879,8 @@ def Intraday_Flow():
 
     except Exception as e:
         logger.error(f"Error in process_intraday_data flow: {e}")
+    finally:
+        sftp_utils.disconnect()  # Disconnect at the end of the flow
 
 
 if __name__ == "__main__":
