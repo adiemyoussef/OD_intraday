@@ -285,7 +285,7 @@ if __name__ == "__main__":
 
     EXPIRATIONS_TO_KEEP = 100         # Allows to filter on expirations for positionning
     # trading_view_file = "SPREADEX_SPX_5_20240731.csv"
-    spx_data_raw = pd.read_csv('spx_20240806.csv')
+    spx_data_raw = pd.read_csv('SPREADEX_SPX, 5_83eaa.csv')
     spx_data_raw.rename(columns={'time': 'effective_datetime'}, inplace = True)
     spx_data_raw['effective_datetime'] = pd.to_datetime(spx_data_raw['effective_datetime'], unit='s')
     spx_data_raw['effective_datetime'] = spx_data_raw['effective_datetime'].dt.tz_localize('UTC').dt.tz_convert(
@@ -295,8 +295,8 @@ if __name__ == "__main__":
     # -----------DATA READING----------#
     query = """
     SELECT * FROM intraday.intraday_books
-    WHERE effective_date ='2024-08-06'
-    and effective_datetime >= '2024-08-06 09:00:00'
+    WHERE effective_date ='2024-08-05'
+    and effective_datetime >= '2024-08-05 09:00:00'
     """
 
     df_books = db.execute_query(query)
@@ -320,11 +320,11 @@ if __name__ == "__main__":
     spx_data = resample_and_convert_timezone(spx_data_raw)
     spx_data.set_index('effective_datetime', inplace=True)
     spx_data_chart = spx_data[spx_data.index.time >= pd.Timestamp('07:00').time()]
-    target_date = pd.Timestamp('2024-08-06').date()
+    target_date = pd.Timestamp('2024-08-05').date()
     start_time = pd.Timestamp('9:00').time()
 
 
-    open_price = 5250
+    open_price = 5265
 
     unique_effective_datetimes = df_books['effective_datetime'].unique()
     cumulative_df = pd.DataFrame()

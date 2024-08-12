@@ -278,7 +278,7 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
 
 
     fig.write_image(
-        os.path.join(rf"C:\Users\ilias\PycharmProjects\OD_intraday\heatmaps_simulation\20240806_heatmaps",f"heatmap_{stamp}.png"),  # Saving as PNG for high resolution
+        os.path.join(rf"C:\Users\ilias\PycharmProjects\OD_intraday\heatmaps_simulation\20240805_heatmaps",f"heatmap_{stamp}.png"),  # Saving as PNG for high resolution
         width=image_width,
         height=image_height,
         scale=scale_factor
