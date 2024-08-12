@@ -64,3 +64,12 @@ deployments:
       repository: https://github.com/adiemyoussef/OD_intraday.git
       branch: dev_test
       access_token: '{{ prefect.blocks.github-credentials.my-github-credentials }}'
+  - prefect.deployments.steps.run_shell_script:
+      script: |
+        echo "Cleaning up .prefect/storage directory"
+        find ~/.prefect/storage -type f -mtime +7 -delete
+        find ~/.prefect/storage -type d -empty -delete
+        echo "Cleanup complete"
+        echo "Current .prefect directory size:"
+        du -sh ~/.prefect
+      stream_output: true

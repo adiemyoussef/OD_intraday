@@ -14,6 +14,11 @@ from enum import Enum
 from tqdm import tqdm
 from psycopg2 import sql,errors
 
+class DatabaseStatus(Enum):
+    DISCONNECTED = "Disconnected"
+    CONNECTED = "Connected"
+    ERROR = "Error"
+
 class AsyncDatabaseUtilities:
     """
     A utility class for asynchronous database operations.
@@ -217,14 +222,6 @@ class AsyncDatabaseUtilities:
         """
         return (df[pos:pos + size] for pos in range(0, len(df), size))
 
-
-
-
-class DatabaseStatus(Enum):
-    DISCONNECTED = "Disconnected"
-    CONNECTED = "Connected"
-    ERROR = "Error"
-
 class DatabaseUtilities:
     """
     A utility class for synchronous database operations with status tracking.
@@ -403,7 +400,6 @@ class DatabaseUtilities:
         except Exception as e:
             self.logger.error(f"Failed to check/reconnect to database: {e}")
             return False
-
 
 class PostGreData:
     """
