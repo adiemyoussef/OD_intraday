@@ -813,6 +813,13 @@ def Intraday_Flow():
                     logger.debug(f"DataFrame shape: {df.shape}")
                     latest_book = build_latest_book(initial_book, df)
 
+                    #------- Posn Only --------#
+                    posn_only= latest_book.iloc[:,:-4]
+                    posn_only.loc[:,'time_stamp'] = get_eastern_time()
+                    # Log the number of rows
+                    db_utils.insert_progress('intraday', 'intraday_books_test_posn',posn_only)
+
+
 
                     final_book = update_book_with_latest_greeks(latest_book, poly_data)
 
