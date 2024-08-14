@@ -47,7 +47,7 @@ def process_data(df: pd.DataFrame, session_date: str, position_type: str, partic
     return success
 
 
-@flow(name="Intraday_Flow")
+@flow(name="Gifs")
 def intraday_flow(
         session_date: Optional[str] = None,
         strike_ranges: Optional[List[int]] = None,

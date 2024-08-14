@@ -731,6 +731,38 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
 
     return merged_book
 
+def compare_dataframes(posn_only, final_book_clean_insert):
+
+    prefect_logger = get_run_logger()
+    prefect_logger.info(f"Row counts: posn_only: {len(posn_only)}, final_book_clean_insert: {len(final_book_clean_insert)}")
+
+    posn_columns = [col for col in posn_only.columns if '_posn' in col]
+
+    prefect_logger.info("\nData types comparison:")
+    for col in posn_columns:
+        prefect_logger.info(f"{col}: posn_only: {posn_only[col].dtype}, final_book_clean_insert: {final_book_clean_insert[col].dtype}")
+
+    prefect_logger.info("\nNaN value counts:")
+    for col in posn_columns:
+        prefect_logger.info(f"{col}: posn_only: {posn_only[col].isna().sum()}, final_book_clean_insert: {final_book_clean_insert[col].isna().sum()}")
+
+    prefect_logger.info("\nValue differences:")
+    for col in posn_columns:
+        diff = (posn_only[col] != final_book_clean_insert[col]).sum()
+        prefect_logger.info(f"{col}: {diff} differences")
+
+    prefect_logger.info("\nSample of differences:")
+    for col in posn_columns:
+        mask = (posn_only[col] != final_book_clean_insert[col])
+        if mask.any():
+            diff_df = pd.DataFrame({
+                'posn_only': posn_only.loc[mask, col],
+                'final_book_clean_insert': final_book_clean_insert.loc[mask, col]
+            })
+            prefect_logger.info(f"\n{col}:")
+            prefect_logger.info(diff_df.head())
+
+
 #----------------- FLOWS ------------------#
 @flow(
     name="Intraday Flow",
@@ -845,6 +877,7 @@ def Intraday_Flow():
                     total_nan_filled = sum(final_book_clean_insert[col].isna().sum() for col in posn_columns)
                     logger.info(f"\nTotal number of NaN values filled across all '_posn' columns: {total_nan_filled}")
 
+                    compare_dataframes(posn_only, final_book_clean_insert)
 
                     db_utils.insert_progress('intraday', 'intraday_books',final_book_clean_insert)
                     pg_data.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
