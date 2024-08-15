@@ -421,7 +421,7 @@ def generate_and_send_gif(data, session_date, position_type ,participant, strike
     )
     fields = [
         {"name": "📅 Date", "value": session_date, "inline": True},
-        {"name": "👥 Participant", "value": participant.upper(), "inline": True},
+        {"name": "👥 Participant", "value": participant, "inline": True},
         {"name": "🎯 Strike Range", "value": f"{strike_input[0]} - {strike_input[1]}", "inline": True},
         {"name": "📈 Analysis Type", "value": "Intraday Movement", "inline": True},
         {"name": "🕒 Time Range", "value": "Market Hours", "inline": True},
@@ -452,10 +452,10 @@ def generate_and_send_gif(data, session_date, position_type ,participant, strike
 if __name__ == "__main__":
     WEBHOOK_URL = 'https://discord.com/api/webhooks/1251013946111164436/VN55yOK-ntil-PnZn1gzWHzKwzDklwIh6fVspA_I8MCCaUnG-hsRsrP1t_WsreGHIity'
 
-    session_date = '2024-08-02'
-    strike_ranges = [5300,5550]  # Example strike ranges
-    expiration = '2024-08-02'
-    participant = 'nonprocust'
+    session_date = '2024-08-14'
+    strike_ranges = [5300,5600]  # Example strike ranges
+    expiration = '2024-08-15'
+    participant = 'total_customers'
     position_type = 'P'
     query =f"""
     SELECT * FROM intraday.intraday_books_test_posn

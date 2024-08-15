@@ -1,0 +1,50 @@
+# Welcome to your prefect.yaml file! You can use this file for storing and managing
+# configuration for deploying your flows. We recommend committing this file to source
+# control along with your flow code.
+
+# Generic metadata about this project
+name: OptionsDepth_intraday_gifs
+prefect-version: 2.19.8
+
+# build section allows you to manage and build docker images
+build:
+
+# push section allows you to manage if and how this project is uploaded to remote locations
+push:
+
+# the deployments section allows you to provide configuration for deploying flows
+deployments:
+- name: intraday_gifs_deploy
+  entrypoint: charting/intraday_beta.py:gif_flow
+  parameters: {}
+  work_pool:
+    name: intraday-paperspace-agent
+  schedules:
+  - cron: 0 9 * * 1-5
+    timezone: America/New_York
+  - cron: 0 12 * * 1-5
+    timezone: America/New_York
+  - cron: 30 15 * * 1-5
+    timezone: America/New_York
+  - cron: 30 18 * * 1-5
+    timezone: America/New_York
+  storage:
+    type: github
+    repository: https://github.com/adiemyoussef/OD_intraday.git
+    reference: dev_test
+    access_token:
+      $ref: github-credentials
+  pull:
+  - prefect.deployments.steps.git_clone:
+      repository: https://github.com/adiemyoussef/OD_intraday.git
+      branch: dev_test
+      access_token: '{{ prefect.blocks.github-credentials.my-github-credentials }}'
+  - prefect.deployments.steps.run_shell_script:
+      script: |
+        echo "Cleaning up .prefect/storage directory"
+        find ~/.prefect/storage -type f -mtime +7 -delete
+        find ~/.prefect/storage -type d -empty -delete
+        echo "Cleanup complete"
+        echo "Current .prefect directory size:"
+        du -sh ~/.prefect
+      stream_output: true

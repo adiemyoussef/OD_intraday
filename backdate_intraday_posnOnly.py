@@ -54,7 +54,6 @@ pg_data.connect()
 logger.info(f'Connected ? -- > {pg_data.check_connection()}')
 status = pg_data.get_status()
 
-
 def process_greek_og(greek_name, poly_data, book):
     latest_greek = poly_data.sort_values('time_stamp', ascending=False).groupby('contract_id').first().reset_index()
     latest_greek = latest_greek[['contract_id', greek_name, 'time_stamp']]
@@ -576,7 +575,7 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
     else:
         start = 64
 
-
+    breakpoint()
     for file_name in session_files[start:] :
         file_path = f"{sftp_folder}/{file_name}"
         logger.info(f"Processing file: {file_name}")
@@ -601,8 +600,8 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
                     df_end = latest_book.iloc[:, :-4]
 
 
-                    final_book = await update_book_with_latest_greeks(latest_book)
-
+                    #final_book = await update_book_with_latest_greeks(latest_book)
+                    final_book = latest_book.copy()
 
                     # Check for NaN values
                     nan_counts = final_book.isna().sum()
@@ -645,10 +644,16 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
                     total_nan_filled = sum(final_book_clean_insert[col].isna().sum() for col in posn_columns)
                     logger.info(f"\nTotal number of NaN values filled across all '_posn' columns: {total_nan_filled}")
 
+                    #breakpoint()
 
-                    pg_data.insert_progress('intraday', 'intraday_books_test', final_book_clean_insert)
-                    # breakpoint()
-                    await db.insert_progress('intraday', 'intraday_books_test', final_book_clean_insert)
+                    # POSN ONLY:
+                    final_book_posn_only = final_book_clean_insert.iloc[:,:-4].copy()
+                    await db.insert_progress('intraday', 'intraday_books_test_posn', final_book_posn_only)
+
+
+                    # pg_data.insert_progress('intraday', 'intraday_books_test', final_book_clean_insert)
+                    # # breakpoint()
+                    # await db.insert_progress('intraday', 'intraday_books_test', final_book_clean_insert)
                     # query = f"""
                     # SELECT * FROM public.intraday_books_test;
                     # """
@@ -688,8 +693,9 @@ async def main():
             distinct_sessions = await get_distinct_sessions(sftp, sftp_folder)
             logger.debug(f"Distinct sessions: {distinct_sessions}")
             # breakpoint()
-            for session_date in distinct_sessions[:-1]:
+            for session_date in distinct_sessions[1:-1]:
                 #session_date = '2024-07-26'
+                #breakpoint()
                 logger.info(f"Processing: {session_date}")
                 await process_session(sftp, session_date, sftp_folder)
         except Exception as e:

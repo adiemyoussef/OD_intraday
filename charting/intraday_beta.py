@@ -48,13 +48,14 @@ def process_data(df: pd.DataFrame, session_date: str, position_type: str, partic
 
 
 @flow(name="Gifs")
-def intraday_flow(
+def gif_flow(
         session_date: Optional[str] = None,
         strike_ranges: Optional[List[int]] = None,
         expiration: Optional[str] = None,
-        participant: str = 'nonprocust',
+        participant: str = 'total_customers',
         position_type: str = 'P',
-        webhook_url: str = 'https://discord.com/api/webhooks/1251013946111164436/VN55yOK-ntil-PnZn1gzWHzKwzDklwIh6fVspA_I8MCCaUnG-hsRsrP1t_WsreGHIty'
+        webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
+
 ):
     # Set default values if not provided
     if session_date is None:
@@ -75,4 +76,4 @@ def intraday_flow(
 
 
 if __name__ == "__main__":
-    intraday_flow()
+    gif_flow()
