@@ -64,44 +64,48 @@ deployments:
       repository: https://github.com/adiemyoussef/OD_intraday.git
       branch: dev_test
       access_token: '{{ prefect.blocks.github-credentials.my-github-credentials }}'
-  - prefect.deployments.steps.run_shell_script:
-      script: "echo \"Cleaning up .prefect/storage directory\"\nfind ~/.prefect/storage
-        -type f -mtime +7 -delete\nfind ~/.prefect/storage -type d -empty -delete\n
-        echo \"Cleanup complete\"\necho \"Current .prefect directory size:\"\ndu -sh
-        ~/.prefect\n"
-      stream_output: true
-#------------#
+#  - prefect.deployments.steps.run_shell_script:
+#      script: "echo \"Cleaning up .prefect/storage directory\"\nfind ~/.prefect/storage
+#        -type f -mtime +7 -delete\nfind ~/.prefect/storage -type d -empty -delete\n
+#        echo \"Cleanup complete\"\necho \"Current .prefect directory size:\"\ndu -sh
+#        ~/.prefect\n"
+#      stream_output: true
+
 - name: intraday_gifs_deploy
   entrypoint: charting/intraday_beta.py:gif_flow
   parameters: {}
   work_pool:
     name: intraday-paperspace-agent
+    work_queue_name:
+    job_variables: {}
   schedules:
   - cron: 0 9 * * 1-5
     timezone: America/New_York
+    day_or: true
+    active: true
   - cron: 0 12 * * 1-5
     timezone: America/New_York
+    day_or: true
+    active: true
   - cron: 30 15 * * 1-5
     timezone: America/New_York
+    day_or: true
+    active: true
   - cron: 30 18 * * 1-5
     timezone: America/New_York
+    day_or: true
+    active: true
   storage:
     type: github
     repository: https://github.com/adiemyoussef/OD_intraday.git
     reference: dev_test
     access_token:
-      $ref: github-credentials
+      token:
   pull:
   - prefect.deployments.steps.git_clone:
       repository: https://github.com/adiemyoussef/OD_intraday.git
       branch: dev_test
       access_token: '{{ prefect.blocks.github-credentials.my-github-credentials }}'
-  - prefect.deployments.steps.run_shell_script:
-      script: |
-        echo "Cleaning up .prefect/storage directory"
-        find ~/.prefect/storage -type f -mtime +7 -delete
-        find ~/.prefect/storage -type d -empty -delete
-        echo "Cleanup complete"
-        echo "Current .prefect directory size:"
-        du -sh ~/.prefect
-      stream_output: true
+  version:
+  tags: []
+  description:

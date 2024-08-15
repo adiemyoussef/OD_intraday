@@ -418,7 +418,7 @@ def generate_and_send_gif(data, session_date, participant, position_type , strik
 
     # Usage example:
     participant_text = participant_mapping.get(participant, 'Unknown Participant')
-    breakpoint()
+
     title = f"📊{session_date} Intraday Recap."
     description = (
         f"Detailed analysis of {participant_text} positions for the {session_date} session.\n"
