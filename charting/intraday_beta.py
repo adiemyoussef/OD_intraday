@@ -57,61 +57,61 @@ def process_data(df: pd.DataFrame, session_date: str, position_type: str, partic
     return success
 
 
-@flow(name="Gifs")
-def gif_flow(params: FlowParameters):
-    session_date = params.session_date.strftime('%Y-%m-%d')
-    strike_ranges = [params.strike_range_start, params.strike_range_end]
-    expiration = params.expiration.strftime('%Y-%m-%d') if params.expiration else session_date
-
-    df = fetch_data(session_date)
-
-    for participant in params.participants:
-        success = process_data(df, session_date, params.position_type, participant,
-                               strike_ranges, expiration, params.webhook_url)
-        if success:
-            print(f"Successfully processed intraday data for {participant} on {session_date}")
-        else:
-            print(f"Failed to process intraday data for {participant} on {session_date}")
-
-
-if __name__ == "__main__":
-    params = FlowParameters(
-        strike_range_start=5350,
-        strike_range_end=5600,
-        session_date=datetime.now(),
-        participants=['total_customers'],
-        position_type='P',
-        expiration=None
-    )
-    gif_flow(params)
-
 # @flow(name="Gifs")
-# def gif_flow(
-#         session_date: Optional[str] = None,
-#         strike_ranges: Optional[List[int]] = None,
-#         expiration: Optional[str] = None,
-#         participant: str = 'total_customers',
-#         position_type: str = 'P',
-#         webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
-#
-# ):
-#     # Set default values if not provided
-#     if session_date is None:
-#         session_date = datetime.now().strftime('%Y-%m-%d')
-#     if strike_ranges is None:
-#         strike_ranges = [5350, 5600]
-#     if expiration is None:
-#         expiration = session_date
+# def gif_flow(params: FlowParameters):
+#     session_date = params.session_date.strftime('%Y-%m-%d')
+#     strike_ranges = [params.strike_range_start, params.strike_range_end]
+#     expiration = params.expiration.strftime('%Y-%m-%d') if params.expiration else session_date
 #
 #     df = fetch_data(session_date)
-#     success = process_data(df, session_date, position_type, participant,
-#                            strike_ranges, expiration, webhook_url)
 #
-#     if success:
-#         print(f"Successfully processed intraday data for {session_date}")
-#     else:
-#         print(f"Failed to process intraday data for {session_date}")
+#     for participant in params.participants:
+#         success = process_data(df, session_date, params.position_type, participant,
+#                                strike_ranges, expiration, params.webhook_url)
+#         if success:
+#             print(f"Successfully processed intraday data for {participant} on {session_date}")
+#         else:
+#             print(f"Failed to process intraday data for {participant} on {session_date}")
 #
 #
 # if __name__ == "__main__":
-#     gif_flow()
+#     params = FlowParameters(
+#         strike_range_start=5350,
+#         strike_range_end=5600,
+#         session_date=datetime.now(),
+#         participants=['total_customers'],
+#         position_type='P',
+#         expiration=None
+#     )
+#     gif_flow(params)
+
+@flow(name="Gifs")
+def gif_flow(
+        session_date: Optional[str] = None,
+        strike_ranges: Optional[List[int]] = None,
+        expiration: Optional[str] = None,
+        participant: str = 'total_customers',
+        position_type: str = 'P',
+        webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
+
+):
+    # Set default values if not provided
+    if session_date is None:
+        session_date = datetime.now().strftime('%Y-%m-%d')
+    if strike_ranges is None:
+        strike_ranges = [5350, 5600]
+    if expiration is None:
+        expiration = session_date
+
+    df = fetch_data(session_date)
+    success = process_data(df, session_date, position_type, participant,
+                           strike_ranges, expiration, webhook_url)
+
+    if success:
+        print(f"Successfully processed intraday data for {session_date}")
+    else:
+        print(f"Failed to process intraday data for {session_date}")
+
+
+if __name__ == "__main__":
+    gif_flow()
