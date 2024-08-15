@@ -6,27 +6,37 @@ from typing import List, Optional
 from charting.generate_gifs import *
 from utilities.db_utils import *
 from config.config import *
-
+from pydantic import BaseModel
 
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME, logger)
 db.connect()
 print(f'{db.get_status()}')
 
+class FlowParameters(BaseModel):
+    strike_range_start: int
+    strike_range_end: int
+    session_date: datetime
+    participants: List[str]
+    position_type: str
+    expiration: Optional[datetime] = None
+    webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
+
+
 @task(cache_key_fn=task_input_hash, cache_expiration=timedelta(hours=1))
 def fetch_data(session_date: str) -> pd.DataFrame:
-    # query = f"""
-    # SELECT * FROM intraday.intraday_books_test_posn
-    # WHERE effective_date = '{session_date}'
-    # and effective_datetime
-    # """
-
-    query =f"""
+    query = f"""
     SELECT * FROM intraday.intraday_books_test_posn
-    WHERE effective_date = '2024-08-14'
-    and effective_datetime < '2024-08-14 10:10:00'
-    and strike_price between 5200 and 5400
-    and expiration_date_original = '2024-08-14'
+    WHERE effective_date = '{session_date}'
+    and effective_datetime
     """
+
+    # query =f"""
+    # SELECT * FROM intraday.intraday_books_test_posn
+    # WHERE effective_date = '2024-08-14'
+    # and effective_datetime < '2024-08-14 10:10:00'
+    # and strike_price between 5200 and 5400
+    # and expiration_date_original = '2024-08-14'
+    # """
 
     return db.execute_query(query)
 
@@ -48,32 +58,60 @@ def process_data(df: pd.DataFrame, session_date: str, position_type: str, partic
 
 
 @flow(name="Gifs")
-def gif_flow(
-        session_date: Optional[str] = None,
-        strike_ranges: Optional[List[int]] = None,
-        expiration: Optional[str] = None,
-        participant: str = 'total_customers',
-        position_type: str = 'P',
-        webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
-
-):
-    # Set default values if not provided
-    if session_date is None:
-        session_date = datetime.now().strftime('%Y-%m-%d')
-    if strike_ranges is None:
-        strike_ranges = [5300, 5400]
-    if expiration is None:
-        expiration = session_date
+def gif_flow(params: FlowParameters):
+    session_date = params.session_date.strftime('%Y-%m-%d')
+    strike_ranges = [params.strike_range_start, params.strike_range_end]
+    expiration = params.expiration.strftime('%Y-%m-%d') if params.expiration else session_date
 
     df = fetch_data(session_date)
-    success = process_data(df, session_date, position_type, participant,
-                           strike_ranges, expiration, webhook_url)
 
-    if success:
-        print(f"Successfully processed intraday data for {session_date}")
-    else:
-        print(f"Failed to process intraday data for {session_date}")
+    for participant in params.participants:
+        success = process_data(df, session_date, params.position_type, participant,
+                               strike_ranges, expiration, params.webhook_url)
+        if success:
+            print(f"Successfully processed intraday data for {participant} on {session_date}")
+        else:
+            print(f"Failed to process intraday data for {participant} on {session_date}")
 
 
 if __name__ == "__main__":
-    gif_flow()
+    params = FlowParameters(
+        strike_range_start=5350,
+        strike_range_end=5600,
+        session_date=datetime.now(),
+        participants=['total_customers'],
+        position_type='P',
+        expiration=None
+    )
+    gif_flow(params)
+
+# @flow(name="Gifs")
+# def gif_flow(
+#         session_date: Optional[str] = None,
+#         strike_ranges: Optional[List[int]] = None,
+#         expiration: Optional[str] = None,
+#         participant: str = 'total_customers',
+#         position_type: str = 'P',
+#         webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
+#
+# ):
+#     # Set default values if not provided
+#     if session_date is None:
+#         session_date = datetime.now().strftime('%Y-%m-%d')
+#     if strike_ranges is None:
+#         strike_ranges = [5350, 5600]
+#     if expiration is None:
+#         expiration = session_date
+#
+#     df = fetch_data(session_date)
+#     success = process_data(df, session_date, position_type, participant,
+#                            strike_ranges, expiration, webhook_url)
+#
+#     if success:
+#         print(f"Successfully processed intraday data for {session_date}")
+#     else:
+#         print(f"Failed to process intraday data for {session_date}")
+#
+#
+# if __name__ == "__main__":
+#     gif_flow()
