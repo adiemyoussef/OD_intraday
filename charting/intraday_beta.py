@@ -24,19 +24,18 @@ class FlowParameters(BaseModel):
 
 @task(cache_key_fn=task_input_hash, cache_expiration=timedelta(hours=1))
 def fetch_data(session_date: str) -> pd.DataFrame:
-    query = f"""
-    SELECT * FROM intraday.intraday_books_test_posn
-    WHERE effective_date = '{session_date}'
-    and effective_datetime
-    """
-
-    # query =f"""
+    # query = f"""
     # SELECT * FROM intraday.intraday_books_test_posn
-    # WHERE effective_date = '2024-08-14'
-    # and effective_datetime < '2024-08-14 10:10:00'
-    # and strike_price between 5200 and 5400
-    # and expiration_date_original = '2024-08-14'
+    # WHERE effective_date = '{session_date}'
     # """
+
+    query =f"""
+    SELECT * FROM intraday.intraday_books_test_posn
+    WHERE effective_date = '2024-08-16'
+    -- and effective_datetime < '2024-08-15 18:10:00'
+    and strike_price between 5300 and 5700
+    and expiration_date = '2024-08-16 16:00:00'
+    """
 
     return db.execute_query(query)
 
@@ -91,17 +90,21 @@ def gif_flow(
         strike_ranges: Optional[List[int]] = None,
         expiration: Optional[str] = None,
         participant: str = 'total_customers',
-        position_type: str = 'P',
+        position_type: str = 'Net',
         webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
+
+        # 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ' #'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
 
 ):
     # Set default values if not provided
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_ranges is None:
-        strike_ranges = [5350, 5600]
+        strike_ranges = [5300, 5700]
     if expiration is None:
         expiration = session_date
+
+
 
     df = fetch_data(session_date)
     success = process_data(df, session_date, position_type, participant,

@@ -15,7 +15,7 @@ import colorsys
 from config.config import *
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, time
 from utilities.db_utils import *
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,7 @@ def generate_frame_wrapper(args):
 def process_single_strike(group, participant):
     date = group['effective_date'].iloc[0]
     strike = group['strike_price'].iloc[0]
+
 
     results = {}
     for flag in ['C', 'P']:
@@ -132,10 +133,10 @@ def generate_frame(data, timestamp, participant, strike_input, expiration_input,
     if expiration_input != "all":
         if isinstance(expiration_input, (list, tuple)):
             daily_data = daily_data[daily_data['expiration_date_original'].isin(expiration_input)]
-            subtitle_expiration = f"For expirations: {', '.join(str(exp) for exp in expiration_input)}"
+            subtitle_expiration = f"For expirations: {', '.join(str(exp) for exp in expiration_input)} PM"
         elif isinstance(expiration_input, date):
             daily_data = daily_data[daily_data['expiration_date_original'] == expiration_input]
-            subtitle_expiration = f"For expiration: {expiration_input}"
+            subtitle_expiration = f"For expiration: {expiration_input} PM"
         else:
 
             # Ensure expiration_input is a string in 'YYYY-MM-DD' format
@@ -146,7 +147,7 @@ def generate_frame(data, timestamp, participant, strike_input, expiration_input,
 
 
             daily_data = daily_data[daily_data['expiration_date_original'] == expiration_input]
-            subtitle_expiration = f"For expiration: {expiration_input}"
+            subtitle_expiration = f"For expiration: {expiration_input} PM"
 
     else:
         subtitle_expiration = "All Expirations"
@@ -282,7 +283,7 @@ def generate_frame(data, timestamp, participant, strike_input, expiration_input,
             x=0.15, y=0.6,
             sizex=0.75, sizey=0.75,
             sizing="contain",
-            opacity=0.1,  # Increased opacity for better visibility
+            opacity=0.3,  # Increased opacity for better visibility
             layer="below"
         )] if img_src else []
     )
@@ -340,6 +341,7 @@ def generate_gif(data, session_date, participant, strike_input, expiration_input
         fig.write_image(frame_path)
         frames.append(imageio.imread(frame_path))
 
+    breakpoint()
 
     frames.append(imageio.imread(frame_path))
 
@@ -400,6 +402,8 @@ def send_to_discord(webhook_url, file_path, content=None, title=None, descriptio
     return response.status_code == 200
 
 def generate_and_send_gif(data, session_date, position_type ,participant, strike_input, expiration,webhook_url):
+
+    breakpoint()
     gif_path = generate_gif(
         data,
         session_date,
@@ -452,19 +456,26 @@ def generate_and_send_gif(data, session_date, position_type ,participant, strike
 if __name__ == "__main__":
     WEBHOOK_URL = 'https://discord.com/api/webhooks/1251013946111164436/VN55yOK-ntil-PnZn1gzWHzKwzDklwIh6fVspA_I8MCCaUnG-hsRsrP1t_WsreGHIity'
 
-    session_date = '2024-08-14'
-    strike_ranges = [5300,5600]  # Example strike ranges
-    expiration = '2024-08-15'
+    session_date = '2024-08-15'
+    strike_ranges = [5300,5700]  # Example strike ranges
+    expiration = '2024-08-16'
     participant = 'total_customers'
-    position_type = 'P'
+    position_type = 'Net'
+    time_exp = "PM"
     query =f"""
     SELECT * FROM intraday.intraday_books_test_posn
     WHERE effective_date = '{session_date}'
+    and
+    expiration_date = '2024-08-16 16:00:00'
+    and effective_datetime < '2024-08-15 11:00:00'
     """
 
     df = db.execute_query(query)
     #df = pd.read_pickle("books_20240801.pkl")
-    #breakpoint()
+    breakpoint()
+
+
+
     print(f"Loaded data shape: {df.shape}")
     print(f"Date range in data: {df['effective_datetime'].min()} to {df['effective_datetime'].max()}")
     print(f"Unique dates in data: {df['effective_date'].nunique()}")

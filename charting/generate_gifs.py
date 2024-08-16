@@ -63,7 +63,7 @@ def process_single_strike(group, participant):
     # Calculate net positions
     if 'C' in results and 'P' in results:
         results['Net'] = {
-            key: {'value': results['C'][key]['value'] + results['P'][key]['value'],
+            key: {'value': results['C'][key]['value'] - results['P'][key]['value'],
                   'time': max(results['C'][key]['time'], results['P'][key]['time'])}
             for key in results['C']
         }
@@ -90,7 +90,7 @@ def generate_color_shades(base_color, num_shades=5):
     return shades
 
 def generate_frame(data, timestamp, participant, strike_input, expiration_input, position_type,
-                   full_img_path, color_net='#0000FF', color_call='#00FF00', color_put='#FF0000'):
+                   full_img_path, color_net='#0000FF', color_call='#00FF00', color_put='#FF0000', metric = "positioning"):
 
 
     try:
@@ -231,7 +231,7 @@ def generate_frame(data, timestamp, participant, strike_input, expiration_input,
     fig.update_layout(
         title=dict(
             text=(f"<b>Breakdown By Strike</b><br>"
-                  f"<sup>SPX: {participant.upper()} {position_type} Positioning as of {timestamp}</sup><br>"
+                  f"<sup>SPX: {participant.upper()} {position_type} {metric} as of {timestamp}</sup><br>"
                   f"<sup>{subtitle_strike} | {subtitle_expiration}</sup>"),
             font=dict(family="Arial", size=24, color="black"),
             x=0.0,
@@ -273,7 +273,7 @@ def generate_frame(data, timestamp, participant, strike_input, expiration_input,
             x=0.15, y=0.6,
             sizex=0.75, sizey=0.75,
             sizing="contain",
-            opacity=0.1,  # Increased opacity for better visibility
+            opacity=0.3,  # Increased opacity for better visibility
             layer="below"
         )] if img_src else []
     )
@@ -309,7 +309,7 @@ def generate_gif(data, session_date,participant_input, position_type_input, stri
 
     # Construct the full path to the image
     full_img_path = project_root / img_path
-
+    # breakpoint()
     # Get unique timestamps
     timestamps = data['effective_datetime'].unique()
 
@@ -333,7 +333,7 @@ def generate_gif(data, session_date,participant_input, position_type_input, stri
         frame_path = f'temp_frames/frame_{i:03d}.png'
         fig.write_image(frame_path)
         frames.append(imageio.imread(frame_path))
-
+    #breakpoint()
     frames.append(imageio.imread(frame_path))
 
     # Create the GIF

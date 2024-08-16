@@ -224,9 +224,10 @@ def compute_heatmap(args, type:str, df_book: pd.DataFrame, start_time:datetime, 
     sim_times = simulation_times(start_time)
 
     book = book_to_list(df_book,sim_times)
-
+    breakpoint()
     delta_array = compute_all(args,book,prices)
 
+    breakpoint()
     df_charm, df_gamma, df_gammader, df_gamma2der = generate_gamma_heatmap(sim_times, prices, delta_array, start_time.date(), start_time.time())
 
     mask_maxima = df_gamma2der > 0
@@ -291,9 +292,10 @@ if __name__ == "__main__":
     #----------------------------------#
     # -----------DATA READING----------#
     query = """
-    SELECT * FROM intraday.intraday_books_test
-    WHERE effective_date ='2024-07-26'
-    and effective_datetime >= '2024-07-26 09:00:00'
+    SELECT * FROM intraday.intraday_books
+    WHERE effective_date ='2024-08-16'
+    and effective_datetime >= '2024-08-16 09:30:00'
+    and expiration_date != '2024-08-16 09:15:00'
     """
 
     df_books = db.execute_query(query)
@@ -321,7 +323,7 @@ if __name__ == "__main__":
     # start_time = pd.Timestamp('12:00').time()
 
 
-    open_price = 5450
+    open_price = 5500
 
     unique_effective_datetimes = df_books['effective_datetime'].unique()
     cumulative_df = pd.DataFrame()
