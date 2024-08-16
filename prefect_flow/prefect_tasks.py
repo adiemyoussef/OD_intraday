@@ -580,7 +580,7 @@ async def build_latest_book(initial_book, intraday_data):
     tags=["finance", "options", "greeks"],
     retries=3,
     retry_delay_seconds=5,
-    timeout_seconds= 60,
+    timeout_seconds= 600,
     log_prints=True
 )
 def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.DataFrame) -> pd.DataFrame:
@@ -622,10 +622,15 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     # Merge latest book with the latest poly data
     merged_book = pd.merge(book, latest_poly, on='contract_id', how='left', suffixes=('', '_update'))
 
+    #breakpoint()
+
     # Log merge results
     total_contracts = len(book)
     merged_contracts = merged_book['iv_update'].notna().sum()
     unmerged_contracts = total_contracts - merged_contracts
+
+
+    #TODO: Jusqu'ici, pas de probleme... But after the historical merge, we lose some contracts that are in merged_book
 
     historical_updates = 0
     if unmerged_contracts > 0:
@@ -655,39 +660,94 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
 
             # Merge unmerged contracts with latest historical data
             updated_unmerged = pd.merge(unmerged_contracts_df,
-                                        latest_historical[['contract_id', 'iv', 'delta', 'gamma', 'vega']],
+                                        latest_historical,
+                                        #latest_historical[['contract_id', 'iv', 'delta', 'gamma', 'vega']],
                                         on='contract_id', how='left', suffixes=('', '_historical'))
 
+
             # Update the merged_book with historical data
-            merged_book.update(updated_unmerged)
+            # merged_book.update(updated_unmerged)
+            # Instead of using update, we'll use a more controlled approach
+            for greek in ['iv', 'delta', 'gamma', 'vega']:
+                historical_column = f'{greek}_historical'
+                merged_book.loc[mask, greek] = updated_unmerged[historical_column].combine_first(
+                    merged_book.loc[mask, greek])
+
+
 
             historical_updates = updated_unmerged['iv_historical'].notna().sum()
 
 
+    # Clean up the merged book
+    # for greek in ['iv', 'delta', 'gamma', 'vega']:
+    #     update_column = f'{greek}_update'
+    #     historical_column = f'{greek}_historical'
+    #
+    #     if historical_column in merged_book.columns:
+    #         merged_book[greek] = merged_book[update_column].combine_first(
+    #             merged_book[historical_column]).combine_first(merged_book[greek])
+    #     else:
+    #         merged_book[greek] = merged_book[update_column].combine_first(merged_book[greek])
+    #
+    #     # Drop temporary columns
+    #     merged_book.drop(columns=[update_column, historical_column], errors='ignore', inplace=True)
 
+    #------- INVESTIGATION----------#
+    # breakpoint()
+    # After all updates, identify contracts that weren't updated
+    not_updated_mask = merged_book[['iv_update', 'delta_update', 'gamma_update', 'vega_update']].isna().all(axis=1)
+                       #  & \
+                       # merged_book[['iv_historical', 'delta_historical', 'gamma_historical', 'vega_historical']].isna().all(
+                       #     axis=1))
+
+    not_updated_contracts = merged_book[not_updated_mask]
+
+    # Store not updated contracts in a CSV file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_filename = f"not_updated_contracts_{timestamp}.csv"
+    not_updated_contracts.to_csv(csv_filename, index=False)
+
+    prefect_logger.info(f"Contracts not updated have been saved to {csv_filename}")
+
+    # Calculate final statistics
+    contracts_with_greeks = merged_book[['iv', 'delta', 'gamma', 'vega']].notna().all(axis=1).sum()
+    contracts_without_greeks = total_contracts - contracts_with_greeks
+    contracts_not_updated = not_updated_contracts.shape[0]
+
+    # Get mm_posn for contracts without greeks
+    contracts_without_greeks_df = merged_book[merged_book[['iv', 'delta', 'gamma', 'vega']].isna().any(axis=1)]
+    mm_posn_sum = contracts_without_greeks_df['mm_posn'].sum()
+
+    # Calculate final statistics
+    #
+    # breakpoint()
     # Clean up the merged book
     for greek in ['iv', 'delta', 'gamma', 'vega']:
         update_column = f'{greek}_update'
         historical_column = f'{greek}_historical'
 
-        if historical_column in merged_book.columns:
-            merged_book[greek] = merged_book[update_column].combine_first(
-                merged_book[historical_column]).combine_first(merged_book[greek])
-        else:
-            merged_book[greek] = merged_book[update_column].combine_first(merged_book[greek])
+        merged_book[greek] = merged_book[update_column].combine_first(merged_book[greek])
 
         # Drop temporary columns
         merged_book.drop(columns=[update_column, historical_column], errors='ignore', inplace=True)
 
+    # Log the number of contracts at this point
+    prefect_logger.info(f"Number of contracts after Greek updates: {len(merged_book)}")
 
     # Calculate final statistics
-    contracts_with_greeks = merged_book['iv'].notna().sum()
+    contracts_with_greeks = merged_book[['iv', 'delta', 'gamma', 'vega']].notna().all(axis=1).sum()
+    #contracts_with_greeks = merged_book['iv'].notna().sum()
     contracts_without_greeks = total_contracts - contracts_with_greeks
     contracts_not_updated = total_contracts - merged_contracts - historical_updates
 
     # Get mm_posn for contracts without greeks
     contracts_without_greeks_df = merged_book[merged_book['iv'].isna()]
     mm_posn_sum = contracts_without_greeks_df['mm_posn'].sum()
+
+
+
+
+
 
     # Prepare log message
     log_data = f"""
@@ -707,7 +767,7 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     # Log using custom logger
     #log_greeks_update_summary(custom_logger, log_data)
     #
-    # breakpoint()
+    #breakpoint()
     # Log using Prefect's logger
     #log_message = "\n".join([f"{key}: {value}" for key, value in log_data.items()])
     #
@@ -728,7 +788,7 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     merged_book.loc[:,'time_stamp'] = get_eastern_time()
 
 
-
+    # breakpoint()
     return merged_book
 
 def compare_dataframes(posn_only, final_book_clean_insert):
@@ -792,7 +852,7 @@ def Intraday_Flow():
 
     flow_start_time = time.time()
 
-    expected_file_override = None # '/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-05_18_00_1.csv.zip'
+    expected_file_override = None #'/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-15_15_00_1.csv.zip'
 
     db_utils.connect()
     # sftp_utils.connect()
@@ -807,7 +867,7 @@ def Intraday_Flow():
             shift_previous_minutes=60 * 8, shift_current_minutes=0)
 
         # Fetch poly data: Slow
-        poly_data = fetch_historical_poly_data(previous_date, current_date, previous_datetime, current_datetime)
+        poly_historical_data = fetch_historical_poly_data(previous_date, current_date, previous_datetime, current_datetime)
 
         rabbitmq_utils.connect()
 
@@ -849,12 +909,120 @@ def Intraday_Flow():
                     posn_only= latest_book.iloc[:,:-4]
                     posn_only.loc[:,'time_stamp'] = get_eastern_time()
                     # Log the number of rows
+                    #TODO: UNCOMMENT
                     db_utils.insert_progress('intraday', 'intraday_books_test_posn',posn_only)
 
 
+                    latest_book["strike_price"].astype(int)
 
-                    final_book = update_book_with_latest_greeks(latest_book, poly_data)
+                    final_book = update_book_with_latest_greeks(latest_book, poly_historical_data)
 
+                    #-------------- INVESRTIGATION ---------------#
+                    # Assuming final_book and latest_book are your dataframes
+                    # Merge the dataframes
+
+                    merged_book = pd.merge(latest_book, final_book,
+                                           on=['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag'],
+                                           suffixes=('_latest', '_final'))
+
+                    # Calculate the difference in total_customers_posn
+                    merged_book['total_customers_posn_diff'] = merged_book['total_customers_posn_final'] - merged_book[
+                        'total_customers_posn_latest']
+
+                    # Filter rows where there's a difference
+                    diff_rows = merged_book[merged_book['total_customers_posn_diff'] != 0]
+
+                    # Display the differences
+                    print("Rows with differences in total_customers_posn:")
+                    print(diff_rows[['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag',
+                                     'total_customers_posn_latest', 'total_customers_posn_final',
+                                     'total_customers_posn_diff']])
+
+                    # Calculate some statistics
+                    print("\nStatistics of differences:")
+                    print(diff_rows['total_customers_posn_diff'].describe())
+
+                    # Check for missing rows
+                    latest_book_rows = set(
+                        latest_book[['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag']].apply(tuple,
+                                                                                                          axis=1))
+                    final_book_rows = set(
+                        final_book[['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag']].apply(tuple, axis=1))
+
+                    missing_in_final = latest_book_rows - final_book_rows
+                    missing_in_latest = final_book_rows - latest_book_rows
+
+                    print(f"\nRows in latest_book but missing in final_book: {len(missing_in_final)}")
+                    print(f"Rows in final_book but missing in latest_book: {len(missing_in_latest)}")
+
+                    #The contracts that have a position but that don't have greeks
+                    if missing_in_final:
+                        missing_in_final_df = pd.DataFrame(list(missing_in_final),
+                                                           columns=['option_symbol', 'strike_price', 'expiration_date',
+                                                                    'call_put_flag'])
+
+                        # Convert expiration_date to datetime if it's not already
+                        missing_in_final_df['expiration_date'] = pd.to_datetime(missing_in_final_df['expiration_date'])
+
+                        # Sort by expiration_date
+                        missing_in_final_df = missing_in_final_df.sort_values('expiration_date')
+
+                        print("\nSample of rows missing in final_book (ordered by expiration_date):")
+                        print(missing_in_final_df.head())
+
+                        # Save to CSV
+                        missing_in_final_df.to_csv('missing_in_final_book.csv', index=False)
+                        print("Full list of missing rows in final_book saved to 'missing_in_final_book.csv'")
+
+                        # Count contracts for each distinct expiration_date
+                        expiration_counts = missing_in_final_df['expiration_date'].value_counts().sort_index()
+                        print("\nNumber of contracts for each distinct expiration_date:")
+                        print(expiration_counts)
+
+                        # List strikes for each distinct expiration date
+                        print("\nList of strikes for each distinct expiration date:")
+                        for date in missing_in_final_df['expiration_date'].unique():
+                            strikes = missing_in_final_df[missing_in_final_df['expiration_date'] == date][
+                                'strike_price'].unique()
+                            strikes.sort()
+                            print(f"Expiration Date: {date.date()}")
+                            print(f"Strikes: {', '.join(map(str, strikes))}")
+                            print(f"Number of strikes: {len(strikes)}")
+                            print("-------------------------")
+
+                    else:
+                        print("No missing rows in final_book")
+
+                    if missing_in_latest:
+                        print("\nSample of rows missing in latest_book:")
+                        print(final_book[
+                                  final_book[['symbol', 'strike_price', 'expiration_date', 'call_put_flag']].apply(
+                                      tuple, axis=1).isin(list(missing_in_latest)[:5])])
+
+                    # Check for NaN values
+                    print("\nNaN values in latest_book:")
+                    print(latest_book['total_customers_posn'].isna().sum())
+
+                    print("\nNaN values in final_book:")
+                    print(final_book['total_customers_posn'].isna().sum())
+
+                    # Check for infinity values
+                    print("\nInfinity values in latest_book:")
+                    print(np.isinf(latest_book['total_customers_posn']).sum())
+
+                    print("\nInfinity values in final_book:")
+                    print(np.isinf(final_book['total_customers_posn']).sum())
+
+                    # breakpoint()
+
+
+
+
+
+                    #-------------------------------------------------#
+
+
+                    # breakpoint()
 
                     # Filter out NaN values and log
                     filtered_final_book = filter_and_log_nan_values(final_book)
@@ -877,7 +1045,7 @@ def Intraday_Flow():
                     total_nan_filled = sum(final_book_clean_insert[col].isna().sum() for col in posn_columns)
                     logger.info(f"\nTotal number of NaN values filled across all '_posn' columns: {total_nan_filled}")
 
-                    compare_dataframes(posn_only, final_book_clean_insert)
+                    # compare_dataframes(posn_only, final_book_clean_insert)
 
                     db_utils.insert_progress('intraday', 'intraday_books',final_book_clean_insert)
                     pg_data.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
