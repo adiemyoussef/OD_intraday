@@ -36,7 +36,6 @@ def generate_frame_wrapper(args):
     fig.write_image(frame_path)
     return index, frame_path
 
-
 def process_single_strike(group, participant):
     date = group['effective_date'].iloc[0]
     strike = group['strike_price'].iloc[0]
@@ -63,7 +62,7 @@ def process_single_strike(group, participant):
     # Calculate net positions
     if 'C' in results and 'P' in results:
         results['Net'] = {
-            key: {'value': results['C'][key]['value'] - results['P'][key]['value'],
+            key: {'value': results['C'][key]['value'] + results['P'][key]['value'],
                   'time': max(results['C'][key]['time'], results['P'][key]['time'])}
             for key in results['C']
         }
@@ -119,7 +118,7 @@ def generate_frame(data, timestamp, participant, strike_input, expiration_input,
     else:
         subtitle_strike = "All Strikes"
 
-
+    #--------- Expiration ------------ #
     if expiration_input != "all":
         if isinstance(expiration_input, (list, tuple)):
             daily_data = daily_data[daily_data['expiration_date_original'].isin(expiration_input)]

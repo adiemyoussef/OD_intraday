@@ -218,16 +218,14 @@ def compute_heatmap(args, type:str, df_book: pd.DataFrame, start_time:datetime, 
     #TODO: Friday AM TEST
     df_book['iv'] = df_book['iv'].astype(float)
 
-    # breakpoint()
     prices = price_matrix(price, steps, range).tolist()
 
     sim_times = simulation_times(start_time)
 
     book = book_to_list(df_book,sim_times)
-    breakpoint()
+
     delta_array = compute_all(args,book,prices)
 
-    breakpoint()
     df_charm, df_gamma, df_gammader, df_gamma2der = generate_gamma_heatmap(sim_times, prices, delta_array, start_time.date(), start_time.time())
 
     mask_maxima = df_gamma2der > 0
