@@ -43,6 +43,8 @@ def generate_frame_wrapper(args):
     return index, frame_path
 
 def process_single_strike(group, participant):
+    #TODO: Investigate Net
+
     date = group['effective_date'].iloc[0]
     strike = group['strike_price'].iloc[0]
 
@@ -126,7 +128,6 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
 
     metrics_data = data[data['effective_datetime'] <= timestamp].copy()
     candlesticks_data = candlesticks[candlesticks['effective_datetime'] == timestamp].copy()
-
 
     # Apply strike and expiration filters
     if strike_input != "all":

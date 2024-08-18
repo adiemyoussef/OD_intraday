@@ -65,8 +65,8 @@ deployments:
       branch: dev_test
       access_token: '{{ prefect.blocks.github-credentials.my-github-credentials }}'
 
-- name: intraday_gifs_deploy
-  entrypoint: charting/intraday_beta.py:gif_flow
+- name: intraday_gifs_v2
+  entrypoint: charting/intraday_beta_v2.py:gif_flow
   work_pool:
     name: intraday-paperspace-agent
     work_queue_name:

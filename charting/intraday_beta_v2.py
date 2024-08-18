@@ -12,6 +12,12 @@ db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()
 print(f'{db.get_status()}')
 
+@task
+def parse_strike_range(strike_range: str) -> List[int]:
+    values = list(map(int, strike_range.split(',')))
+    return [min(values), max(values)]
+
+
 @task(cache_key_fn=None, cache_expiration=timedelta(hours=0, minutes=1))
 def fetch_data(session_date: str, strike_range: List[int], expiration: str) -> [pd.DataFrame]:
 
@@ -19,10 +25,10 @@ def fetch_data(session_date: str, strike_range: List[int], expiration: str) -> [
     expiration = '2024-08-16 16:00:00'
 
     metrics_query =f"""
-    SELECT * FROM intraday.intraday_books_test_posn
+    SELECT * FROM intraday.intraday_books -- _test_posn
     WHERE effective_date = '{session_date}'
     and effective_datetime > '2024-08-16 09:30:00'
-    and effective_datetime < '2024-08-16 12:00:00'
+    -- and effective_datetime < '2024-08-16 12:00:00'
     and strike_price between {strike_range[0]} and {strike_range[1]}
     and expiration_date = '{expiration}'
     """
@@ -107,6 +113,7 @@ def send_discord_message(gif_paths: List[str], session_date: str, participant: s
             "• ■ represents current position magnitude\n"
             "• ● represents the start of day position magnitude\n"
             "• ✖ represents the prior update position magnitude\n"
+            "\n"
         ), "inline": False},
     ]
     footer_text = f"Generated on {current_time} | By OptionsDepth Inc."
@@ -131,17 +138,28 @@ def send_discord_message(gif_paths: List[str], session_date: str, participant: s
     return success
 
 @flow(name="Intraday GIF Generation")
+# def gif_flow(
+#     session_date: Optional[str] = None,
+#     strike_range: Optional[List[int]] = None,
+#     expiration: Optional[str] = None,
+#     participant: str = 'total_customers',
+#     position_types: Optional[List[str]] = None,
+#     webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
+# ):
 def gif_flow(
     session_date: Optional[str] = None,
-    strike_range: Optional[List[int]] = None,
+    strike_range: Optional[str] = None,
     expiration: Optional[str] = None,
     participant: str = 'total_customers',
     position_types: Optional[List[str]] = None,
     webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
 ):
+    if strike_range:
+        strike_range = parse_strike_range(strike_range)
+
 
     # position_types = ['Net', 'C', 'P']
-    position_types = ['P']
+    position_types = ['C'] #,'P']
     expiration = '2024-08-16'
 
     # Set default values if not provided
