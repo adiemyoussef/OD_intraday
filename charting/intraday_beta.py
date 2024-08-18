@@ -32,7 +32,7 @@ def fetch_data(session_date: str) -> pd.DataFrame:
     query =f"""
     SELECT * FROM intraday.intraday_books_test_posn
     WHERE effective_date = '2024-08-16'
-    -- and effective_datetime < '2024-08-15 18:10:00'
+    and effective_datetime < '2024-08-16 12:10:00'
     and strike_price between 5300 and 5700
     and expiration_date = '2024-08-16 16:00:00'
     """
@@ -50,10 +50,13 @@ def process_data(df: pd.DataFrame, session_date: str, position_type: str, partic
     daily_data = daily_data[daily_data['expiration_date_original'] == expiration_input]
 
     # generate_and_send_gif(data, session_date, participant, position_type, strike_input, expiration, webhook_url)
-    #
-    success = generate_and_send_gif(daily_data, session_date, participant, position_type,
-                                    strike_ranges, expiration, webhook_url)
-    return success
+
+    for position_type in ['C', 'P', 'Net']:
+        print(f'Generating gif for {position_type}')
+        success = generate_and_send_gif(daily_data, session_date, participant, position_type,
+                                        strike_ranges, expiration, webhook_url)
+        print(f'Status: {success}')
+        #return success
 
 
 # @flow(name="Gifs")

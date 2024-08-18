@@ -1,4 +1,3 @@
-import uuid
 from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
@@ -14,11 +13,6 @@ import logging
 from PIL import Image
 import base64
 from io import BytesIO
-import requests
-import json
-from datetime import datetime
-import os
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -94,21 +88,8 @@ def generate_color_shades(base_color, num_shades=5):
 
     return shades
 
-def generate_color_scale(base_color, is_positive):
-    rgb = tuple(int(base_color.lstrip('#')[i:i + 2], 16) for i in (0, 2, 4))
-    hsv = colorsys.rgb_to_hsv(rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)
-
-    if is_positive:
-        v = min(1, hsv[2] * 1.3)  # Increase brightness for positive values
-    else:
-        v = max(0, hsv[2] * 0.7)  # Decrease brightness for negative values
-
-    rgb = colorsys.hsv_to_rgb(hsv[0], hsv[1], v)
-    return f'rgb({int(rgb[0] * 255)},{int(rgb[1] * 255)},{int(rgb[2] * 255)})'
-
-
-def generate_frame(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type,
-                   full_img_path, metric = "positioning"):
+def generate_frame(data, timestamp, participant, strike_input, expiration_input, position_type,
+                   full_img_path, color_net='#0000FF', color_call='#00FF00', color_put='#FF0000', metric = "positioning"):
 
 
     try:
@@ -124,17 +105,15 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
 
 
 
-    metrics_data = data[data['effective_datetime'] <= timestamp].copy()
-    candlesticks_data = candlesticks[candlesticks['effective_datetime'] == timestamp].copy()
-
+    daily_data = data[data['effective_datetime'] <= timestamp].copy()
 
     # Apply strike and expiration filters
     if strike_input != "all":
         if isinstance(strike_input, (list, tuple)):
-            metrics_data = metrics_data[metrics_data['strike_price'].between(min(strike_input), max(strike_input))]
+            daily_data = daily_data[daily_data['strike_price'].between(min(strike_input), max(strike_input))]
             subtitle_strike = f"For strikes: {min(strike_input)} to {max(strike_input)}"
         elif isinstance(strike_input, int):
-            metrics_data = metrics_data[metrics_data['strike_price'] == strike_input]
+            daily_data = daily_data[daily_data['strike_price'] == strike_input]
             subtitle_strike = f"For strike: {strike_input}"
     else:
         subtitle_strike = "All Strikes"
@@ -142,32 +121,29 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
     #--------- Expiration ------------ #
     if expiration_input != "all":
         if isinstance(expiration_input, (list, tuple)):
-            metrics_data = metrics_data[metrics_data['expiration_date_original'].isin(expiration_input)]
+            daily_data = daily_data[daily_data['expiration_date_original'].isin(expiration_input)]
             subtitle_expiration = f"For expirations: {', '.join(str(exp) for exp in expiration_input)}"
-            breakpoint()
         elif isinstance(expiration_input, date):
-            metrics_data = metrics_data[metrics_data['expiration_date_original'] == expiration_input]
+            daily_data = daily_data[daily_data['expiration_date_original'] == expiration_input]
             subtitle_expiration = f"For expiration: {expiration_input}"
-            breakpoint()
         else:
 
             # Ensure expiration_input is a string in 'YYYY-MM-DD' format
             expiration_input = pd.to_datetime(expiration_input).strftime('%Y-%m-%d')
             # Convert the expiration_date_original column to datetime, then back to string in 'YYYY-MM-DD' format
-            metrics_data['expiration_date_original'] = pd.to_datetime(metrics_data['expiration_date_original']).dt.strftime(
+            daily_data['expiration_date_original'] = pd.to_datetime(daily_data['expiration_date_original']).dt.strftime(
                 '%Y-%m-%d')
 
 
-            metrics_data = metrics_data[metrics_data['expiration_date_original'] == expiration_input]
+            daily_data = daily_data[daily_data['expiration_date_original'] == expiration_input]
             subtitle_expiration = f"For expiration: {expiration_input}"
-            #breakpoint()
 
     else:
         subtitle_expiration = "All Expirations"
 
 
     # Group by strike price
-    grouped = metrics_data.groupby('strike_price')
+    grouped = daily_data.groupby('strike_price')
 
     # Process each group
     results = [process_single_strike(group, participant) for _, group in grouped]
@@ -179,28 +155,17 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
     fig = make_subplots(rows=1, cols=1)
 
     position_types = ['C', 'P', 'Net'] if position_type == 'All' else [position_type]
-
-    colors = {
-        'Net': {
-            'negative': 'rgb(0,0,130)',    # dark blue
-            'positive': 'rgb(65,147,247)'  # light blue
-        },
-        'C': {
-            'negative': 'rgb(83,183,75)',   # dark green
-            'positive': 'rgb(145,199,153)'  # light green
-        },
-        'P': {
-            'negative': 'rgb(160,0,0)',   # dark red
-            'positive': 'rgb(255,0,0)'   # light red
-        }
-    }
+    colors = {'Net': color_net, 'C': color_call, 'P': color_put}
 
     for pos_type in position_types:
         if pos_type in results_df.columns:
+            shades = generate_color_shades(colors[pos_type])
+
             positions = ['current', 'start_of_day', 'prior_update']
             symbols = ['square', 'circle', 'x']
 
-            for position, symbol in zip(positions, symbols):
+            for position, symbol, shade in zip(positions, symbols, shades):
+                # Helper function to safely extract values
                 def safe_extract(x, key):
                     if isinstance(x, dict) and key in x:
                         return x[key]['value'] if isinstance(x[key], dict) else x[key]
@@ -210,54 +175,29 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
                 valid_mask = x_values.notnull()
 
                 if position == 'current':
-                    positive_mask = x_values > 0
-                    negative_mask = x_values <= 0
-
-                    # Positive values
-                    trace_positive = go.Bar(
-                        x=x_values[valid_mask & positive_mask],
-                        y=results_df['strike_price'][valid_mask & positive_mask],
-                        name=f'{pos_type} {position.capitalize().replace("_", " ")} (Positive)',
+                    trace = go.Bar(
+                        x=x_values[valid_mask],
+                        y=results_df['strike_price'][valid_mask],
+                        name=f'{pos_type} {position.capitalize().replace("_", " ")}',
                         orientation='h',
-                        marker_color=colors[pos_type]['positive'],
-                        opacity=1,
+                        marker_color=shade,
+                        opacity=0.7,
                         legendgroup=pos_type,
                         legendgrouptitle_text=pos_type,
                         hovertemplate=f"<b>{position.capitalize().replace('_', ' ')}</b><br>" +
                                       "Strike: %{y}<br>" +
                                       "Position: %{x}<br>" +
                                       "Time: %{customdata}<extra></extra>",
-                        customdata=results_df[pos_type][valid_mask & positive_mask].apply(
+                        customdata=results_df[pos_type][valid_mask].apply(
                             lambda x: x[position]['time'] if isinstance(x, dict) and position in x else None)
                     )
-                    fig.add_trace(trace_positive)
-
-                    # Negative values
-                    trace_negative = go.Bar(
-                        x=x_values[valid_mask & negative_mask],
-                        y=results_df['strike_price'][valid_mask & negative_mask],
-                        name=f'{pos_type} {position.capitalize().replace("_", " ")} (Negative)',
-                        orientation='h',
-                        marker_color=colors[pos_type]['negative'],
-                        opacity=1,
-                        legendgroup=pos_type,
-                        legendgrouptitle_text=pos_type,
-                        hovertemplate=f"<b>{position.capitalize().replace('_', ' ')}</b><br>" +
-                                      "Strike: %{y}<br>" +
-                                      "Position: %{x}<br>" +
-                                      "Time: %{customdata}<extra></extra>",
-                        customdata=results_df[pos_type][valid_mask & negative_mask].apply(
-                            lambda x: x[position]['time'] if isinstance(x, dict) and position in x else None)
-                    )
-                    fig.add_trace(trace_negative)
                 else:
-                    # For non-current positions, use the same color scheme as before
                     trace = go.Scatter(
                         x=x_values[valid_mask],
                         y=results_df['strike_price'][valid_mask],
                         mode='markers',
                         name=f'{pos_type} {position.capitalize().replace("_", " ")}',
-                        marker=dict(symbol=symbol, size=8, color=colors[pos_type]['positive']),
+                        marker=dict(symbol=symbol, size=8, color=shade),
                         legendgroup=pos_type,
                         hovertemplate=f"<b>{position.capitalize().replace('_', ' ')}</b><br>" +
                                       "Strike: %{y}<br>" +
@@ -266,7 +206,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
                         customdata=results_df[pos_type][valid_mask].apply(
                             lambda x: x[position]['time'] if isinstance(x, dict) and position in x else None)
                     )
-                    fig.add_trace(trace)
+                fig.add_trace(trace)
 
             # Add horizontal line for range (lowest to highest) for each strike
             for _, row in results_df.iterrows():
@@ -282,41 +222,9 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
                             x1=max_value,
                             y0=strike,
                             y1=strike,
-                            line=dict(color=colors[pos_type]['positive'], width=2),
+                            line=dict(color=shade, width=2),
                             opacity=0.7,
                         )
-
-    # Add the horizontal line for SPX Spot Price if 'close' exists in candlesticks_data
-    if 'close' in candlesticks_data.columns and not candlesticks_data['close'].empty:
-        spx_spot_price = candlesticks_data['close'].iloc[0]
-
-        x_min = min(trace.x.min() for trace in fig.data if hasattr(trace, 'x') and len(trace.x) > 0)
-        x_max = max(trace.x.max() for trace in fig.data if hasattr(trace, 'x') and len(trace.x) > 0)
-
-        fig.add_shape(
-            type="line",
-            x0=x_min,
-            x1=x_max,
-            y0=spx_spot_price,
-            y1=spx_spot_price,
-            line=dict(color="black", width=4, dash="dash"),
-            name="SPX Spot Price"
-        )
-
-        # Add annotation for SPX Spot Price
-        fig.add_annotation(
-            x=x_max,
-            y=spx_spot_price,
-            text=f"SPX Spot Price: {spx_spot_price:.2f}",
-            showarrow=False,
-            xanchor="right",
-            yanchor="bottom",
-            bgcolor="white",
-            bordercolor="black",
-            borderwidth=1,
-            font=dict(color="black", size=16)
-        )
-
 
     # Update layout
     fig.update_layout(
@@ -391,9 +299,8 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
 
     return fig
 
-
-def generate_gif(data,candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
-                 img_path='config/images/logo_dark.png', color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
+def generate_gif(data, session_date,participant_input, position_type_input, strike_input, expiration_input,
+                 img_path='config/images/logo_light.png', color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
                  output_gif='animated_chart.gif'):
 
     # Get the project root directory
@@ -401,106 +308,143 @@ def generate_gif(data,candlesticks, session_date, participant_input, position_ty
 
     # Construct the full path to the image
     full_img_path = project_root / img_path
-
+    # breakpoint()
     # Get unique timestamps
     timestamps = data['effective_datetime'].unique()
 
-    # Create a unique temporary directory to store frames
-    temp_dir = f'temp_frames_{uuid.uuid4().hex}'
-    os.makedirs(temp_dir, exist_ok=True)
+
+    # Create a temporary directory to store frames
+    if not os.path.exists('temp_frames'):
+        os.makedirs('temp_frames')
+
 
     # Generate frames
     frames = []
 
+    # breakpoint()
+
     for i, timestamp in enumerate(timestamps):
         print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
-        fig = generate_frame(data,candlesticks, timestamp, participant_input, strike_input, expiration_input, position_type_input,
-                             full_img_path)
+        fig = generate_frame(data, timestamp, participant_input, strike_input, expiration_input, position_type_input,
+                             full_img_path, color_net, color_call, color_put)
 
         # Save the frame as an image
-        frame_path = os.path.join(temp_dir, f'frame_{i:03d}.png')
+        frame_path = f'temp_frames/frame_{i:03d}.png'
         fig.write_image(frame_path)
         frames.append(imageio.imread(frame_path))
-
-    # Add the last frame one more time to pause at the end
+    #breakpoint()
     frames.append(imageio.imread(frame_path))
 
     # Create the GIF
     imageio.mimsave(output_gif, frames, fps=5)
 
     # Clean up temporary files
-    for file in os.listdir(temp_dir):
-        os.remove(os.path.join(temp_dir, file))
-    os.rmdir(temp_dir)
+    for file in os.listdir('temp_frames'):
+        os.remove(os.path.join('temp_frames', file))
+    os.rmdir('temp_frames')
 
     print(f"Animation saved as {output_gif}")
     return output_gif
 
 
 
-def send_to_discord(webhook_url, file_paths, content=None, title=None, description=None, fields=None,
+def send_to_discord_original(webhook_url, file_path, content=None, title=None, description=None, fields=None,
                     footer_text=None):
-    """
-    Sends a message to Discord with an embedded message first, followed by GIFs in a separate message.
-    :param webhook_url: Discord webhook URL
-    :param file_paths: List of file paths for GIFs
-    :param content: Optional content text
-    :param title: Title for the embed
-    :param description: Description for the embed
-    :param fields: Fields for the embed
-    :param footer_text: Footer text for the embed
-    :return: Status code of the second request
-    """
-    if not isinstance(file_paths, list):
-        file_paths = [file_paths]
 
-    # First Request: Send the embedded message
+    breakpoint()
+    with open(file_path, 'rb') as f:
+        file_content = f.read()
+
+    # Prepare the embed
     embed = {
         "title": title or "Options Chart Analysis",
         "description": description or "Here's the latest options chart analysis.",
-        "color": 3447003,  # A nice blue color
+        "color": 3447003,  # A nice blue color, you can change this
+        "timestamp": datetime.utcnow().isoformat(),
         "fields": fields or [],
+        "image": {"url": "attachment://chart.gif"},
         "footer": {"text": footer_text or "Generated by Options Analysis Bot"},
-        "timestamp": datetime.utcnow().isoformat()
+        # "author": {
+        #     "name": "Options Analysis Bot",
+        #     "icon_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQmKLlOmqYS-L68xOFw8jNoYHFSWCKgK7DXjA&s"  # Replace with your bot's icon URL
+        # }
     }
 
-    # Prepare the payload with the embed
+    # Prepare the payload
     payload = {
-        "embeds": [embed],
-        "content": content or ""  # Ensure content is initialized
+        "content": content,
+        "embeds": [embed]
     }
 
-    # Send the first request (embed only)
-    response = requests.post(webhook_url, json=payload)
+    # Prepare the files
+    files = {
+        "file": ("chart.gif", file_content, "image/gif"),
+        "payload_json": (None, json.dumps(payload))
+    }
 
-    print(response)
-
-    if response.status_code == 200 or response.status_code == 204:
-        print("Embedded message sent successfully to Discord!")
-    else:
-        print(f"Failed to Embedded message. Status code: {response.status_code}")
-        print(f"Response content: {response.content}")
-        breakpoint()
-
-    # Second Request: Send the GIFs separately
-    files = {}
-    for i, file_path in enumerate(file_paths):
-        with open(file_path, 'rb') as f:
-            file_content = f.read()
-        files[f"file{i}"] = (os.path.basename(file_path), file_content, "image/gif")
-
-    # Send the second request (GIFs only)
+    # Send the request
     response = requests.post(webhook_url, files=files)
 
-    if response.status_code == 200 or response.status_code == 204:
-        print("GIFs sent successfully to Discord!")
+    if response.status_code == 200:
+        print("Message sent successfully to Discord!")
     else:
-        print(f"Failed to send GIFs. Status code: {response.status_code}")
+        print(f"Failed to send message. Status code: {response.status_code}")
         print(f"Response content: {response.content}")
 
     return response.status_code == 200
 
-#---------------------#
+
+import requests
+import json
+from datetime import datetime
+import os
+
+
+def send_to_discord(webhook_url, file_paths, content=None, title=None, description=None, fields=None,
+                    footer_text=None):
+    if not isinstance(file_paths, list):
+        file_paths = [file_paths]
+
+    files = {}
+    embeds = []
+
+    for i, file_path in enumerate(file_paths):
+        with open(file_path, 'rb') as f:
+            file_content = f.read()
+
+        file_name = f"chart_{i}.gif"
+        files[f"file{i}"] = (file_name, file_content, "image/gif")
+
+        embed = {
+            "title": f"{title or 'Options Chart Analysis'} - {os.path.basename(file_path)}",
+            "description": description or "Here's the latest options chart analysis.",
+            "color": 3447003,  # A nice blue color, you can change this
+            "timestamp": datetime.utcnow().isoformat(),
+            "fields": fields or [],
+            "image": {"url": f"attachment://{file_name}"},
+            "footer": {"text": footer_text or "Generated by Options Analysis Bot"},
+        }
+        embeds.append(embed)
+
+    # Prepare the payload
+    payload = {
+        "content": content,
+        "embeds": embeds
+    }
+
+    # Add the payload to the files
+    files["payload_json"] = (None, json.dumps(payload))
+
+    # Send the request
+    response = requests.post(webhook_url, files=files)
+
+    if response.status_code == 200:
+        print("Message sent successfully to Discord!")
+    else:
+        print(f"Failed to send message. Status code: {response.status_code}")
+        print(f"Response content: {response.content}")
+
+    return response.status_code == 200
 def generate_and_send_gif(data, session_date, participant, position_type , strike_input, expiration,webhook_url):
     gif_path = generate_gif(
         data,
@@ -544,23 +488,17 @@ def generate_and_send_gif(data, session_date, participant, position_type , strik
         {"name": "💡 Interpretation", "value": (
             "• Green bars indicate Calls positioning\n"
             "• Red bars indicate Puts positioning\n"
-            "• Blue bars indicate Net positioning\n"
-            "\n"
             "• ■ represents current position magnitude\n"
             "• ● represents the start of day position magnitude\n"
             "• ✖ represents the prior update position magnitude\n"
         ), "inline": False},
     ]
-    footer_text = f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} by OptionsDepth"
-
-    #TODO: add different content depending on the time of the day
-    content = "🚀 New options chart analysis is ready! Check out the latest market insights below."
-
+    footer_text = f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Options Analysis v1.0"
 
     success = send_to_discord(
         webhook_url,
         gif_path,
-        content={content},
+        content="🚀 New options chart analysis is ready! Check out the latest market insights below.",
         title=title,
         description=description,
         fields=fields,
