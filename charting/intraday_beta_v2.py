@@ -1,12 +1,17 @@
 import pandas as pd
 from prefect import flow, task
 from prefect.tasks import task_input_hash, Task
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, date
 from typing import List, Optional
 from charting.generate_gifs import generate_gif, send_to_discord
 from utilities.db_utils import DatabaseUtilities
 from config.config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 import os
+
+
+default_date = date.today() - timedelta(days=0)
+LIST_PART = ['total_customers', 'broker', 'firm', 'retail', 'institution']
+
 
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()
@@ -21,16 +26,15 @@ def parse_strike_range(strike_range: str) -> List[int]:
 @task(cache_key_fn=None, cache_expiration=timedelta(hours=0, minutes=1))
 def fetch_data(session_date: str, strike_range: List[int], expiration: str) -> [pd.DataFrame]:
 
-    session_date = '2024-08-16'
-    expiration = '2024-08-16 16:00:00'
+    #session_date = '2024-08-19'
+    #expiration = '2024-08-16 16:00:00'
 
     metrics_query =f"""
-    SELECT * FROM intraday.intraday_books -- _test_posn
+    SELECT * FROM intraday.intraday_books_test_posn
     WHERE effective_date = '{session_date}'
-    and effective_datetime > '2024-08-16 09:30:00'
-    -- and effective_datetime < '2024-08-16 12:00:00'
+    and effective_datetime > '2024-08-19 08:30:00'
     and strike_price between {strike_range[0]} and {strike_range[1]}
-    and expiration_date = '{expiration}'
+    and expiration_date_original = '{expiration}'
     """
 
     candlesticks_query = f"""
@@ -44,13 +48,17 @@ def fetch_data(session_date: str, strike_range: List[int], expiration: str) -> [
     metrics = db.execute_query(metrics_query)
     candlesticks = db.execute_query(candlesticks_query)
 
+    if candlesticks.empty:
+        print("No candlesticks Available")
 
-    candlesticks['effective_datetime'] = (
-        pd.to_datetime(candlesticks['effective_datetime'], utc=True)  # Set timezone to UTC
-        .dt.tz_convert('America/New_York')  # Convert to Eastern Time
-        .dt.tz_localize(None)  # Remove timezone information (make naive)
-    )
-    candlesticks.drop_duplicates(keep='first', inplace=False)
+    else:
+        candlesticks['effective_datetime'] = (
+            pd.to_datetime(candlesticks['effective_datetime'], utc=True)  # Set timezone to UTC
+            .dt.tz_convert('America/New_York')  # Convert to Eastern Time
+            .dt.tz_localize(None)  # Remove timezone information (make naive)
+        )
+        candlesticks.drop_duplicates(keep='first', inplace=False)
+
 
     return metrics, candlesticks
 
@@ -147,33 +155,36 @@ def send_discord_message(gif_paths: List[str], session_date: str, participant: s
 #     webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
 # ):
 def gif_flow(
-    session_date: Optional[str] = None,
-    strike_range: Optional[str] = None,
+    session_date: Optional[date] = default_date,
+    #strike_range: Optional[str] = None,
+    strike_range: Optional[List[int]] = None,
     expiration: Optional[str] = None,
     participant: str = 'total_customers',
     position_types: Optional[List[str]] = None,
     webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
+                        #'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 ):
     if strike_range:
         strike_range = parse_strike_range(strike_range)
 
+    #position_types = ['Net']
+    position_types = ['Net', 'C', 'P']
+    expiration = '2024-08-19'
 
-    # position_types = ['Net', 'C', 'P']
-    position_types = ['C'] #,'P']
-    expiration = '2024-08-16'
 
     # Set default values if not provided
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT
-        strike_range = [5300, 5700]
+        strike_range = [5450, 5650]
     if expiration is None:
         expiration = session_date
     if position_types is None:
         position_types = ['C', 'P', 'Net']
     elif 'All' in position_types:
         position_types = ['C', 'P', 'Net']
+
 
     # Fetch data
     metrics, candlesticks = fetch_data(session_date, strike_range, expiration)

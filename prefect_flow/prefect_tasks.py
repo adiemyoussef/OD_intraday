@@ -964,10 +964,21 @@ def Intraday_Flow():
                         # Convert expiration_date to datetime if it's not already
                         missing_in_final_df['expiration_date'] = pd.to_datetime(missing_in_final_df['expiration_date'])
 
-                        # Sort by expiration_date
-                        missing_in_final_df = missing_in_final_df.sort_values('expiration_date')
+                        # Merge with latest_book to get the total_customers_posn
+                        missing_in_final_df = pd.merge(
+                            missing_in_final_df,
+                            latest_book[['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag',
+                                         'total_customers_posn']],
+                            on=['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag'],
+                            how='left'
+                        )
 
-                        print("\nSample of rows missing in final_book (ordered by expiration_date):")
+                        # Sort by expiration_date and total_customers_posn
+                        missing_in_final_df = missing_in_final_df.sort_values(
+                            ['expiration_date', 'total_customers_posn'], ascending=[True, False])
+
+                        print(
+                            "\nSample of rows missing in final_book (ordered by expiration_date and total_customers_posn):")
                         print(missing_in_final_df.head())
 
                         # Save to CSV
@@ -979,16 +990,29 @@ def Intraday_Flow():
                         print("\nNumber of contracts for each distinct expiration_date:")
                         print(expiration_counts)
 
-                        # List strikes for each distinct expiration date
-                        print("\nList of strikes for each distinct expiration date:")
+                        # List strikes and total_customers_posn for each distinct expiration date
+                        print("\nList of strikes and total_customers_posn for each distinct expiration date:")
                         for date in missing_in_final_df['expiration_date'].unique():
-                            strikes = missing_in_final_df[missing_in_final_df['expiration_date'] == date][
-                                'strike_price'].unique()
+                            date_df = missing_in_final_df[missing_in_final_df['expiration_date'] == date]
+                            strikes = date_df['strike_price'].unique()
                             strikes.sort()
                             print(f"Expiration Date: {date.date()}")
                             print(f"Strikes: {', '.join(map(str, strikes))}")
                             print(f"Number of strikes: {len(strikes)}")
+                            print("Top 5 contracts by total_customers_posn:")
+                            print(date_df.nlargest(5, 'total_customers_posn')[
+                                      ['strike_price', 'call_put_flag', 'total_customers_posn']])
                             print("-------------------------")
+
+                        # Calculate and print total_customers_posn statistics
+                        total_posn = missing_in_final_df['total_customers_posn'].sum()
+                        max_posn = missing_in_final_df['total_customers_posn'].max()
+                        print(f"\nTotal total_customers_posn for all missing contracts: {total_posn}")
+                        print(f"Maximum total_customers_posn among missing contracts: {max_posn}")
+                        print("\nTop 10 missing contracts by total_customers_posn:")
+                        print(missing_in_final_df.nlargest(10, 'total_customers_posn')[
+                                  ['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag',
+                                   'total_customers_posn']])
 
                     else:
                         print("No missing rows in final_book")

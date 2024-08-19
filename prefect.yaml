@@ -72,19 +72,7 @@ deployments:
     work_queue_name:
     job_variables: {}
   schedules:
-  - cron: 0 9 * * 1-5
-    timezone: America/New_York
-    day_or: true
-    active: true
-  - cron: 0 12 * * 1-5
-    timezone: America/New_York
-    day_or: true
-    active: true
-  - cron: 30 15 * * 1-5
-    timezone: America/New_York
-    day_or: true
-    active: true
-  - cron: 30 18 * * 1-5
+  - cron: 4,14,24,34,44,54 9-16 * * 1-5
     timezone: America/New_York
     day_or: true
     active: true

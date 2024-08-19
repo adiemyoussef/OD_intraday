@@ -127,7 +127,13 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
 
 
     metrics_data = data[data['effective_datetime'] <= timestamp].copy()
-    candlesticks_data = candlesticks[candlesticks['effective_datetime'] == timestamp].copy()
+
+    # Check if candlesticks is not None and has the required column
+    if candlesticks is not None and 'effective_datetime' in candlesticks.columns:
+        candlesticks_data = candlesticks[candlesticks['effective_datetime'] == timestamp].copy()
+    else:
+        print("Candlesticks data is missing or does not contain 'effective_datetime' column. SPX Spot Price line will not be added.")
+        candlesticks_data = pd.DataFrame()
 
     # Apply strike and expiration filters
     if strike_input != "all":
@@ -187,8 +193,8 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
             'positive': 'rgb(65,147,247)'  # light blue
         },
         'C': {
-            'negative': 'rgb(83,183,75)',   # dark green
-            'positive': 'rgb(145,199,153)'  # light green
+            'negative': 'rgb(50,168,82)',   # dark green
+            'positive': 'rgb(48,199,40)'  # light green
         },
         'P': {
             'negative': 'rgb(160,0,0)',   # dark red
@@ -294,30 +300,40 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
         x_min = min(trace.x.min() for trace in fig.data if hasattr(trace, 'x') and len(trace.x) > 0)
         x_max = max(trace.x.max() for trace in fig.data if hasattr(trace, 'x') and len(trace.x) > 0)
 
+        # Add some padding to the right of the chart
+        x_padding = (x_max - x_min) * 0.33  # 10% of the x-axis range
+        new_x_max = x_max + x_padding
+
+        # Update the x-axis range
+        fig.update_xaxes(range=[x_min, new_x_max])
+
         fig.add_shape(
             type="line",
             x0=x_min,
-            x1=x_max,
+            x1=new_x_max,
             y0=spx_spot_price,
             y1=spx_spot_price,
-            line=dict(color="black", width=4, dash="dash"),
+            line=dict(color="black", width=2, dash="dot"),  # Changed to dotted line
+            #line=dict(color="black", width=4, dash="dash"),
             name="SPX Spot Price"
         )
 
-        # Add annotation for SPX Spot Price
+        # Add annotation for SPX Spot Price in the padded area
         fig.add_annotation(
-            x=x_max,
+            x=new_x_max,
             y=spx_spot_price,
-            text=f"SPX Spot Price: {spx_spot_price:.2f}",
+            text=f"SPX Spot<br><b>{spx_spot_price:.2f}</b>",
+            #text=f"SPX Spot Price:\n{spx_spot_price:.2f}",
             showarrow=False,
             xanchor="right",
-            yanchor="bottom",
-            bgcolor="white",
+            yanchor="middle",
+            bgcolor="grey",  # Changed background color to grey
             bordercolor="black",
+            borderpad=6,  # Increased padding between text and border
+            #borderRadius=10,  # Added rounded corners
             borderwidth=1,
-            font=dict(color="black", size=16)
+            font=dict(color="white", size=16),  # Changed text color to white
         )
-
 
     # Update layout
     fig.update_layout(
@@ -402,6 +418,7 @@ def generate_gif(data,candlesticks, session_date, participant_input, position_ty
 
     # Construct the full path to the image
     full_img_path = project_root / img_path
+
 
     # Get unique timestamps
     timestamps = data['effective_datetime'].unique()
