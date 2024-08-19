@@ -189,23 +189,29 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
 
     colors = {
         'Net': {
-            'negative': 'rgb(0,0,130)',    # dark blue
-            'positive': 'rgb(65,147,247)'  # light blue
+            #'negative': 'rgb(0,0,130)',    # dark blue
+            'negative': 'rgb(0,149,255)',  # light blue
+            'positive': 'rgb(0,149,255)'  # light blue
+
         },
         'C': {
-            'negative': 'rgb(50,168,82)',   # dark green
-            'positive': 'rgb(48,199,40)'  # light green
+            # 'negative': 'rgb(50,168,82)',   # dark green
+            # 'positive': 'rgb(48,199,40)',  # light green
+            'negative': 'rgb(0,217,51)',  # dark green
+            'positive': 'rgb(0,217,51)'  # light green
         },
         'P': {
-            'negative': 'rgb(160,0,0)',   # dark red
-            'positive': 'rgb(255,0,0)'   # light red
+            # 'negative': 'rgb(160,0,0)',   # dark red
+            # 'positive': 'rgb(255,0,0)'   # light red
+            'negative': 'rgb(204,3,0)',  # dark red
+            'positive': 'rgb(204,3,0)'  # light red
         }
     }
 
     for pos_type in position_types:
         if pos_type in results_df.columns:
             positions = ['current', 'start_of_day', 'prior_update']
-            symbols = ['square', 'circle', 'x']
+            symbols = ['line-ns', 'circle', 'x-thin']
 
             for position, symbol in zip(positions, symbols):
                 def safe_extract(x, key):
@@ -227,6 +233,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
                         name=f'{pos_type} {position.capitalize().replace("_", " ")} (Positive)',
                         orientation='h',
                         marker_color=colors[pos_type]['positive'],
+
                         opacity=1,
                         legendgroup=pos_type,
                         legendgrouptitle_text=pos_type,
@@ -264,7 +271,14 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
                         y=results_df['strike_price'][valid_mask],
                         mode='markers',
                         name=f'{pos_type} {position.capitalize().replace("_", " ")}',
-                        marker=dict(symbol=symbol, size=8, color=colors[pos_type]['positive']),
+                        # marker=dict(symbol=symbol, size=10, color='black'),
+                        marker=dict(
+                            symbol=symbol,
+                            size=10,  # Increased size for better visibility
+                            color='black',
+                            line=dict(width=2, color='black'),  # Add a border to make it more visible
+                        ),
+                        #marker=dict(symbol=symbol, size=8, color=colors[pos_type]['positive']),
                         legendgroup=pos_type,
                         hovertemplate=f"<b>{position.capitalize().replace('_', ' ')}</b><br>" +
                                       "Strike: %{y}<br>" +
@@ -289,8 +303,12 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
                             x1=max_value,
                             y0=strike,
                             y1=strike,
-                            line=dict(color=colors[pos_type]['positive'], width=2),
-                            opacity=0.7,
+                            line=dict(
+                                color=colors[pos_type]['positive'],
+                                width=2.5,
+                                dash="solid",  # Options: "solid", "dot", "dash", "longdash", "dashdot", "longdashdot"
+                            ),
+                            opacity=1,
                         )
 
     # Add the horizontal line for SPX Spot Price if 'close' exists in candlesticks_data

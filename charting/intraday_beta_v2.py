@@ -29,10 +29,13 @@ def fetch_data(session_date: str, strike_range: List[int], expiration: str) -> [
     #session_date = '2024-08-19'
     #expiration = '2024-08-16 16:00:00'
 
+    #TODO: effective_datetime adaptive
+
+
     metrics_query =f"""
     SELECT * FROM intraday.intraday_books_test_posn
     WHERE effective_date = '{session_date}'
-    and effective_datetime > '2024-08-19 08:30:00'
+    and effective_datetime >= '2024-08-19 09:00:00'
     and strike_price between {strike_range[0]} and {strike_range[1]}
     and expiration_date_original = '{expiration}'
     """
@@ -162,13 +165,12 @@ def gif_flow(
     participant: str = 'total_customers',
     position_types: Optional[List[str]] = None,
     webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
-                        #'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
+                       #'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 ):
     if strike_range:
         strike_range = parse_strike_range(strike_range)
 
-    #position_types = ['Net']
-    position_types = ['Net', 'C', 'P']
+    position_types = ['Net','C','P']
     expiration = '2024-08-19'
 
 
@@ -176,7 +178,7 @@ def gif_flow(
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-        #TODO: +/- 200 pts from SPOT
+        #TODO: +/- 200 pts from SPOT Open
         strike_range = [5450, 5650]
     if expiration is None:
         expiration = session_date
