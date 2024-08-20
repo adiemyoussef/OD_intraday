@@ -11,7 +11,7 @@ import os
 from datetime import datetime, time
 
 DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
-
+#https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ
 
 default_date = date.today() - timedelta(days=0)
 LIST_PART = ['total_customers', 'broker', 'firm', 'retail', 'institution']
@@ -186,7 +186,6 @@ def zero_dte_flow(
     position_types = ['Net','C','P']
     expiration = str(session_date)
 
-    breakpoint()
 
     # Set default values if not provided
     if session_date is None:
