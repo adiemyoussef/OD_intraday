@@ -2,6 +2,7 @@ import uuid
 from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
+#3from imageio.plugins import ffmpeg
 from plotly.subplots import make_subplots
 import imageio.v2 as imageio
 from datetime import date, datetime
@@ -19,6 +20,7 @@ import json
 from datetime import datetime
 import cv2
 import imageio_ffmpeg
+import ffmpeg
 
 
 logger = logging.getLogger(__name__)
@@ -163,7 +165,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
         elif isinstance(expiration_input, date):
             metrics_data = metrics_data[metrics_data['expiration_date_original'] == expiration_input]
             subtitle_expiration = f"For expiration: {expiration_input}"
-            breakpoint()
+
         else:
 
             # Ensure expiration_input is a string in 'YYYY-MM-DD' format
@@ -491,6 +493,78 @@ from pathlib import Path
 import imageio
 import numpy as np
 
+def generate_discord_compatible_video(input_video_path, output_video_path):
+    """
+    Convert the input video to a Discord-compatible format.
+    """
+    try:
+        (
+            ffmpeg
+            .input(input_video_path)
+            .output(output_video_path, vcodec='libx264', acodec='aac', **{'b:v': '1M', 'b:a': '128k'})
+            .overwrite_output()
+            .run(capture_stdout=True, capture_stderr=True)
+        )
+        print(f"Successfully converted video to Discord-compatible format: {output_video_path}")
+        return output_video_path
+    except ffmpeg.Error as e:
+        print(f"Error occurred while converting video: {e.stderr.decode()}")
+        return None
+
+def generate_video_2(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
+                   img_path='config/images/logo_dark.png', color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
+                   output_video='None.mp4'):
+
+    # Get the project root directory
+    project_root = Path(__file__).parent.parent
+
+    # Construct the full path to the image
+    full_img_path = project_root / img_path
+
+    # Get unique timestamps
+    timestamps = data['effective_datetime'].unique()
+
+    # Create a unique temporary directory to store frames
+    temp_dir = f'temp_frames_{uuid.uuid4().hex}'
+    os.makedirs(temp_dir, exist_ok=True)
+
+    # Generate frames
+    frame_paths = []
+
+    for i, timestamp in enumerate(timestamps):
+        print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
+        fig = generate_frame(data, candlesticks, timestamp, participant_input, strike_input, expiration_input, position_type_input,
+                             full_img_path)
+
+        # Save the frame as an image
+        frame_path = os.path.join(temp_dir, f'frame_{i:03d}.png')
+        fig.write_image(frame_path)
+        frame_paths.append(frame_path)
+
+    # Use the frame_paths directly, no need for additional processing
+    file_paths = frame_paths
+
+    # Create the writer with the correct output path
+    temp_output = f'temp_{output_video}'
+    writer = imageio.get_writer(temp_output, fps=3)
+    #writer = imageio.get_writer(output_video, fps=3)
+
+    # Convert to Discord-compatible format
+    final_output = generate_discord_compatible_video(temp_output, output_video)
+
+    # Clean up temporary files
+    for file in frame_paths:
+        os.remove(file)
+    os.rmdir(temp_dir)
+    os.remove(temp_output)
+
+    if final_output:
+        print(f"Video saved as {final_output}")
+        return final_output
+    else:
+        print("Failed to generate Discord-compatible video")
+        return None
+
 def generate_video(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
                    img_path='config/images/logo_dark.png', color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
                    output_video='None.mp4'):
@@ -525,23 +599,33 @@ def generate_video(data, candlesticks, session_date, participant_input, position
     file_paths = frame_paths
 
     # Create the writer with the correct output path
-    writer = imageio.get_writer(output_video, fps=3)
+    temp_output = f'temp_{output_video}'
+    writer = imageio.get_writer(temp_output, fps=3)
 
     # Read and write images
     for file_path in file_paths:
         image = imageio.imread(file_path)
         writer.append_data(image)
 
-    print('Finished writing video')
+    print('Finished writing temporary video')
     writer.close()
+
+    # Convert to Discord-compatible format
+    final_output = generate_discord_compatible_video(temp_output, output_video)
 
     # Clean up temporary files
     for file in frame_paths:
         os.remove(file)
     os.rmdir(temp_dir)
+    os.remove(temp_output)
 
-    print(f"Video saved as {output_video}")
-    return output_video
+    if final_output:
+        print(f"Video saved as {final_output}")
+        return final_output
+    else:
+        print("Failed to generate Discord-compatible video")
+        return None
+
 def send_to_discord(webhook_url, file_paths, content=None, title=None, description=None, fields=None,
                     footer_text=None):
     """
