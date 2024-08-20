@@ -17,8 +17,7 @@ from io import BytesIO
 import requests
 import json
 from datetime import datetime
-import cv2
-import imageio_ffmpeg
+import os
 
 
 logger = logging.getLogger(__name__)
@@ -35,14 +34,6 @@ console_handler.setFormatter(file_formatter)
 # Add the handler to the logger
 logger.addHandler(console_handler)
 
-participant_mapping = {
-    'mm': 'Market Makers',
-    'broker': 'Brokers and Dealers',
-    'firm': 'Firms',
-    'nonprocus': 'Non-Professional Customers',
-    'procust': 'Professional Customers',
-    'total_customers': 'Total Customers'
-}
 
 def generate_frame_wrapper(args):
     timestamp, index, generate_frame_partial = args
@@ -134,6 +125,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
         img_src = None
 
 
+
     metrics_data = data[data['effective_datetime'] <= timestamp].copy()
 
     # Check if candlesticks is not None and has the required column
@@ -172,9 +164,10 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
             metrics_data['expiration_date_original'] = pd.to_datetime(metrics_data['expiration_date_original']).dt.strftime(
                 '%Y-%m-%d')
 
+
             metrics_data = metrics_data[metrics_data['expiration_date_original'] == expiration_input]
             subtitle_expiration = f"For expiration: {expiration_input}"
-
+            #breakpoint()
 
     else:
         subtitle_expiration = "All Expirations"
@@ -361,12 +354,11 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
             font=dict(color="white", size=16),  # Changed text color to white
         )
 
-
     # Update layout
     fig.update_layout(
         title=dict(
             text=(f"<b>Breakdown By Strike</b><br>"
-                  f"<sup>SPX: {participant_mapping.get(participant, 'Unknown Participant')} {position_type} {metric} as of {timestamp}</sup><br>"
+                  f"<sup>SPX: {participant.upper()} {position_type} {metric} as of {timestamp}</sup><br>"
                   f"<sup>{subtitle_strike} | {subtitle_expiration}</sup>"),
             font=dict(family="Arial", size=24, color="black"),
             x=0.0,
@@ -471,7 +463,7 @@ def generate_gif(data,candlesticks, session_date, participant_input, position_ty
     frames.append(imageio.imread(frame_path))
 
     # Create the GIF
-    imageio.mimsave(output_gif, frames, fps=1.5)
+    imageio.mimsave(output_gif, frames, fps=5)
 
     # Clean up temporary files
     for file in os.listdir(temp_dir):
@@ -481,67 +473,8 @@ def generate_gif(data,candlesticks, session_date, participant_input, position_ty
     print(f"Animation saved as {output_gif}")
     return output_gif
 
-import cv2
-import numpy as np
-from PIL import Image
 
-import os
-import uuid
-from pathlib import Path
-import imageio
-import numpy as np
 
-def generate_video(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
-                   img_path='config/images/logo_dark.png', color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
-                   output_video='None.mp4'):
-
-    # Get the project root directory
-    project_root = Path(__file__).parent.parent
-
-    # Construct the full path to the image
-    full_img_path = project_root / img_path
-
-    # Get unique timestamps
-    timestamps = data['effective_datetime'].unique()
-
-    # Create a unique temporary directory to store frames
-    temp_dir = f'temp_frames_{uuid.uuid4().hex}'
-    os.makedirs(temp_dir, exist_ok=True)
-
-    # Generate frames
-    frame_paths = []
-
-    for i, timestamp in enumerate(timestamps):
-        print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
-        fig = generate_frame(data, candlesticks, timestamp, participant_input, strike_input, expiration_input, position_type_input,
-                             full_img_path)
-
-        # Save the frame as an image
-        frame_path = os.path.join(temp_dir, f'frame_{i:03d}.png')
-        fig.write_image(frame_path)
-        frame_paths.append(frame_path)
-
-    # Use the frame_paths directly, no need for additional processing
-    file_paths = frame_paths
-
-    # Create the writer with the correct output path
-    writer = imageio.get_writer(output_video, fps=3)
-
-    # Read and write images
-    for file_path in file_paths:
-        image = imageio.imread(file_path)
-        writer.append_data(image)
-
-    print('Finished writing video')
-    writer.close()
-
-    # Clean up temporary files
-    for file in frame_paths:
-        os.remove(file)
-    os.rmdir(temp_dir)
-
-    print(f"Video saved as {output_video}")
-    return output_video
 def send_to_discord(webhook_url, file_paths, content=None, title=None, description=None, fields=None,
                     footer_text=None):
     """
@@ -664,76 +597,6 @@ def generate_and_send_gif(data, session_date, participant, position_type , strik
     success = send_to_discord(
         webhook_url,
         gif_path,
-        content={content},
-        title=title,
-        description=description,
-        fields=fields,
-        footer_text=footer_text
-    )
-
-    os.remove(gif_path)  # Clean up the gif file
-    return success
-
-
-def generate_and_send_video(data, session_date, participant, position_type , strike_input, expiration,webhook_url):
-    video_path = generate_video(
-        data,
-        session_date,
-        participant_input = participant,
-        position_type_input=position_type,
-        strike_input=strike_input,
-        expiration_input=expiration,)
-
-
-
-    if video_path is None:
-        print(f"Failed to generate video for {session_date} with strike input {strike_input}")
-        return False
-
-    participant_mapping = {
-        'mm': 'Market Makers',
-        'broker': 'Brokers and Dealers',
-        'firm': 'Firms',
-        'nonprocus': 'Non-Professional Customers',
-        'procust': 'Professional Customers',
-        'total_customers': 'Total Customers'
-    }
-
-    # Usage example:
-    participant_text = participant_mapping.get(participant, 'Unknown Participant')
-
-    title = f"📊{session_date} Intraday Recap."
-    description = (
-        f"Detailed analysis of {participant_text} positions for the {session_date} session.\n"
-        f"This chart provides insights into market movements and positioning within the specified strike range."
-    )
-    fields = [
-        {"name": "👥 Participant(s)", "value": participant_text, "inline": True},
-        {"name": "🎯 Strike Range", "value": f"{strike_input[0]} - {strike_input[1]}", "inline": True},
-        {"name": "📅 Expiration(s)", "value": session_date, "inline": True},
-        {"name": "📈 Analysis Type", "value": "Intraday Positional Movement", "inline": True},
-        {"name": "🕒 Time Range", "value": "Market Hours", "inline": True},
-        {"name": "🔄 Update Frequency", "value": "10 minutes", "inline": True},
-        #{"name": "📊 Data Points", "value": str(len(data)), "inline": False},
-        {"name": "💡 Interpretation", "value": (
-            "• Green bars indicate Calls positioning\n"
-            "• Red bars indicate Puts positioning\n"
-            "• Blue bars indicate Net positioning\n"
-            "\n"
-            "• ■ represents current position magnitude\n"
-            "• ● represents the start of day position magnitude\n"
-            "• ✖ represents the prior update position magnitude\n"
-        ), "inline": False},
-    ]
-    footer_text = f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} by OptionsDepth"
-
-    #TODO: add different content depending on the time of the day
-    content = "🚀 New options chart analysis is ready! Check out the latest market insights below."
-
-
-    success = send_to_discord(
-        webhook_url,
-        video_path,
         content={content},
         title=title,
         description=description,

@@ -3,7 +3,8 @@ from prefect import flow, task
 from prefect.tasks import task_input_hash, Task
 from datetime import timedelta, datetime, date
 from typing import List, Optional
-from charting.generate_gifs import generate_gif, send_to_discord
+#from charting.generate_gifs import generate_gif, send_to_discord
+from charting.generate_gifs import generate_gif, send_to_discord,generate_video
 from utilities.db_utils import DatabaseUtilities
 from config.config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 import os
@@ -26,16 +27,13 @@ def parse_strike_range(strike_range: str) -> List[int]:
 @task(cache_key_fn=None, cache_expiration=timedelta(hours=0, minutes=1))
 def fetch_data(session_date: str, strike_range: List[int], expiration: str) -> [pd.DataFrame]:
 
-    #session_date = '2024-08-19'
-    #expiration = '2024-08-16 16:00:00'
-
     #TODO: effective_datetime adaptive
 
 
     metrics_query =f"""
     SELECT * FROM intraday.intraday_books_test_posn
     WHERE effective_date = '{session_date}'
-    and effective_datetime >= '2024-08-19 09:00:00'
+    and effective_datetime >= '2024-08-19 17:00:00'
     and strike_price between {strike_range[0]} and {strike_range[1]}
     and expiration_date_original = '{expiration}'
     """
@@ -81,9 +79,25 @@ def process_data(metric: pd.DataFrame,candlesticks: pd.DataFrame, session_date: 
             print(f"Failed to generate GIF for {position_type}")
     return gif_paths
 
+@task
+def generate_video_task(metric: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
+                        strike_range: List[int], expiration: str, position_type: list) -> str:
+
+    videos_paths =[]
+
+    for pos_type in position_type:
+
+        video_path = generate_video(
+            metric, candlesticks, session_date, participant, pos_type,
+            strike_range, expiration,
+            output_video=f'{pos_type}_{expiration}_animated_chart.mp4'
+        )
+        videos_paths.append(video_path)
+
+    return videos_paths
 
 @task
-def send_discord_message(gif_paths: List[str], session_date: str, participant: str,
+def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_date: str, participant: str,
                          strike_range: List[int], expiration: str, position_types: List[str],
                          webhook_url: str) -> bool:
     participant_mapping = {
@@ -108,7 +122,7 @@ def send_discord_message(gif_paths: List[str], session_date: str, participant: s
         {"name": "", "value": "", "inline": True},
         {"name": "", "value": "", "inline": True},
         {"name": "📈 Analysis Type", "value": "Intraday Positional Movement", "inline": True},
-        {"name": "⏰ As of:", "value": current_time, "inline": True},
+        {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
         {"name": "", "value":"", "inline": True},
         {"name": "👥 Participant(s)", "value": participant_text, "inline": True},
         {"name": "🎯 Strike Range", "value": f"{strike_range[0]} - {strike_range[1]}", "inline": True},
@@ -131,7 +145,7 @@ def send_discord_message(gif_paths: List[str], session_date: str, participant: s
 
     success = send_to_discord(
         webhook_url,
-        gif_paths,
+        file_paths,
         content="🚀 New options chart analysis is ready! Check out the latest market insights below.",
         title=title,
         description=description,
@@ -140,7 +154,7 @@ def send_discord_message(gif_paths: List[str], session_date: str, participant: s
     )
 
     # Clean up the gif files after sending
-    for path in gif_paths:
+    for path in file_paths:
         try:
             os.remove(path)
         except FileNotFoundError:
@@ -164,14 +178,15 @@ def gif_flow(
     expiration: Optional[str] = None,
     participant: str = 'total_customers',
     position_types: Optional[List[str]] = None,
-    webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
-                       #'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
+    webhook_url: str = #'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
+                       'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 ):
     if strike_range:
         strike_range = parse_strike_range(strike_range)
 
+    position_types = ['Net'] #, 'C', 'P']
     position_types = ['Net','C','P']
-    expiration = '2024-08-19'
+    expiration = '2024-08-20'
 
 
     # Set default values if not provided
@@ -187,18 +202,21 @@ def gif_flow(
     elif 'All' in position_types:
         position_types = ['C', 'P', 'Net']
 
-
     # Fetch data
     metrics, candlesticks = fetch_data(session_date, strike_range, expiration)
 
+    as_of_time_stamp = str(metrics["effective_datetime"].max())
     # Process data and generate GIFs
-    gif_paths = process_data(metrics, candlesticks, session_date, participant, strike_range, expiration, position_types)
+    #gif_paths = process_data(metrics, candlesticks, session_date, participant, strike_range, expiration, position_types)
 
-    # Send Discord message
-    success = send_discord_message(gif_paths, session_date, participant, strike_range, expiration, position_types, webhook_url)
+    videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration, position_types)
+    print(f"Video generated at: {videos_paths}")
 
-    if success:
-        print(f"Successfully processed and sent intraday data for {session_date}")
+    # Send Discord message with Videos
+    video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types, webhook_url)
+
+    if video_success:
+        print(f"Successfully processed and sent intraday data (GIF and video) for {session_date}")
     else:
         print(f"Failed to process or send intraday data for {session_date}")
 
