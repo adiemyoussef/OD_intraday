@@ -824,6 +824,19 @@ def compare_dataframes(posn_only, final_book_clean_insert):
 
 
 #----------------- FLOWS ------------------#
+@flow(name="Post-Processing Flow 1")
+def post_processing_flow_1():
+    logger = get_run_logger()
+    logger.info("Post-Processing Flow 1 is running")
+    # Add any post-processing logic here
+
+@flow(name="Post-Processing Flow 2")
+def post_processing_flow_2():
+    logger = get_run_logger()
+    logger.info("Post-Processing Flow 2 is running")
+    # Add any post-processing logic here
+
+
 @flow(
     name="Intraday Flow",
     description="""
@@ -1096,6 +1109,9 @@ def Intraday_Flow():
                             if attempt == RABBITMQ_MAX_ACK_RETRIES - 1:
                                 logger.error(f"Failed to acknowledge message {file_info['file_name']} after all retries.")
                             time.sleep(10)  # Wait a bit before retrying
+
+                    post_processing_flow_1()
+                    post_processing_flow_2()
                     logger.info(f"Finished flow in {time.time()-flow_start_time} sec.")
 
 
