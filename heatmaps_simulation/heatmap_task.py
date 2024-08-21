@@ -180,7 +180,9 @@ def book_to_list(book:pd.DataFrame, sim_times):
 
 @task(name= "Generate heatmap")
 def generate_heatmaps(sim_times: list, prices: list, deltas:np.ndarray, trade_date:datetime.date, hour_start:datetime.date):
-    print("Generating heatmap results")
+    prefect_logger = get_run_logger()
+
+    prefect_logger.info("Generating heatmap results")
     simtime_number = []
     for (i, time) in enumerate(sim_times):
         simtime_number.append(i)
@@ -217,8 +219,9 @@ def generate_heatmaps(sim_times: list, prices: list, deltas:np.ndarray, trade_da
 
 @task(name= "Compute heatmap")
 def compute_heatmap(args, type: str, df_book: pd.DataFrame, start_time: datetime, price: float, steps: float, range: float):
+    prefect_logger = get_run_logger()
     num_processors = os.cpu_count()
-    print("Number of processors available:", num_processors)
+    prefect_logger.info("Number of processors available:", num_processors)
     args.proc = num_processors
     args.mode = type
 
@@ -267,7 +270,7 @@ def heatmap_generation_flow():
 
     # Input parameters
     #spx = {"steps": HEATMAP_PRICE_STEPS, "range": HEATMAP_PRICE_RANGE}
-    spx = {"steps": 5, "range": 5}
+    spx = {"steps": 5, "range": 0.005}
     open_price = 5500
     effective_datetime = '2024-08-21 10:30:00'
     datetime_object = pd.to_datetime(effective_datetime)
@@ -276,9 +279,11 @@ def heatmap_generation_flow():
     query = f"""
     SELECT * FROM intraday.intraday_books
     WHERE effective_date ='2024-08-21'
-    and effective_datetime = '{effective_datetime}'
+    and effective_datetime = '2024-08-21 10:30:00'
     """
     df_book = fetch_data_from_db(query)
+    unique_eff_datetime = df_book["effective_date"].unique()
+    prefect_logger.info(f"{unique_eff_datetime}")
 
     # Compute heatmap
     start_heatmap_computations = time.time()
