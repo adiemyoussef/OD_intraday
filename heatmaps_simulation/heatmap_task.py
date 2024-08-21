@@ -12,6 +12,7 @@ from utilities.db_utils import *
 import requests
 from datetime import datetime
 import io
+from prefect import task, flow, get_run_logger
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -177,6 +178,7 @@ def book_to_list(book:pd.DataFrame, sim_times):
 
     return result.values.tolist()
 
+@task(name= "Generate heatmap")
 def generate_heatmaps(sim_times: list, prices: list, deltas:np.ndarray, trade_date:datetime.date, hour_start:datetime.date):
     print("Generating heatmap results")
     simtime_number = []
@@ -212,8 +214,9 @@ def generate_heatmaps(sim_times: list, prices: list, deltas:np.ndarray, trade_da
 
     return df_charm, df_gamma, df_gamma_der, df_gamma_2der
 
-def compute_heatmap(args, type:str, df_book: pd.DataFrame, start_time:datetime, price:float, steps:float, range:float):
 
+@task(name= "Compute heatmap")
+def compute_heatmap(args, type: str, df_book: pd.DataFrame, start_time: datetime, price: float, steps: float, range: float):
     num_processors = os.cpu_count()
     print("Number of processors available:", num_processors)
     args.proc = num_processors
@@ -245,44 +248,48 @@ def compute_heatmap(args, type:str, df_book: pd.DataFrame, start_time:datetime, 
 
     return df_charm, df_gamma, minima_df, maxima_df
 
+@task(name= "Fetch Data")
+def fetch_data_from_db(query):
+    return db.execute_query(query)
 
-if __name__ == "__main__":
-
-    #------------- INPUTS ------------#
-    spx = {"steps": HEATMAP_PRICE_STEPS, "range": HEATMAP_PRICE_RANGE}
-    open_price = 5500
-
-
-    #----------------------------------#
-    # -----------DATA READING----------#
-    query = """
-    SELECT * FROM intraday.intraday_books
-    WHERE effective_date ='2024-08-21'
-    and effective_datetime = '2024-108-2 09:30:00'
-    """
-    df_book = db.execute_query(query)
-
-    effective_datetime = '2024-08-24 09:30:00'
-    datetime_object = pd.to_datetime(effective_datetime)
-
-    start_heatmap_computations = time.time()
-    df_charm, df_gamma, minima_df, maxima_df = compute_heatmap(args, type='delta', df_book=df_book,
-                                          start_time=datetime_object, price=open_price,
-                                          steps=spx['steps'], range=spx['range'])
-    logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
-
-    #unpivoted_intraday_gamma=build_unpivot(df_gamma,minima_df,maxima_df)
-    #unpivoted_intraday_charm=build_unpivot(df_charm,minima_df,maxima_df)
-
+@task(name= 'Plot and send chart')
+def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime):
     gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df, effective_datetime=effective_datetime, spx=None)
     send_to_discord(DEV_CHANNEL, gamma_chart)
 
-    # charm_chart = plot_charm(df_heatmap=df_charm, minima_df=minima_df, maxima_df=maxima_df, effective_datetime=effective_datetime, spx=None)
-    # send_discord(gamma_chart)
+@flow(name="Heatmap Generation Flow")
+def heatmap_generation_flow():
+    prefect_logger = get_run_logger()
 
-    # db.push_to_db(unpivoted_intraday_gamma)
-    # db.push_to_db(unpivoted_intraday_charm)
+    # Input parameters
+    spx = {"steps": HEATMAP_PRICE_STEPS, "range": HEATMAP_PRICE_RANGE}
+    open_price = 5500
+    effective_datetime = '2024-08-24 09:30:00'
+    datetime_object = pd.to_datetime(effective_datetime)
 
-    logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
+    # Fetch data
+    query = """
+    SELECT * FROM intraday.intraday_books
+    WHERE effective_date ='2024-08-21'
+    and effective_datetime = '2024-08-21 09:30:00'
+    """
+    df_book = fetch_data_from_db(query)
 
-    logger.info("All heatmaps have been processed !!!!")
+    # Compute heatmap
+    start_heatmap_computations = time.time()
+    args = argparse.Namespace(proc=os.cpu_count(), mode='delta')
+    df_charm, df_gamma, minima_df, maxima_df = compute_heatmap(
+        args, type='delta', df_book=df_book,
+        start_time=datetime_object, price=open_price,
+        steps=spx['steps'], range=spx['range']
+    )
+    prefect_logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
+
+    # Plot and send chart
+    plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime)
+
+    prefect_logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
+    prefect_logger.info("All heatmaps have been processed !!!!")
+
+if __name__ == "__main__":
+    heatmap_generation_flow()
