@@ -17,7 +17,7 @@ import io
 from prefect import task, flow, get_run_logger
 from plotly.io import to_image
 from PIL import Image
-
+import plotly.io as pio
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
