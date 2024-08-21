@@ -426,6 +426,11 @@ def heatmap_generation_flow(
     )
     prefect_logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
 
+    # Plot and send chart
+    plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks = candlesticks_resampled)
+
+    prefect_logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
+
     gamma_to_push = build_unpivot(df_gamma,effective_datetime, minima_df,maxima_df)
     prefect_logger.info(f"Built unpivoted gamma data. Shape: {gamma_to_push.shape}")
 
@@ -434,11 +439,6 @@ def heatmap_generation_flow(
     prefect_logger.info(f'{db.get_status()}')
     db.insert_progress('intraday','intraday_gamma',gamma_to_push)
     prefect_logger.info("Inserted gamma data into database")
-
-    # Plot and send chart
-    plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks = candlesticks_resampled)
-
-    prefect_logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
 
 if __name__ == "__main__":
