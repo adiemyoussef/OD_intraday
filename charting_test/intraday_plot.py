@@ -11,7 +11,7 @@ import warnings
 import yfinance as yf
 from config.config import *
 from pathlib import Path
-
+from prefect import task, flow, get_run_logger
 with warnings.catch_warnings():
     warnings.simplefilter("ignore", category=RuntimeWarning)
 
@@ -115,7 +115,7 @@ def get_traces(result_df, key_values, key_prices, line_color):
 
 
 def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None, save_fig=False, fig_show = False):
-
+    prefect_logger = get_logger_run()
     x = df_heatmap.index
     y = df_heatmap.columns.values
     z = df_heatmap.values.transpose()
@@ -249,6 +249,7 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
     # if not spx empty
     #----- Adding OHLC -----
     if spx is not None:
+        prefect_logger.info("Entering OHLC overlay")
         candlestick = go.Candlestick(
             x=spx.index,
             open=spx['open'],

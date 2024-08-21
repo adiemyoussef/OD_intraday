@@ -351,10 +351,16 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
         image_height = 810  # Height in pixels
         scale_factor = 3  # Increase for better quality, especially for raster formats
 
-        # Convert Plotly figure to PNG image
-        img_bytes = to_image(gamma_chart,width= image_width,height=image_height, format="png", scale=scale_factor)
+        # Try different image conversion methods
+        try:
+            prefect_logger.info("Attempting to convert figure to image using to_image")
+            img_bytes = to_image(gamma_chart, width=image_width, height=image_height, format="png", scale=scale_factor)
+        except Exception as e:
+            prefect_logger.warning(f"to_image failed: {str(e)}. Trying pio.to_image")
+            img_bytes = pio.to_image(gamma_chart, width=image_width, height=image_height, format="png",
+                                     scale=scale_factor)
 
-
+        prefect_logger.info("Successfully converted figure to image")
 
         prefect_logger.info("Sending chart to Discord")
         send_to_discord(DEV_CHANNEL, img_bytes, title=f"Gamma Heatmap for {effective_datetime}")
@@ -421,12 +427,13 @@ def heatmap_generation_flow(
     prefect_logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
 
     gamma_to_push = build_unpivot(df_gamma,effective_datetime, minima_df,maxima_df)
+    prefect_logger.info(f"Built unpivoted gamma data. Shape: {gamma_to_push.shape}")
 
     prefect_logger.info(f'{db.get_status()}')
     db.connect()
     prefect_logger.info(f'{db.get_status()}')
     db.insert_progress('intraday','intraday_gamma',gamma_to_push)
-
+    prefect_logger.info("Inserted gamma data into database")
 
     # Plot and send chart
     plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks = candlesticks_resampled)
