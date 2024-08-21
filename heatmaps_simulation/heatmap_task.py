@@ -2,6 +2,7 @@ import base64
 import time
 import pandas as pd
 import pytz
+from kaleido.scopes.plotly import PlotlyScope
 from matplotlib import pyplot as plt
 from cupy_numba.main import compute_all
 import argparse
@@ -372,9 +373,11 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
             html = gamma_chart.to_html(include_plotlyjs='cdn', full_html=False)
             prefect_logger.info(f"Generated HTML. Length: {len(html)}")
 
+            send_to_discord(DEV_CHANNEL, html, title=f"Gamma Heatmap for {effective_datetime}")
             # Here you would typically use a headless browser to capture a screenshot
             # For this example, we'll just encode the HTML as base64
-            img_bytes = base64.b64encode(html.encode('utf-8'))
+            scope = PlotlyScope()
+            img_bytes = scope.transform(gamma_chart, format="png", width=1440, height=810)
             prefect_logger.info(f"Encoded HTML as base64. Size: {len(img_bytes)} bytes")
 
         if img_bytes:
@@ -383,7 +386,7 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
             raise ValueError("Image conversion resulted in empty bytes")
 
         prefect_logger.info("Sending chart to Discord")
-        send_to_discord(DEV_CHANNEL, img_bytes, title=f"Gamma Heatmap for {effective_datetime}")
+        send_to_discord(DEV_CHANNEL, html, title=f"Gamma Heatmap for {effective_datetime}")
 
     except Exception as e:
         prefect_logger.exception(f"Error in plot_and_send_chart: {str(e)}")
