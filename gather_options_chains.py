@@ -166,7 +166,11 @@ def fetch_options_data(engine, run_id):
 
 
     start_time = time.time()
+
+    #TODO: Add insert in PG
     insert_with_progress(engine,"landing", df_final,"poly_options_data")
+    # Insert_to_pg()
+
     prefect_logger.info(f"Time taken to fetch options chain: {time.time() - start_time} seconds")
     logging.info(f"Time taken to insert options chain: {time.time() - start_time} seconds")
 
