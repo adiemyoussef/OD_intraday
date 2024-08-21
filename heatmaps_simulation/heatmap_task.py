@@ -1,7 +1,6 @@
 import time
 import pandas as pd
 from matplotlib import pyplot as plt
-
 from cupy_numba.main import compute_all
 import argparse
 import os
@@ -367,7 +366,8 @@ def heatmap_generation_flow(
     prefect_logger.info(f'{db.get_status()}')
     db.connect()
     prefect_logger.info(f'{db.get_status()}')
-    db.insert_progress("intraday","intraday_gamma",gamma_to_push)
+    db.insert_progress('intraday','intraday_gamma',gamma_to_push)
+    d
 
     # Plot and send chart
     # plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks = None)
