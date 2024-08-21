@@ -1,3 +1,4 @@
+import base64
 import time
 import pandas as pd
 import pytz
@@ -361,15 +362,25 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
             height=image_height
         )
         # Try different methods to save the figure
-        # try:
-        img_buffer = io.BytesIO()
-        gamma_chart.write_image(img_buffer, format="png", scale=3)
-        img_bytes = img_buffer.getvalue()
+        try:
+            img_bytes = gamma_chart.to_image(format="png", scale=3)
+            prefect_logger.info(f"Successfully converted figure to image using to_image. Size: {len(img_bytes)} bytes")
+        except Exception as e:
+            prefect_logger.warning(f"to_image failed: {str(e)}. Trying alternative method.")
+
+            # Alternative method: Save as HTML and capture screenshot
+            html = gamma_chart.to_html(include_plotlyjs='cdn', full_html=False)
+            prefect_logger.info(f"Generated HTML. Length: {len(html)}")
+
+            # Here you would typically use a headless browser to capture a screenshot
+            # For this example, we'll just encode the HTML as base64
+            img_bytes = base64.b64encode(html.encode('utf-8'))
+            prefect_logger.info(f"Encoded HTML as base64. Size: {len(img_bytes)} bytes")
+
         if img_bytes:
-            prefect_logger.info(f"Successfully converted figure to image. Size: {len(img_bytes)} bytes")
+            prefect_logger.info(f"Successfully converted figure to image/HTML. Size: {len(img_bytes)} bytes")
         else:
             raise ValueError("Image conversion resulted in empty bytes")
-
 
         prefect_logger.info("Sending chart to Discord")
         send_to_discord(DEV_CHANNEL, img_bytes, title=f"Gamma Heatmap for {effective_datetime}")
