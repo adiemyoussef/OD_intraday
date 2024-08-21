@@ -362,22 +362,14 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
         )
         # Try different methods to save the figure
         try:
-            prefect_logger.info("Attempting to convert figure to image using to_image")
-            img_bytes = to_image(gamma_chart, format="png", scale=3)
-        except Exception as e:
-            prefect_logger.warning(f"to_image failed: {str(e)}. Trying pio.to_image")
-            try:
-                img_bytes = pio.to_image(gamma_chart, format="png", scale=3)
-            except Exception as e:
-                prefect_logger.warning(f"pio.to_image failed: {str(e)}. Trying write_image")
-                img_buffer = io.BytesIO()
-                gamma_chart.write_image(img_buffer, format="png", scale=3)
-                img_bytes = img_buffer.getvalue()
+            img_buffer = io.BytesIO()
+            gamma_chart.write_image(img_buffer, format="png", scale=3)
+            img_bytes = img_buffer.getvalue()
+            if img_bytes:
+                prefect_logger.info(f"Successfully converted figure to image. Size: {len(img_bytes)} bytes")
+            else:
+                raise ValueError("Image conversion resulted in empty bytes")
 
-        if img_bytes:
-            prefect_logger.info(f"Successfully converted figure to image. Size: {len(img_bytes)} bytes")
-        else:
-            raise ValueError("Image conversion resulted in empty bytes")
 
         prefect_logger.info("Sending chart to Discord")
         send_to_discord(DEV_CHANNEL, img_bytes, title=f"Gamma Heatmap for {effective_datetime}")
