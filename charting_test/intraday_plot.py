@@ -114,7 +114,7 @@ def get_traces(result_df, key_values, key_prices, line_color):
     return traces
 
 
-def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None, save_fig=True, fig_show = True):
+def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None, save_fig=False, fig_show = False):
 
     x = df_heatmap.index
     y = df_heatmap.columns.values
@@ -325,6 +325,7 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
         )
         print(f"Image saved to: {save_path}")
 
+    return fig
 def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=None,show_fig = False):
 
 
