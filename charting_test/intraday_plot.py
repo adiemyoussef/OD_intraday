@@ -10,7 +10,7 @@ from PIL import Image
 import warnings
 import yfinance as yf
 from config.config import *
-
+from pathlib import Path
 
 with warnings.catch_warnings():
     warnings.simplefilter("ignore", category=RuntimeWarning)
@@ -18,8 +18,33 @@ with warnings.catch_warnings():
 
 # Adjust the fps as needed.
 
-img = Image.open(LOGO_dark)
-img2 = Image.open(LOGO_light)
+# img = Image.open(LOGO_dark)
+# img2 = Image.open(LOGO_light)
+
+
+# At the top of your heatmap_task.py file, add:
+# Get the directory of the current script
+SCRIPT_DIR = Path(__file__).parent.resolve()
+
+# Define the path to the config directory relative to the script
+CONFIG_DIR = SCRIPT_DIR.parent / 'config'
+
+# Update the LOGO_dark path
+LOGO_dark = str(CONFIG_DIR / 'images' / 'logo_dark.png')
+
+# In your intraday_plot.py file, update the image loading:
+from PIL import Image
+
+def load_logo():
+    try:
+        return Image.open(LOGO_dark)
+    except FileNotFoundError:
+        print(f"Warning: Logo file not found at {LOGO_dark}. Using placeholder.")
+        return Image.new('RGBA', (100, 100), color = (73, 109, 137))
+
+# Replace the original Image.open(LOGO_dark) with:
+img = load_logo()
+
 
 def create_gif(folder_path:str, output_filename:str):
     """
