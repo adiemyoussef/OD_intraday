@@ -16,6 +16,8 @@ from datetime import datetime
 import io
 from prefect import task, flow, get_run_logger
 from plotly.io import to_image
+from PIL import Image
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -30,18 +32,15 @@ console_handler.setFormatter(file_formatter)
 
 # Add the handler to the logger
 logger.addHandler(console_handler)
+prefect_logger = get_run_logger()
+
 
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()
-print(f'{db.get_status()}')
+prefect_logger.info(f'{db.get_status()}')
 
 DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 
-import requests
-from datetime import datetime
-import io
-from PIL import Image
-from prefect import get_run_logger
 
 
 def send_to_discord(webhook_url, image, content=None, title=None, description=None, fields=None, footer_text=None):
@@ -366,6 +365,9 @@ def heatmap_generation_flow(
 
     gamma_to_push = build_unpivot(df_gamma,effective_datetime, minima_df,maxima_df)
 
+    prefect_logger.info(f'{db.get_status()}')
+    db.connect()
+    prefect_logger.info(f'{db.get_status()}')
     db.insert_progress("intraday","intraday_gamma",gamma_to_push)
 
     # Plot and send chart
