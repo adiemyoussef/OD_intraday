@@ -502,6 +502,16 @@ def generate_discord_compatible_video(input_video_path, output_video_path):
             ffmpeg
             .input(input_video_path)
             .output(output_video_path, vcodec='libx264', acodec='aac', **{'b:v': '1M', 'b:a': '128k'})
+            # .output(output_video_path,
+            #         vcodec='libx264',
+            #         acodec='aac',
+            #         vf='scale=1280:-2',  # Ensure width is 1280, height auto
+            #         video_bitrate='5M',
+            #         audio_bitrate='384k',
+            #         r=30,  # Frame rate
+            #         pix_fmt='yuv420p',  # Pixel format
+            #         movflags='+faststart'
+            #         )
             .overwrite_output()
             .run(capture_stdout=True, capture_stderr=True)
         )
@@ -511,59 +521,6 @@ def generate_discord_compatible_video(input_video_path, output_video_path):
         print(f"Error occurred while converting video: {e.stderr.decode()}")
         return None
 
-def generate_video_2(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
-                   img_path='config/images/logo_dark.png', color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
-                   output_video='None.mp4'):
-
-    # Get the project root directory
-    project_root = Path(__file__).parent.parent
-
-    # Construct the full path to the image
-    full_img_path = project_root / img_path
-
-    # Get unique timestamps
-    timestamps = data['effective_datetime'].unique()
-
-    # Create a unique temporary directory to store frames
-    temp_dir = f'temp_frames_{uuid.uuid4().hex}'
-    os.makedirs(temp_dir, exist_ok=True)
-
-    # Generate frames
-    frame_paths = []
-
-    for i, timestamp in enumerate(timestamps):
-        print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
-        fig = generate_frame(data, candlesticks, timestamp, participant_input, strike_input, expiration_input, position_type_input,
-                             full_img_path)
-
-        # Save the frame as an image
-        frame_path = os.path.join(temp_dir, f'frame_{i:03d}.png')
-        fig.write_image(frame_path)
-        frame_paths.append(frame_path)
-
-    # Use the frame_paths directly, no need for additional processing
-    file_paths = frame_paths
-
-    # Create the writer with the correct output path
-    temp_output = f'temp_{output_video}'
-    writer = imageio.get_writer(temp_output, fps=3)
-    #writer = imageio.get_writer(output_video, fps=3)
-
-    # Convert to Discord-compatible format
-    final_output = generate_discord_compatible_video(temp_output, output_video)
-
-    # Clean up temporary files
-    for file in frame_paths:
-        os.remove(file)
-    os.rmdir(temp_dir)
-    os.remove(temp_output)
-
-    if final_output:
-        print(f"Video saved as {final_output}")
-        return final_output
-    else:
-        print("Failed to generate Discord-compatible video")
-        return None
 
 def generate_video(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
                    img_path='config/images/logo_dark.png', color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
@@ -825,5 +782,5 @@ def generate_and_send_video(data, session_date, participant, position_type , str
         footer_text=footer_text
     )
 
-    os.remove(gif_path)  # Clean up the gif file
+    os.remove(video_path)  # Clean up the gif file
     return success
