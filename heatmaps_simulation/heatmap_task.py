@@ -315,7 +315,7 @@ def heatmap_generation_flow():
 
     # Input parameters
     #spx = {"steps": HEATMAP_PRICE_STEPS, "range": HEATMAP_PRICE_RANGE}
-    spx = {"steps": 5, "range": 0.005}
+    spx = {"steps": 5, "range": 0.025}
     open_price = 5500
     effective_datetime = '2024-08-21 10:30:00'
     datetime_object = pd.to_datetime(effective_datetime)
