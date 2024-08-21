@@ -321,16 +321,18 @@ def heatmap_generation_flow():
 
     # Input parameters
     #spx = {"steps": HEATMAP_PRICE_STEPS, "range": HEATMAP_PRICE_RANGE}
-    spx = {"steps": 5, "range": 0.025}
-    open_price = 5500
-    effective_datetime = '2024-08-21 10:30:00'
+    spx = {"steps": 2.5, "range": 0.025}
+    open_price = 5600
+    effective_date = '2024-08-21'
+    effective_time = '12:00:00'
+    effective_datetime = effective_date + ' ' + effective_time
     datetime_object = pd.to_datetime(effective_datetime)
 
     # Fetch data
     query = f"""
     SELECT * FROM intraday.intraday_books
-    WHERE effective_date ='2024-08-21'
-    and effective_datetime = '2024-08-21 10:30:00'
+    WHERE effective_date ='{effective_date}'
+    and effective_datetime = '{effective_datetime}'
     """
     df_book = fetch_data_from_db(query)
     unique_eff_datetime = df_book["effective_date"].unique()
