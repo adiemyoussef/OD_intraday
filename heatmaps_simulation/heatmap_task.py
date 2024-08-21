@@ -361,14 +361,14 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
             height=image_height
         )
         # Try different methods to save the figure
-        try:
-            img_buffer = io.BytesIO()
-            gamma_chart.write_image(img_buffer, format="png", scale=3)
-            img_bytes = img_buffer.getvalue()
-            if img_bytes:
-                prefect_logger.info(f"Successfully converted figure to image. Size: {len(img_bytes)} bytes")
-            else:
-                raise ValueError("Image conversion resulted in empty bytes")
+        # try:
+        img_buffer = io.BytesIO()
+        gamma_chart.write_image(img_buffer, format="png", scale=3)
+        img_bytes = img_buffer.getvalue()
+        if img_bytes:
+            prefect_logger.info(f"Successfully converted figure to image. Size: {len(img_bytes)} bytes")
+        else:
+            raise ValueError("Image conversion resulted in empty bytes")
 
 
         prefect_logger.info("Sending chart to Discord")
