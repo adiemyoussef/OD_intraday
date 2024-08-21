@@ -1,5 +1,7 @@
 import time
 import pandas as pd
+from matplotlib import pyplot as plt
+
 from cupy_numba.main import compute_all
 import argparse
 import os
@@ -280,19 +282,35 @@ def fetch_data_from_db(query):
 
 @task(name= 'Plot and send chart')
 def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime):
+    logger = get_run_logger()
 
+    # Convert effective_datetime from string to datetime object if necessary
     if isinstance(effective_datetime, str):
         effective_datetime = datetime.strptime(effective_datetime, '%Y-%m-%d %H:%M:%S')
 
-    gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df, effective_datetime=effective_datetime, spx=None)
+    logger.info(f"Plotting gamma chart for {effective_datetime}")
 
-    # Save the figure to a bytes buffer
-    buf = io.BytesIO()
-    gamma_chart.savefig(buf, format='png')
-    buf.seek(0)
+    try:
+        gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
+                                 effective_datetime=effective_datetime, spx=None)
 
-    # Send to Discord
-    send_to_discord(DEV_CHANNEL, buf.getvalue(), title="Gamma Heatmap")
+        if gamma_chart is None:
+            logger.error("plot_gamma returned None instead of a matplotlib figure")
+            # Create a simple error chart
+            fig, ax = plt.subplots()
+            ax.text(0.5, 0.5, "Error: Failed to generate gamma chart", ha='center', va='center')
+            gamma_chart = fig
+
+        buf = io.BytesIO()
+        gamma_chart.savefig(buf, format='png')
+        buf.seek(0)
+
+        logger.info("Sending chart to Discord")
+        send_to_discord(DEV_CHANNEL, buf.getvalue(), title=f"Gamma Heatmap for {effective_datetime}")
+
+    except Exception as e:
+        logger.exception(f"Error in plot_and_send_chart: {str(e)}")
+        raise
 
 
 @flow(name="Heatmap Generation Flow")
