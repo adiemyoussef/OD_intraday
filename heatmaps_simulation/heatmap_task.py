@@ -369,7 +369,7 @@ def heatmap_generation_flow(
     db.insert_progress("intraday","intraday_gamma",gamma_to_push)
 
     # Plot and send chart
-    plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candles = None)
+    # plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks = None)
 
     prefect_logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
