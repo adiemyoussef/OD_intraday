@@ -323,7 +323,7 @@ def heatmap_generation_flow(
     range: float = 0.0025,
     open_price: float = 5600,
     effective_date: str = '2024-08-21',
-    effective_time: str = '12:00:00'
+    effective_time: str = '13:00:00'
 ):
     prefect_logger = get_run_logger()
 
@@ -370,7 +370,7 @@ def heatmap_generation_flow(
 
 
     # Plot and send chart
-    # plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks = None)
+    plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks = None)
 
     prefect_logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
