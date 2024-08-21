@@ -25,6 +25,8 @@ from utilities.rabbitmq_utils import *
 from utilities.misc_utils import *
 from utilities.customized_logger import DailyRotatingFileHandler
 from utilities.logging_config import *
+from charting.intraday_beta_v2 import *
+
 # Setup
 mp.set_start_method("fork", force=True)
 dill.settings['recurse'] = True
@@ -170,7 +172,7 @@ def ensure_all_connections_are_open():
 #------------------ TASKS ------------------#
 @task(name= "fetch_historical_poly_data", task_run_name= "Fetching historical greeks")
 def fetch_historical_poly_data(previous_date, current_date, previous_datetime, current_datetime):
-    start_time = time.time()
+    start_time = time_module.time()
     query = f"""
     SELECT option_symbol, contract_type, strike_price, expiration_date, time_stamp,
            implied_volatility, delta, gamma, vega
@@ -181,7 +183,7 @@ def fetch_historical_poly_data(previous_date, current_date, previous_datetime, c
     """
 
     poly_data  = db_utils.execute_query(query)
-    logger.info(f'Fetched {len(poly_data)} rows in {time.time() - start_time} sec.')
+    logger.info(f'Fetched {len(poly_data)} rows in {time_module.time() - start_time} sec.')
 
     return poly_data
 @task(retries=3, retry_delay_seconds=60, name= "process_last_message_in_queue", task_run_name= "Processing last message in queue...")
@@ -359,14 +361,14 @@ def get_file_from_sftp(msg_body, override_path = None):
 
         #sftp_utils.ensure_connection()  # Ensure connection before SFTP operation
 
-        start = time.time()
+        start = time_module.time()
         sftp_utils.connect()
-        prefect_logger.info(f'It took {time.time() - start} sec. to connect')
+        prefect_logger.info(f'It took {time_module.time() - start} sec. to connect')
 
-        read_time = time.time()
+        read_time = time_module.time()
         file_info = sftp_utils.get_file_info(file_path)
         file_data = sftp_utils.read_file(file_path)
-        prefect_logger.info(f'It took {time.time() - read_time} sec. to read to file')
+        prefect_logger.info(f'It took {time_module.time() - read_time} sec. to read to file')
         logger.debug(f'[verify_and_process_message]: {file_info} {file_data}')
 
 
@@ -863,13 +865,20 @@ def post_processing_flow_2():
 def Intraday_Flow():
 
 
-    flow_start_time = time.time()
+    flow_start_time = time_module.time()
 
     expected_file_override = None #'/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-15_15_00_1.csv.zip'
 
     db_utils.connect()
     # sftp_utils.connect()
     try:
+
+        #TODO: initial_price, last_price = get_prices()
+
+        # parallel_subflows = [zero_dte_flow(), one_dte_flow()]
+        # await asyncio.gather(*parallel_subflows)
+
+        breakpoint()
 
         initial_book = get_initial_book(get_unrevised_book)
 
@@ -1110,9 +1119,12 @@ def Intraday_Flow():
                                 logger.error(f"Failed to acknowledge message {file_info['file_name']} after all retries.")
                             time.sleep(10)  # Wait a bit before retrying
 
-                    post_processing_flow_1()
-                    post_processing_flow_2()
-                    logger.info(f"Finished flow in {time.time()-flow_start_time} sec.")
+                    logger.info(f"Data flow finished in {time_module.time() - flow_start_time} sec.")
+
+                    # Discord MP4
+                    #zero_dte_flow()
+                    #one_dte_flow()
+                    logger.info(f"Finished flow in {time_module.time()-flow_start_time} sec.")
 
 
                 else:
@@ -1135,5 +1147,6 @@ if __name__ == "__main__":
     """
     Synchronous Flow
     """
+    # main_flow_state = asyncio.run(Intraday_Flow())
     Intraday_Flow()
 

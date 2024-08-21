@@ -57,16 +57,7 @@ def get_logger(debug_mode=False):
     debug_mode parameter is kept for backward compatibility but doesn't affect the logging levels anymore.
     """
     return setup_custom_logger("Prefect_Flow")
-# def get_logger(debug_mode=False):
-#     """
-#     Returns the appropriate logger based on the context.
-#     If called within a Prefect task or flow, returns the Prefect run logger.
-#     Otherwise, returns the custom logger.
-#     """
-#     try:
-#         return get_run_logger()
-#     except RuntimeError:
-#         return setup_custom_logger("Prefect_Flow", logging.DEBUG if debug_mode else logging.INFO)
+
 
 def get_logger(debug_mode=False):
     log_level = logging.DEBUG if debug_mode else logging.INFO
