@@ -31,7 +31,9 @@ console_handler.setFormatter(file_formatter)
 # Add the handler to the logger
 logger.addHandler(console_handler)
 
-db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME, logger)
+db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
+db.connect()
+print(f'{db.get_status()}')
 
 DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 
@@ -117,16 +119,20 @@ def send_to_discord(webhook_url, image, content=None, title=None, description=No
     return response.status_code
 def build_unpivot(df, minima, maxima, ticker='SPX'):
 
-
+    prefect_logger = get_run_logger()
     df_unpivot = df.reset_index().melt(id_vars=['index'], var_name='price', value_name='value')
     df_unpivot['minima'] = minima.reset_index().melt(id_vars=['index'], var_name='price', value_name='value').value
     df_unpivot['maxima'] = maxima.reset_index().melt(id_vars=['index'], var_name='price', value_name='value').value
-    df_unpivot.rename(columns={'index': 'effective_datetime'}, inplace=True)
+    df_unpivot.rename(columns={'index': 'sim_datetime'}, inplace=True)
 
-    effective_date = df_unpivot['effective_datetime'].iloc[0].date()
+    effective_date = df_unpivot['sim_datetime'].iloc[0].date()
+    effective_datetime = str(df["effective_datetime"].unique())
 
+    df_unpivot.insert(3, 'effective_datetime', effective_datetime)
     df_unpivot.insert(2, 'effective_date', effective_date)
     df_unpivot.insert(1, 'ticker', ticker)
+
+    prefect_logger.info(f'{df_unpivot.head()}')
 
     return df_unpivot
 
@@ -282,7 +288,7 @@ def fetch_data_from_db(query):
     return db.execute_query(query)
 
 @task(name= 'Plot and send chart')
-def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime):
+def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks=None):
     prefect_logger = get_run_logger()
 
     # Convert effective_datetime from string to datetime object if necessary
@@ -293,7 +299,7 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime):
 
     try:
         gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
-                                 effective_datetime=effective_datetime, spx=None)
+                                 effective_datetime=effective_datetime, spx=spx_candlesticks)
         if gamma_chart is None:
             prefect_logger.error("plot_gamma returned None instead of a Plotly figure")
             raise ValueError("Failed to generate gamma chart")
@@ -316,15 +322,21 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime):
 
 
 @flow(name="Heatmap Generation Flow")
-def heatmap_generation_flow():
+def heatmap_generation_flow(
+    steps: float = 2.5,
+    range: float = 0.025,
+    open_price: float = 5600,
+    effective_date: str = '2024-08-21',
+    effective_time: str = '12:00:00'
+):
     prefect_logger = get_run_logger()
 
     # Input parameters
-    #spx = {"steps": HEATMAP_PRICE_STEPS, "range": HEATMAP_PRICE_RANGE}
-    spx = {"steps": 2.5, "range": 0.025}
-    open_price = 5600
-    effective_date = '2024-08-21'
-    effective_time = '12:00:00'
+
+    spx = {"steps": steps, "range": range}
+    open_price = open_price
+    effective_date = effective_date
+    effective_time = effective_time
     effective_datetime = effective_date + ' ' + effective_time
     datetime_object = pd.to_datetime(effective_datetime)
 
@@ -338,6 +350,11 @@ def heatmap_generation_flow():
     unique_eff_datetime = df_book["effective_date"].unique()
     prefect_logger.info(f"{unique_eff_datetime}")
 
+    #------------- Candlesticks -------------#
+
+
+
+    #----------------------------------------#
     # Compute heatmap
     start_heatmap_computations = time.time()
     args = argparse.Namespace(proc=os.cpu_count(), mode='delta')
@@ -348,8 +365,12 @@ def heatmap_generation_flow():
     )
     prefect_logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
 
+    gamma_to_push = build_unpivot(df_gamma,minima_df,maxima_df)
+
+    db.insert_progress("intraday","intraday_gamma",gamma_to_push)
+
     # Plot and send chart
-    plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime)
+    plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candles = None)
 
     prefect_logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
