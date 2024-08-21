@@ -367,7 +367,7 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
 @flow(name="Heatmap Generation Flow")
 def heatmap_generation_flow(
     steps: float = 2.5,
-    range: float = 0.0025,
+    range: float = 0.025,
     open_price: float = 5600,
     effective_date: str = '2024-08-21',
     effective_time: str = '13:00:00'
