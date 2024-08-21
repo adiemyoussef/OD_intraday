@@ -32,13 +32,19 @@ db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME, log
 
 DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 
+import requests
+from datetime import datetime
+import io
+from PIL import Image
+from prefect import get_run_logger
+
 
 def send_to_discord(webhook_url, image, content=None, title=None, description=None, fields=None, footer_text=None):
     """
     Sends a message to Discord with an embedded message first, followed by an image in a separate message.
 
     :param webhook_url: Discord webhook URL
-    :param image: Image data as bytes or a file-like object
+    :param image: Image as a file path, bytes, or file-like object
     :param content: Optional content text
     :param title: Title for the embed
     :param description: Description for the embed
@@ -46,6 +52,7 @@ def send_to_discord(webhook_url, image, content=None, title=None, description=No
     :param footer_text: Footer text for the embed
     :return: Status code of the second request
     """
+    prefect_logger = get_run_logger()
 
     # First Request: Send the embedded message
     embed = {
@@ -57,38 +64,54 @@ def send_to_discord(webhook_url, image, content=None, title=None, description=No
         "timestamp": datetime.utcnow().isoformat()
     }
 
-    # Prepare the payload with the embed
     payload = {
         "embeds": [embed],
-        "content": content or ""  # Ensure content is initialized
+        "content": content or ""
     }
 
-    # Send the first request (embed only)
     response = requests.post(webhook_url, json=payload)
-
     if response.status_code == 200 or response.status_code == 204:
-        print("Embedded message sent successfully to Discord!")
+        prefect_logger.info("Embedded message sent successfully to Discord!")
     else:
-        print(f"Failed to send Embedded message. Status code: {response.status_code}")
-        print(f"Response content: {response.content}")
+        prefect_logger.error(f"Failed to send Embedded message. Status code: {response.status_code}")
+        prefect_logger.error(f"Response content: {response.content}")
         return response.status_code
 
-    # Second Request: Send the image separately
+    # Prepare the image for sending
+    if isinstance(image, str):  # If image is a file path
+        with open(image, 'rb') as img_file:
+            image_data = img_file.read()
+    elif isinstance(image, bytes):  # If image is already in bytes
+        image_data = image
+    elif hasattr(image, 'read'):  # If image is a file-like object
+        image_data = image.read()
+    else:
+        prefect_logger.error("Unsupported image type")
+        return 400
+
+    # Convert image to PNG if it's not already
+    try:
+        img = Image.open(io.BytesIO(image_data))
+        with io.BytesIO() as output:
+            img.save(output, format='PNG')
+            image_data = output.getvalue()
+    except Exception as e:
+        prefect_logger.error(f"Error processing image: {e}")
+        return 400
+
+    # Second Request: Send the image
     files = {
-        'file': ('image.png', image, 'image/png')
+        'file': ('image.png', image_data, 'image/png')
     }
 
-    # Send the second request (image only)
     response = requests.post(webhook_url, files=files)
-
     if response.status_code == 200 or response.status_code == 204:
-        print("Image sent successfully to Discord!")
+        prefect_logger.info("Image sent successfully to Discord!")
     else:
-        print(f"Failed to send Image. Status code: {response.status_code}")
-        print(f"Response content: {response.content}")
+        prefect_logger.error(f"Failed to send Image. Status code: {response.status_code}")
+        prefect_logger.error(f"Response content: {response.content}")
 
     return response.status_code
-
 def build_unpivot(df, minima, maxima, ticker='SPX'):
 
 
@@ -262,7 +285,15 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime):
         effective_datetime = datetime.strptime(effective_datetime, '%Y-%m-%d %H:%M:%S')
 
     gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df, effective_datetime=effective_datetime, spx=None)
-    send_to_discord(DEV_CHANNEL, gamma_chart)
+
+    # Save the figure to a bytes buffer
+    buf = io.BytesIO()
+    gamma_chart.savefig(buf, format='png')
+    buf.seek(0)
+
+    # Send to Discord
+    send_to_discord(DEV_CHANNEL, buf.getvalue(), title="Gamma Heatmap")
+
 
 @flow(name="Heatmap Generation Flow")
 def heatmap_generation_flow():
