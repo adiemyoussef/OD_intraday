@@ -32,12 +32,11 @@ console_handler.setFormatter(file_formatter)
 
 # Add the handler to the logger
 logger.addHandler(console_handler)
-prefect_logger = get_run_logger()
 
 
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()
-prefect_logger.info(f'{db.get_status()}')
+print(f'{db.get_status()}')
 
 DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 
