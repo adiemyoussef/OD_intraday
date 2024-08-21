@@ -1,5 +1,6 @@
 import time
 import pandas as pd
+import pytz
 from matplotlib import pyplot as plt
 from cupy_numba.main import compute_all
 import argparse
@@ -206,6 +207,52 @@ def book_to_list(book:pd.DataFrame, sim_times):
 
     return result.values.tolist()
 
+def resample_and_convert_timezone(df:pd.DataFrame, datetime_column='effective_datetime', resample_interval='5T',
+                                  target_timezone='US/Eastern'):
+    """
+    Resample a dataframe with 1-minute OHLCV data to a specified interval and convert timezone.
+
+    Parameters:
+    df (pandas.DataFrame): Input dataframe with OHLCV data
+    datetime_column (str): Name of the datetime column (default: 'effective_datetime')
+    resample_interval (str): Pandas resample rule (default: '5T' for 5 minutes)
+    timezone (str): Timezone to convert to (default: 'US/Eastern')
+
+    Returns:
+    pandas.DataFrame: Resampled dataframe with converted timezone
+    """
+
+    # Ensure the datetime column is in the correct format
+    df[datetime_column] = pd.to_datetime(df[datetime_column])
+
+    # Set the datetime column as index
+    df = df.set_index(datetime_column)
+
+    # Check if the index is timezone-aware
+    if df.index.tzinfo is None:
+        # If timezone-naive, assume it's UTC and localize
+        df.index = df.index.tz_localize('UTC')
+
+    # Convert to target timezone
+    target_tz = pytz.timezone(target_timezone)
+    df.index = df.index.tz_convert(target_tz)
+
+    # Resample to the specified interval
+    df_resampled = df.resample(resample_interval).agg({
+        'open': 'first',
+        'high': 'max',
+        'low': 'min',
+        'close': 'last',
+    })
+
+    # Reset index to make datetime a column again
+    df_resampled.reset_index(inplace=True)
+
+    # Remove timezone information after conversion if needed
+    df_resampled[datetime_column] = df_resampled[datetime_column].dt.tz_localize(None)
+
+    return df_resampled
+
 @task(name= "Generate heatmap")
 def generate_heatmaps(sim_times: list, prices: list, deltas:np.ndarray, trade_date:datetime.date, hour_start:datetime.date):
     prefect_logger = get_run_logger()
@@ -336,20 +383,32 @@ def heatmap_generation_flow(
     effective_datetime = effective_date + ' ' + effective_time
     datetime_object = pd.to_datetime(effective_datetime)
 
+    #----------------- Books ----------------------#
     # Fetch data
-    query = f"""
+    books_query = f"""
     SELECT * FROM intraday.intraday_books
     WHERE effective_date ='{effective_date}'
     and effective_datetime = '{effective_datetime}'
     """
-    df_book = fetch_data_from_db(query)
+    df_book = fetch_data_from_db(books_query)
     unique_eff_datetime = df_book["effective_date"].unique()
     prefect_logger.info(f"{unique_eff_datetime}")
 
     #------------- Candlesticks -------------#
+    # Fetch data
+    cd_query = f"""
+    SELECT * FROM optionsdepth_stage.charts_candlestick
+    where ticker = 'SPX'
+    and
+    effective_date = '{effective_date}'
+    """
+    candlesticks = fetch_data_from_db(cd_query)
+    unique_cd_eff_datetime = candlesticks["effective_date"].unique()
+    prefect_logger.info(f"{unique_cd_eff_datetime}")
 
-
-
+    candlesticks_resampled = resample_and_convert_timezone(candlesticks)
+    cd_ed = candlesticks_resampled["effective_datetime"].unique()
+    prefect_logger.info(f"{cd_ed}")
     #----------------------------------------#
     # Compute heatmap
     start_heatmap_computations = time.time()
@@ -370,7 +429,7 @@ def heatmap_generation_flow(
 
 
     # Plot and send chart
-    plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks = None)
+    plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks = candlesticks_resampled)
 
     prefect_logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
