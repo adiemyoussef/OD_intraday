@@ -117,7 +117,7 @@ def send_to_discord(webhook_url, image, content=None, title=None, description=No
         prefect_logger.error(f"Response content: {response.content}")
 
     return response.status_code
-def build_unpivot(df, minima, maxima, ticker='SPX'):
+def build_unpivot(df, effective_datetime, minima, maxima, ticker='SPX'):
 
     prefect_logger = get_run_logger()
     df_unpivot = df.reset_index().melt(id_vars=['index'], var_name='price', value_name='value')
@@ -126,7 +126,6 @@ def build_unpivot(df, minima, maxima, ticker='SPX'):
     df_unpivot.rename(columns={'index': 'sim_datetime'}, inplace=True)
 
     effective_date = df_unpivot['sim_datetime'].iloc[0].date()
-    effective_datetime = str(df["effective_datetime"].unique())
 
     df_unpivot.insert(3, 'effective_datetime', effective_datetime)
     df_unpivot.insert(2, 'effective_date', effective_date)
@@ -365,7 +364,7 @@ def heatmap_generation_flow(
     )
     prefect_logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
 
-    gamma_to_push = build_unpivot(df_gamma,minima_df,maxima_df)
+    gamma_to_push = build_unpivot(df_gamma,effective_datetime, minima_df,maxima_df)
 
     db.insert_progress("intraday","intraday_gamma",gamma_to_push)
 
