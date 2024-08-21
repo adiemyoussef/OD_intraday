@@ -277,7 +277,7 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
     )
     fig.add_layout_image(
         dict(
-            source=img2,
+            source=img,
             xref="paper",
             yref="paper",
             x=1,
@@ -461,7 +461,7 @@ def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=N
     )
     fig.add_layout_image(
         dict(
-            source=img2,
+            source=img,
             xref="paper",
             yref="paper",
             x=1,
