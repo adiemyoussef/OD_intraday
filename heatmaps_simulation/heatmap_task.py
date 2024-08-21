@@ -347,20 +347,32 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
             prefect_logger.error("plot_gamma returned None instead of a Plotly figure")
             raise ValueError("Failed to generate gamma chart")
 
+        prefect_logger.info("Successfully created Plotly figure")
+        prefect_logger.info(f"Figure data: {gamma_chart.to_dict()}")
+        prefect_logger.info(f"Figure layout: {gamma_chart.layout}")
+
         image_width = 1440  # Width in pixels
         image_height = 810  # Height in pixels
         scale_factor = 3  # Increase for better quality, especially for raster formats
 
+        prefect_logger.info(f"Before update figure size.... layout: {gamma_chart.layout}")
+        gamma_chart.update_layout(
+            width=image_width,
+            height=image_height
+        )
+        prefect_logger.info(f"Updated figure size. New layout: {gamma_chart.layout}")
         # Try different image conversion methods
         try:
             prefect_logger.info("Attempting to convert figure to image using to_image")
-            img_bytes = to_image(gamma_chart, width=image_width, height=image_height, format="png", scale=scale_factor)
+            img_bytes = to_image(gamma_chart, format="png", scale=3)
         except Exception as e:
             prefect_logger.warning(f"to_image failed: {str(e)}. Trying pio.to_image")
-            img_bytes = pio.to_image(gamma_chart, width=image_width, height=image_height, format="png",
-                                     scale=scale_factor)
+            img_bytes = pio.to_image(gamma_chart, format="png", scale=3)
 
-        prefect_logger.info("Successfully converted figure to image")
+        if img_bytes:
+            prefect_logger.info(f"Successfully converted figure to image. Size: {len(img_bytes)} bytes")
+        else:
+            raise ValueError("Image conversion resulted in empty bytes")
 
         prefect_logger.info("Sending chart to Discord")
         send_to_discord(DEV_CHANNEL, img_bytes, title=f"Gamma Heatmap for {effective_datetime}")
