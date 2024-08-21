@@ -298,8 +298,14 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime):
             prefect_logger.error("plot_gamma returned None instead of a Plotly figure")
             raise ValueError("Failed to generate gamma chart")
 
+        image_width = 1440  # Width in pixels
+        image_height = 810  # Height in pixels
+        scale_factor = 3  # Increase for better quality, especially for raster formats
+
         # Convert Plotly figure to PNG image
-        img_bytes = to_image(gamma_chart, format="png", scale=2)
+        img_bytes = to_image(gamma_chart,width= image_width,height=image_height, format="png", scale=scale_factor)
+
+
 
         prefect_logger.info("Sending chart to Discord")
         send_to_discord(DEV_CHANNEL, img_bytes, title=f"Gamma Heatmap for {effective_datetime}")
