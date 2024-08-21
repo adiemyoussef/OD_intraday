@@ -254,6 +254,10 @@ def fetch_data_from_db(query):
 
 @task(name= 'Plot and send chart')
 def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime):
+
+    if isinstance(effective_datetime, str):
+        effective_datetime = datetime.strptime(effective_datetime, '%Y-%m-%d %H:%M:%S')
+
     gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df, effective_datetime=effective_datetime, spx=None)
     send_to_discord(DEV_CHANNEL, gamma_chart)
 
@@ -262,16 +266,17 @@ def heatmap_generation_flow():
     prefect_logger = get_run_logger()
 
     # Input parameters
-    spx = {"steps": HEATMAP_PRICE_STEPS, "range": HEATMAP_PRICE_RANGE}
+    #spx = {"steps": HEATMAP_PRICE_STEPS, "range": HEATMAP_PRICE_RANGE}
+    spx = {"steps": 5, "range": 5}
     open_price = 5500
-    effective_datetime = '2024-08-24 09:30:00'
+    effective_datetime = '2024-08-24 10:30:00'
     datetime_object = pd.to_datetime(effective_datetime)
 
     # Fetch data
-    query = """
+    query = f"""
     SELECT * FROM intraday.intraday_books
     WHERE effective_date ='2024-08-21'
-    and effective_datetime = '2024-08-21 09:30:00'
+    and effective_datetime = '{effective_datetime}'
     """
     df_book = fetch_data_from_db(query)
 
@@ -289,7 +294,7 @@ def heatmap_generation_flow():
     plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime)
 
     prefect_logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
-    prefect_logger.info("All heatmaps have been processed !!!!")
+
 
 if __name__ == "__main__":
     heatmap_generation_flow()
