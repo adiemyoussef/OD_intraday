@@ -15,6 +15,7 @@ import requests
 from datetime import datetime
 import io
 from prefect import task, flow, get_run_logger
+from plotly.io import to_image
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -282,34 +283,29 @@ def fetch_data_from_db(query):
 
 @task(name= 'Plot and send chart')
 def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime):
-    logger = get_run_logger()
+    prefect_logger = get_run_logger()
 
     # Convert effective_datetime from string to datetime object if necessary
     if isinstance(effective_datetime, str):
         effective_datetime = datetime.strptime(effective_datetime, '%Y-%m-%d %H:%M:%S')
 
-    logger.info(f"Plotting gamma chart for {effective_datetime}")
+    prefect_logger.info(f"Plotting gamma chart for {effective_datetime}")
 
     try:
         gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
                                  effective_datetime=effective_datetime, spx=None)
-
         if gamma_chart is None:
-            logger.error("plot_gamma returned None instead of a matplotlib figure")
-            # Create a simple error chart
-            fig, ax = plt.subplots()
-            ax.text(0.5, 0.5, "Error: Failed to generate gamma chart", ha='center', va='center')
-            gamma_chart = fig
+            prefect_logger.error("plot_gamma returned None instead of a Plotly figure")
+            raise ValueError("Failed to generate gamma chart")
 
-        buf = io.BytesIO()
-        gamma_chart.savefig(buf, format='png')
-        buf.seek(0)
+        # Convert Plotly figure to PNG image
+        img_bytes = to_image(gamma_chart, format="png", scale=2)
 
-        logger.info("Sending chart to Discord")
-        send_to_discord(DEV_CHANNEL, buf.getvalue(), title=f"Gamma Heatmap for {effective_datetime}")
+        prefect_logger.info("Sending chart to Discord")
+        send_to_discord(DEV_CHANNEL, img_bytes, title=f"Gamma Heatmap for {effective_datetime}")
 
     except Exception as e:
-        logger.exception(f"Error in plot_and_send_chart: {str(e)}")
+        prefect_logger.exception(f"Error in plot_and_send_chart: {str(e)}")
         raise
 
 
