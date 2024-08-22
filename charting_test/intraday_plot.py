@@ -779,16 +779,33 @@ if __name__ == "__main__":
     db.connect()
     print(f'{db.get_status()}')
 
-    list_of_ed = ['2024-08-21 09:30:00','2024-08-21 10:30:00','2024-08-21 11:30:00','2024-08-21 12:30:00','2024-08-21 13:30:00','2024-08-21 14:30:00','2024-08-21 15:00:00']
+    effective_date = '2024-08-22'
+    list_of_ed = [f'{effective_date} 09:50:00',
+                  f'{effective_date} 12:10:00',
+                  f'{effective_date} 12:12:00',
+                  f'{effective_date} 12:30:00',
+                  f'{effective_date} 12:40:00',
+                    f'{effective_date} 12:50:00',
+                    f'{effective_date} 13:00:00',
+                    f'{effective_date} 13:10:00']#'2024-08-21 10:30:00','2024-08-21 11:30:00','2024-08-21 12:30:00','2024-08-21 13:30:00','2024-08-21 14:30:00','2024-08-21 15:00:00']
 
     for effective_datetime in list_of_ed:
         books_query = f"""
-        WITH latest_effective_datetime AS (
-            -- Assuming this subquery exists in your original code
-            -- Replace with the actual subquery if different
-            -- SELECT MAX(effective_datetime) AS latest_datetime
-            -- FROM intraday_gamma
-            SELECT '{effective_datetime}' AS latest_datetime
+        WITH ranked_gamma AS (
+            SELECT 
+                id,
+                ticker,
+                effective_date,
+                effective_datetime,
+                price,
+                value,
+                sim_datetime,
+                NULL as minima,
+                NULL as maxima,
+                ROW_NUMBER() OVER (PARTITION BY sim_datetime,price ORDER BY effective_datetime DESC) AS rn
+            FROM intraday.intraday_gamma
+            WHERE effective_datetime <= '{effective_datetime}' -- (SELECT max(effective_datetime) FROM intraday_gamma)
+            and effective_date = '{effective_date}'
         ),
         consumed_gamma AS (
             SELECT 
@@ -799,27 +816,28 @@ if __name__ == "__main__":
                 price,
                 value,
                 sim_datetime,
-                NULL as minima,
-                NULL as maxima
-            FROM intraday.intraday_gamma
-            WHERE effective_datetime < (SELECT latest_datetime FROM latest_effective_datetime)
-            AND sim_datetime = effective_datetime
+                minima,
+                maxima
+            FROM ranked_gamma
+            WHERE rn = 1
         ),
         upcoming_gamma AS (
             SELECT * 
             FROM intraday.intraday_gamma
-            WHERE effective_datetime >= (SELECT latest_datetime FROM latest_effective_datetime)
+            WHERE effective_datetime >= '{effective_datetime}' -- (SELECT max(effective_datetime) FROM intraday_gamma)
+            and
+            effective_date = '{effective_date}'
         ),
         final_gamma as(
         SELECT * FROM consumed_gamma
         UNION ALL
-        SELECT * FROM upcoming_gamma)
-        
-        SELECT * from final_gamma
+        SELECT * FROM upcoming_gamma
+        )
+        SELECT * from final_gamma;
         """
         df_book = db.execute_query(books_query)
-        #breakpoint()
 
+        #breakpoint()
         plot_gamma_intraday(df_book,effective_datetime)
 
 
