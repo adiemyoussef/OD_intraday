@@ -11,8 +11,9 @@ import warnings
 import yfinance as yf
 from config.config import *
 from pathlib import Path
-
 from prefect import task, flow, get_run_logger
+
+# from prefect import task, flow, get_run_logger
 with warnings.catch_warnings():
     warnings.simplefilter("ignore", category=RuntimeWarning)
 

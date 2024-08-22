@@ -299,7 +299,7 @@ def generate_heatmaps(sim_times: list, prices: list, deltas:np.ndarray, trade_da
 def compute_heatmap(args, type: str, df_book: pd.DataFrame, start_time: datetime, price: float, steps: float, range: float):
     prefect_logger = get_run_logger()
     num_processors = os.cpu_count()
-    prefect_logger.info("Number of processors available:", num_processors)
+    prefect_logger.info(f"Number of processors available:{num_processors}")
     args.proc = num_processors
     args.mode = type
 
@@ -381,9 +381,11 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
 
 @flow(name="Heatmap Generation Flow")
 def heatmap_generation_flow(
+    df_book: pd.DataFrame = None,
     steps: float = 2.5,
     range: float = 0.025,
     open_price: float = 5600,
+    effective_datetime: str = None,
     effective_date: str = '2024-08-22',
     effective_time: str = '09:50:00'
 ):
@@ -393,21 +395,22 @@ def heatmap_generation_flow(
 
     spx = {"steps": steps, "range": range}
     open_price = open_price
-    effective_date = effective_date
-    effective_time = effective_time
-    effective_datetime = effective_date + ' ' + effective_time
-    datetime_object = pd.to_datetime(effective_datetime)
+    if df_book is None:
+        effective_date = effective_date
+        effective_time = effective_time
+        effective_datetime = effective_date + ' ' + effective_time
 
-    #----------------- Books ----------------------#
-    # Fetch data
-    books_query = f"""
-    SELECT * FROM intraday.intraday_books
-    WHERE effective_date ='{effective_date}'
-    and effective_datetime = '{effective_datetime}'
-    """
-    df_book = fetch_data_from_db(books_query)
-    unique_eff_datetime = df_book["effective_date"].unique()
-    prefect_logger.info(f"{unique_eff_datetime}")
+
+        #----------------- Books ----------------------#
+        # Fetch data
+        books_query = f"""
+        SELECT * FROM intraday.intraday_books
+        WHERE effective_date ='{effective_date}'
+        and effective_datetime = '{effective_datetime}'
+        """
+        df_book = fetch_data_from_db(books_query)
+        unique_eff_datetime = df_book["effective_date"].unique()
+        prefect_logger.info(f"{unique_eff_datetime}")
 
     #------------- Candlesticks -------------#
     # Fetch data
@@ -429,6 +432,8 @@ def heatmap_generation_flow(
     # Compute heatmap
     start_heatmap_computations = time.time()
     args = argparse.Namespace(proc=os.cpu_count(), mode='delta')
+
+    datetime_object = pd.to_datetime(effective_datetime)
     df_charm, df_gamma, minima_df, maxima_df = compute_heatmap(
         args, type='delta', df_book=df_book,
         start_time=datetime_object, price=open_price,

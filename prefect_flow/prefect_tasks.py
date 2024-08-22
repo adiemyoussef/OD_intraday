@@ -26,7 +26,7 @@ from utilities.misc_utils import *
 from utilities.customized_logger import DailyRotatingFileHandler
 from utilities.logging_config import *
 from charting.intraday_beta_v2 import *
-
+from heatmaps_simulation.heatmap_task import *
 # Setup
 mp.set_start_method("fork", force=True)
 dill.settings['recurse'] = True
@@ -1120,6 +1120,10 @@ def Intraday_Flow():
 
                     logger.info(f"Data flow finished in {time_module.time() - flow_start_time} sec.")
 
+                    #breakpoint()
+                    #Heatmap flow
+                    effective_datetime = str(final_book_clean_insert["effective_datetime"].unique()[0])
+                    heatmap_generation_flow(final_book_clean_insert,effective_datetime=effective_datetime)
                     # Discord MP4
                     #zero_dte_flow()
                     #one_dte_flow()
