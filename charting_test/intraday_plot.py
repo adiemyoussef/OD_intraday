@@ -249,6 +249,7 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
 
     # if not spx empty
     #----- Adding OHLC -----
+
     if spx is not None:
         prefect_logger.info("Entering OHLC overlay")
         candlestick = go.Candlestick(
@@ -257,7 +258,8 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
             high=spx['high'],
             low=spx['low'],
             close=spx['close'],
-            name= 'SPX'
+            name= 'SPX',
+
 
         )
         fig.add_trace(candlestick)
@@ -300,8 +302,6 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
     image_width = 1440  # Width in pixels
     image_height = 810  # Height in pixels
     scale_factor = 3  # Increase for better quality, especially for raster formats
-
-    stamp = df_heatmap.index[0].strftime("%Y-%m-%d_%H-%M")
 
     if fig_show:
         fig.show()
