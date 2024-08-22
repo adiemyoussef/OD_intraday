@@ -370,7 +370,7 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
             img_bytes = gamma_chart.to_image(format="png", scale=scale_factor)
             prefect_logger.info(f"Successfully converted figure to image using to_image. Size: {len(img_bytes)} bytes")
             prefect_logger.info("Sending chart to Discord")
-            #send_to_discord(DEV_CHANNEL, img_bytes, title=f"Gamma Heatmap for {effective_datetime}")
+            send_to_discord(DEV_CHANNEL, img_bytes, title=f"Gamma Heatmap for {effective_datetime}")
         except Exception as e:
             prefect_logger.warning(f"to_image failed: {str(e)}. Trying alternative method.")
 
@@ -382,10 +382,10 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
 @flow(name="Heatmap Generation Flow")
 def heatmap_generation_flow(
     steps: float = 2.5,
-    range: float = 0.01,
+    range: float = 0.025,
     open_price: float = 5600,
-    effective_date: str = '2024-08-21',
-    effective_time: str = '15:00:00'
+    effective_date: str = '2024-08-22',
+    effective_time: str = '09:50:00'
 ):
     prefect_logger = get_run_logger()
 
