@@ -238,12 +238,12 @@ def one_dte_flow(
     expiration: Optional[str] = None,
     participant: str = 'total_customers',
     position_types: Optional[List[str]] = None,
-    webhook_url: str = #'https://discord.com/api/webhooks/1275269470151245938/qNZXtA_ySwcJJJf6bS_myYqU-uDd71zHV--XJBR7xb6uVhs7ccjKE59_c8y9AMZ86OC_'
-                    DEV_CHANNEL
+    webhook_url: str = 'https://discord.com/api/webhooks/1275269470151245938/qNZXtA_ySwcJJJf6bS_myYqU-uDd71zHV--XJBR7xb6uVhs7ccjKE59_c8y9AMZ86OC_'
+                    #DEV_CHANNEL
 ):
-    session_date = '2024-08-21'
-    participant = 'firm'
-    expiration = '2024-08-22'
+    # session_date = '2024-08-21'
+    # participant = 'firm'
+    # expiration = '2024-08-22'
 
     # Set default values if not provided
     if session_date is None:
