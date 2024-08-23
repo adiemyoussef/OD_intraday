@@ -228,7 +228,6 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
     # Group by strike price
     grouped = metrics_data.groupby('strike_price')
 
-    breakpoint()
     # Process each group
     results = [process_single_strike(group, participant, metric) for _, group in grouped]
 
