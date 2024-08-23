@@ -95,7 +95,7 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
 
         video_path = generate_video(
             data, candlesticks, session_date, participant, pos_type,
-            strike_range, expiration, "GEX",
+            strike_range, expiration, "positioning",
             output_video=f'{pos_type}_{expiration}_animated_chart.mp4'
         )
         videos_paths.append(video_path)
@@ -353,5 +353,6 @@ def GEX_flow(
     pass
 
 if __name__ == "__main__":
-    #one_dte_flow()
-    GEX_flow()
+    zero_dte_flow()
+    one_dte_flow()
+    #GEX_flow()
