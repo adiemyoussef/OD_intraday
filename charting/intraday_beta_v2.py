@@ -243,7 +243,7 @@ def one_dte_flow(
 ):
     # session_date = '2024-08-21'
     # participant = 'firm'
-    #expiration = '2024-08-26'
+    expiration = '2024-08-26'
 
     # Set default values if not provided
     if session_date is None:
@@ -256,6 +256,7 @@ def one_dte_flow(
     if position_types is None:
         position_types = ['Net','C','P']
     if expiration is None:
+        #TODO: Next business day not day
         expiration = str(get_next_expiration_date(session_date))
     elif 'All' in position_types:
         position_types = ['C', 'P', 'Net']
