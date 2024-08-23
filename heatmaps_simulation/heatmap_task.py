@@ -426,8 +426,8 @@ def heatmap_generation_flow(
 
     candlesticks_resampled = resample_and_convert_timezone(candlesticks)
     candlesticks_resampled = candlesticks_resampled.set_index('effective_datetime', drop=False)
-    cd_ed = candlesticks_resampled["effective_datetime"].unique()
-    prefect_logger.info(f"{cd_ed}")
+    #cd_ed = candlesticks_resampled["effective_datetime"].unique()
+    #prefect_logger.info(f"{cd_ed}")
     #----------------------------------------#
     # Compute heatmap
     start_heatmap_computations = time.time()
