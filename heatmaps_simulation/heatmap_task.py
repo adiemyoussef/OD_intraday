@@ -390,7 +390,7 @@ def heatmap_generation_flow(
     effective_time: str = '11:40:00'
 ):
     prefect_logger = get_run_logger()
-
+    #TODO: Effective_date from effective_datetime
     # Input parameters
 
     spx = {"steps": steps, "range": range}
