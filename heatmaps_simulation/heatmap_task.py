@@ -386,7 +386,7 @@ def heatmap_generation_flow(
     range: float = 0.025,
     open_price: float = 5600,
     effective_datetime: str = None,
-    effective_date: str = '2024-08-22',
+    effective_date: str = '2024-08-23',
     effective_time: str = '11:40:00'
 ):
     prefect_logger = get_run_logger()
