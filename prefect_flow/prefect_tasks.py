@@ -251,7 +251,7 @@ async def process_last_message_in_queue(rabbitmq_utils:RabbitMQUtilities, expect
       retry_delay_seconds=60,
       timeout_seconds=60,
       cache_key_fn=task_input_hash,
-      cache_expiration=timedelta(hours=1),
+      cache_expiration=timedelta(hours=12),
 
       )
 def get_initial_book(get_unrevised_book: Callable):

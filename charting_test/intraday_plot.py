@@ -388,45 +388,45 @@ def plot_gamma_intraday(df: pd.DataFrame, effective_datetime, spx: pd.DataFrame 
         )
     )
 
-    minima = go.Contour(
-        name="Gamma Trough",
-        showlegend=True,
-        z=z_min,
-        y=y,
-        x=x,
-        contours_coloring='heatmap',
-        colorscale=[[0.0, "rgba(0,0,0,0)"],
-                    [1.0, "rgba(0,0,0,0)"]],
-        line_color='yellow',
-        line_width=5,
-        line_dash="dot",
-        line_smoothing=0,
-        contours_start=0,
-        contours_end=0,
-        showscale=False
-    )
-
-    maxima = go.Contour(
-        name="Gamma Peak",
-        showlegend=True,
-        z=z_max,
-        y=y,
-        x=x,
-        contours_coloring='heatmap',
-        colorscale=[[0.0, "rgba(0,0,0,0)"],
-                    [1.0, "rgba(0,0,0,0)"]],
-        line_color='green',
-        line_width=5,
-        line_dash="dot",
-        line_smoothing=0,
-        contours_start=0,
-        contours_end=0,
-        showscale=False
-    )
+    # minima = go.Contour(
+    #     name="Gamma Trough",
+    #     showlegend=True,
+    #     z=z_max,
+    #     y=y,
+    #     x=x,
+    #     contours_coloring='heatmap',
+    #     colorscale=[[0.0, "rgba(0,0,0,0)"],
+    #                 [1.0, "rgba(0,0,0,0)"]],
+    #     line_color='yellow',
+    #     line_width=5,
+    #     line_dash="dot",
+    #     line_smoothing=0,
+    #     contours_start=0,
+    #     contours_end=0,
+    #     showscale=False
+    # )
+    #
+    # maxima = go.Contour(
+    #     name="Gamma Peak",
+    #     showlegend=True,
+    #     z=z_min,
+    #     y=y,
+    #     x=x,
+    #     contours_coloring='heatmap',
+    #     colorscale=[[0.0, "rgba(0,0,0,0)"],
+    #                 [1.0, "rgba(0,0,0,0)"]],
+    #     line_color='green',
+    #     line_width=5,
+    #     line_dash="dot",
+    #     line_smoothing=0,
+    #     contours_start=0,
+    #     contours_end=0,
+    #     showscale=False
+    # )
 
     fig.add_trace(heatmap)
-    fig.add_trace(minima)
-    fig.add_trace(maxima)
+    # fig.add_trace(minima)
+    # fig.add_trace(maxima)
 
     fig.update_layout(
 
@@ -780,16 +780,16 @@ if __name__ == "__main__":
     print(f'{db.get_status()}')
 
     effective_date = '2024-08-22'
-    list_of_ed = [f'{effective_date} 09:50:00',
-                  f'{effective_date} 12:10:00',
-                  f'{effective_date} 12:12:00',
-                  f'{effective_date} 12:30:00',
-                  f'{effective_date} 12:40:00',
-                    f'{effective_date} 12:50:00',
-                    f'{effective_date} 13:00:00',
-                    f'{effective_date} 13:10:00']#'2024-08-21 10:30:00','2024-08-21 11:30:00','2024-08-21 12:30:00','2024-08-21 13:30:00','2024-08-21 14:30:00','2024-08-21 15:00:00']
+    effective_datetimes_query = f"""
+    SELECT distinct(effective_datetime) from intraday.intraday_gamma
+    where effective_date = '{effective_date}'
+    """
+    list_of_ed =db.execute_query(effective_datetimes_query)#'2024-08-21 10:30:00','2024-08-21 11:30:00','2024-08-21 12:30:00','2024-08-21 13:30:00','2024-08-21 14:30:00','2024-08-21 15:00:00']
 
-    for effective_datetime in list_of_ed:
+
+    for effective_datetime in list_of_ed.values:
+        effective_datetime = effective_datetime[0]
+        print(effective_datetime)
         books_query = f"""
         WITH ranked_gamma AS (
             SELECT 
