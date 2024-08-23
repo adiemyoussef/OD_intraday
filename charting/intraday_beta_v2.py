@@ -31,7 +31,6 @@ def parse_strike_range(strike_range: str) -> List[int]:
     values = list(map(int, strike_range.split(',')))
     return [min(values), max(values)]
 
-
 @task(cache_key_fn=None, cache_expiration=timedelta(hours=0, minutes=1))
 def fetch_data(session_date: str, strike_range: List[int], expiration: str, start_video:str) -> [pd.DataFrame]:
 
@@ -87,16 +86,16 @@ def process_data(metric: pd.DataFrame,candlesticks: pd.DataFrame, session_date: 
     return gif_paths
 
 @task
-def generate_video_task(metric: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
-                        strike_range: List[int], expiration: str, position_type: list) -> str:
+def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
+                        strike_range: List[int], expiration: str, position_type: list, metric:str = '') -> str:
 
     videos_paths =[]
 
     for pos_type in position_type:
 
         video_path = generate_video(
-            metric, candlesticks, session_date, participant, pos_type,
-            strike_range, expiration,
+            data, candlesticks, session_date, participant, pos_type,
+            strike_range, expiration, "GEX",
             output_video=f'{pos_type}_{expiration}_animated_chart.mp4'
         )
         videos_paths.append(video_path)
@@ -105,7 +104,7 @@ def generate_video_task(metric: pd.DataFrame, candlesticks: pd.DataFrame, sessio
 
 @task
 def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_date: str, participant: str,
-                         strike_range: List[int], expiration: str, position_types: List[str],
+                         strike_range: List[int], expiration: str, position_types: List[str], metric: str,
                          webhook_url: str) -> bool:
     participant_mapping = {
         'mm': 'Market Makers',
@@ -119,7 +118,7 @@ def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_da
 
     title = f"📊 {session_date} Intraday Recap"
     description = (
-        f"Detailed analysis of {participant_text} positions for the {session_date} session.\n"
+        f"Detailed analysis of {participant_text} {metric} for the {session_date} session.\n"
         f"This chart provides insights into market movements and positioning within the specified strike range.\n"
         ""
     )
@@ -220,11 +219,12 @@ def zero_dte_flow(
     # Process data and generate GIFs
     #gif_paths = process_data(metrics, candlesticks, session_date, participant, strike_range, expiration, position_types)
 
-    videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration, position_types)
+    videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+                                       position_types, 'positioning')
     print(f"Video generated at: {videos_paths}")
 
     # Send Discord message with Videos
-    video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types, webhook_url)
+    video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types,'positioning', webhook_url)
 
     if video_success:
         print(f"Successfully processed and sent intraday data (GIF and video) for {session_date}")
@@ -276,22 +276,83 @@ def one_dte_flow(
     print(f"Start time set to: {start_time}")
 
     # Fetch data
-    metrics, candlesticks = fetch_data(session_date, strike_range, expiration, start_time)
+    data, candlesticks = fetch_data(session_date, strike_range, expiration, start_time)
 
-    as_of_time_stamp = str(metrics["effective_datetime"].max())
+    as_of_time_stamp = str(data["effective_datetime"].max())
     # Process data and generate GIFs
-    #gif_paths = process_data(metrics, candlesticks, session_date, participant, strike_range, expiration, position_types)
+    #gif_paths = process_data(data, candlesticks, session_date, participant, strike_range, expiration, position_types)
 
-    videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration, position_types)
+    videos_paths = generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration,
+                                       position_types, 'positioning')
     print(f"Video generated at: {videos_paths}")
 
     # Send Discord message with Videos
-    video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types, webhook_url)
+    video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types,'positioning', webhook_url)
 
     if video_success:
         print(f"Successfully processed and sent intraday data (GIF and video) for {session_date}")
     else:
         print(f"Failed to process or send intraday data for {session_date}")
 
+
+# @flow(name="DEX gifs")
+# def DEX_flow(
+#     session_date: Optional[date] = default_date,
+#     strike_range: Optional[List[int]] = None,
+#     expiration: Optional[str] = None,
+#     participant: str = 'total_customers',
+#     position_types: Optional[List[str]] = None,
+#     webhook_url: str = DEV_CHANNEL
+# ):
+#     pass
+
+@flow(name="GEX gifs")
+def GEX_flow(
+        session_date: Optional[date] = None,
+        strike_range: Optional[List[int]] = None,
+        expiration: Optional[str] = None,
+        participant: str = 'mm',
+        position_types: Optional[List[str]] = None,
+        webhook_url: str = DEV_CHANNEL
+):
+    expiration= '2024-08-23'
+
+    if session_date is None:
+        #TODO: the latest effective_date of the book
+        session_date = datetime.now().strftime('%Y-%m-%d')
+    if strike_range is None:
+        #TODO: +/- 200 pts from SPOT Open
+        strike_range = [5500, 5700]
+    if position_types is None:
+        position_types = ['Net']
+
+    current_time = datetime.now().time()
+
+    if current_time < time(12, 0):  # Before 12:00 PM
+        start_time = '07:00:00'
+    elif time(12, 0) <= current_time < time(23, 0):  # Between 12:00 PM and 7:00 PM
+        start_time = '09:00:00'
+    else:  # 7:00 PM or later
+        start_time = '07:00:00'  # You might want to adjust this for the after 7:00 PM case
+
+    print(f"Start time set to: {start_time}")
+    # Fetch data
+    metrics, candlesticks = fetch_data(session_date, strike_range, expiration, start_time)
+    as_of_time_stamp = str(metrics["effective_datetime"].max())
+
+    videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+                                       position_types, "GEX")
+    print(f"Video generated at: {videos_paths}")
+
+    # Send Discord message with Videos
+    video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types,'GEX', webhook_url)
+
+    if video_success:
+        print(f"Successfully processed and sent intraday data (GIF and video) for {session_date}")
+    else:
+        print(f"Failed to process or send intraday data for {session_date}")
+    pass
+
 if __name__ == "__main__":
-    one_dte_flow()
+    #one_dte_flow()
+    GEX_flow()

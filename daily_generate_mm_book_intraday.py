@@ -3,14 +3,16 @@ import sys
 import pandas as pd
 import pandas_market_calendars as mcal
 import pytz
-from OptionsDepth import Options_data
-import utilities.sql_config as config
 from datetime import datetime, timedelta
+from utilities.db_utils import *
+from config.config import *
 
-# Initializing class and functions
-od = Options_data()
 nyse = mcal.get_calendar('NYSE')
 montreal_tz = pytz.timezone('America/Montreal')
+db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
+db.connect()
+print(f'{db.get_status()}')
+
 
 def round_up_to_nearest_5min(dt):
     # Round up to the nearest 5 minutes
@@ -508,32 +510,4 @@ def run(override_entries:bool):
         print(f"Error: {e}", file=sys.stderr)
 
 if __name__ == "__main__":
-    # import pyarrow.parquet as pq
-    # import pyarrow as pa
-    # parquet_file = 'poly_options.parquet'
-    # chunk_size = 100000
-    # query = f"""SELECT * FROM landing.poly_options_data ORDER BY date_only"""
-    # chunks = []
-    # # Initialize the start row
-    # start_row = 0
-    #
-    # for chunk in od.read_table(query,chunk_size):
-    #
-    #     breakpoint()
-    #     # Convert the chunk DataFrame to Arrow table
-    #     table = pa.Table.from_pandas(chunk)
-    #     # Append the Arrow table to the list of chunks
-    #     chunks.append(table)
-    #
-    #     # Save to Parquet file incrementally
-    #     with pq.ParquetWriter(parquet_file, table.schema, use_dictionary=True, compression='snappy') as writer:
-    #         for table_chunk in chunks:
-    #             writer.write_table(table_chunk)
-    #
-    #     # Clear the chunks list to free memory
-    #     chunks.clear()
-    #     start_row += chunk_size
-    #     print(f'Processed up to row {start_row}')
-    #
-    # breakpoint()
     run(override_entries=True)

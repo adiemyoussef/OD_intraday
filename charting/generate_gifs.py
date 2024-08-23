@@ -53,8 +53,9 @@ def generate_frame_wrapper(args):
     fig.write_image(frame_path)
     return index, frame_path
 
-def process_single_strike(group, participant):
+def process_single_strike_original(group, participant):
     #TODO: Investigate Net
+
 
     date = group['effective_date'].iloc[0]
     strike = group['strike_price'].iloc[0]
@@ -63,27 +64,69 @@ def process_single_strike(group, participant):
     for flag in ['C', 'P']:
         flag_group = group[group['call_put_flag'] == flag].sort_values('effective_datetime')
         if not flag_group.empty:
-            positions = flag_group[f'{participant}_posn']
+            metric = flag_group[f'{participant}_posn']
             datetimes = flag_group['effective_datetime']
 
-            highest_idx = positions.idxmax()
-            lowest_idx = positions.idxmin()
+            highest_idx = metric.idxmax()
+            lowest_idx = metric.idxmin()
 
             results[flag] = {
-                'start_of_day': {'value': positions.iloc[0], 'time': datetimes.iloc[0]},
-                'current': {'value': positions.iloc[-1], 'time': datetimes.iloc[-1]},
-                'lowest': {'value': positions.min(), 'time': datetimes[lowest_idx]},
-                'highest': {'value': positions.max(), 'time': datetimes[highest_idx]},
-                'prior_update': {'value': positions.iloc[-2] if len(positions) > 1 else positions.iloc[0],
-                                 'time': datetimes.iloc[-2] if len(positions) > 1 else datetimes.iloc[0]}
+                'start_of_day': {'value': metric.iloc[0], 'time': datetimes.iloc[0]},
+                'current': {'value': metric.iloc[-1], 'time': datetimes.iloc[-1]},
+                'lowest': {'value': metric.min(), 'time': datetimes[lowest_idx]},
+                'highest': {'value': metric.max(), 'time': datetimes[highest_idx]},
+                'prior_update': {'value': metric.iloc[-2] if len(metric) > 1 else metric.iloc[0],
+                                 'time': datetimes.iloc[-2] if len(metric) > 1 else datetimes.iloc[0]}
             }
 
-    # Calculate net positions
+    # Calculate net metric
     if 'C' in results and 'P' in results:
         results['Net'] = {
             key: {'value': results['C'][key]['value'] + results['P'][key]['value'],
                   'time': max(results['C'][key]['time'], results['P'][key]['time'])}
             for key in results['C']
+        }
+
+    return {'date': date, 'strike_price': strike, **results}
+
+def process_single_strike(group, participant, metric):
+
+    date = group['effective_date'].iloc[0]
+    strike = group['strike_price'].iloc[0]
+    results = {}
+
+    for flag in ['C', 'P']:
+        flag_group = group[group['call_put_flag'] == flag].sort_values('effective_datetime')
+        if not flag_group.empty:
+            if metric == "GEX":
+                metric_values = flag_group[f'{participant}_posn'] * flag_group['gamma']
+            elif metric == "DEX":
+                metric_values = flag_group[f'{participant}_posn'] * flag_group['delta']
+            else:
+                metric_values = flag_group[f'{participant}_posn']
+
+            datetimes = flag_group['effective_datetime']
+            highest_idx = metric_values.idxmax()
+            lowest_idx = metric_values.idxmin()
+
+            results[flag] = {
+                'start_of_day': {'value': metric_values.iloc[0], 'time': datetimes.iloc[0]},
+                'current': {'value': metric_values.iloc[-1], 'time': datetimes.iloc[-1]},
+                'lowest': {'value': metric_values.min(), 'time': datetimes[lowest_idx]},
+                'highest': {'value': metric_values.max(), 'time': datetimes[highest_idx]},
+                'prior_update': {
+                    'value': metric_values.iloc[-2] if len(metric_values) > 1 else metric_values.iloc[0],
+                    'time': datetimes.iloc[-2] if len(datetimes) > 1 else datetimes.iloc[0]
+                }
+            }
+
+    # Calculate net metric
+    if 'C' in results and 'P' in results:
+        results['Net'] = {
+            key: {
+                'value': results['C'][key]['value'] + results['P'][key]['value'],
+                'time': max(results['C'][key]['time'], results['P'][key]['time'])
+            } for key in results['C']
         }
 
     return {'date': date, 'strike_price': strike, **results}
@@ -120,8 +163,8 @@ def generate_color_scale(base_color, is_positive):
     return f'rgb({int(rgb[0] * 255)},{int(rgb[1] * 255)},{int(rgb[2] * 255)})'
 
 
-def generate_frame(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type,
-                   full_img_path, metric = "positioning"):
+def generate_frame(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type,metric,
+                   full_img_path):
 
 
     try:
@@ -186,7 +229,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
     grouped = metrics_data.groupby('strike_price')
 
     # Process each group
-    results = [process_single_strike(group, participant) for _, group in grouped]
+    results = [process_single_strike(group, participant, metric) for _, group in grouped]
 
     # Convert results to DataFrame and sort by strike price
     results_df = pd.DataFrame(results).sort_values('strike_price', ascending=True)
@@ -220,10 +263,10 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
 
     for pos_type in position_types:
         if pos_type in results_df.columns:
-            positions = ['current', 'start_of_day', 'prior_update']
+            metric = ['current', 'start_of_day', 'prior_update']
             symbols = ['line-ns', 'circle', 'x-thin']
 
-            for position, symbol in zip(positions, symbols):
+            for position, symbol in zip(metric, symbols):
                 def safe_extract(x, key):
                     if isinstance(x, dict) and key in x:
                         return x[key]['value'] if isinstance(x[key], dict) else x[key]
@@ -275,7 +318,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
                     )
                     fig.add_trace(trace_negative)
                 else:
-                    # For non-current positions, use the same color scheme as before
+                    # For non-current metric, use the same color scheme as before
                     trace = go.Scatter(
                         x=x_values[valid_mask],
                         y=results_df['strike_price'][valid_mask],
@@ -439,7 +482,8 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
 
 
 def generate_gif(data,candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
-                 img_path='config/images/logo_dark.png', color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
+                 metric = "positioning",
+                 img_path='config/images/logo_dark.png',
                  output_gif='animated_chart.gif'):
 
     # Get the project root directory
@@ -462,7 +506,7 @@ def generate_gif(data,candlesticks, session_date, participant_input, position_ty
     for i, timestamp in enumerate(timestamps):
         print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
         fig = generate_frame(data,candlesticks, timestamp, participant_input, strike_input, expiration_input, position_type_input,
-                             full_img_path)
+                             full_img_path, metric)
 
         # Save the frame as an image
         frame_path = os.path.join(temp_dir, f'frame_{i:03d}.png')
@@ -523,7 +567,8 @@ def generate_discord_compatible_video(input_video_path, output_video_path):
 
 
 def generate_video(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
-                   img_path='config/images/logo_dark.png', color_net='#0000FF', color_call='#00FF00', color_put='#FF0000',
+                   metric,
+                   img_path='config/images/logo_dark.png',
                    output_video='None.mp4'):
 
     # Get the project root directory
@@ -545,6 +590,7 @@ def generate_video(data, candlesticks, session_date, participant_input, position
     for i, timestamp in enumerate(timestamps):
         print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
         fig = generate_frame(data, candlesticks, timestamp, participant_input, strike_input, expiration_input, position_type_input,
+                             metric,
                              full_img_path)
 
         # Save the frame as an image
@@ -653,7 +699,8 @@ def generate_and_send_gif(data, session_date, participant, position_type , strik
         participant_input = participant,
         position_type_input=position_type,
         strike_input=strike_input,
-        expiration_input=expiration,)
+        expiration_input=expiration,
+        )
 
 
 
