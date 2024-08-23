@@ -131,6 +131,7 @@ def build_unpivot(df, effective_datetime, minima, maxima, ticker='SPX'):
     df_unpivot.insert(2, 'effective_date', effective_date)
     df_unpivot.insert(1, 'ticker', ticker)
 
+    df_unpivot = df_unpivot.replace({np.nan: None})
     prefect_logger.info(f'{df_unpivot.head()}')
 
     return df_unpivot
@@ -298,7 +299,7 @@ def generate_heatmaps(sim_times: list, prices: list, deltas:np.ndarray, trade_da
 def compute_heatmap(args, type: str, df_book: pd.DataFrame, start_time: datetime, price: float, steps: float, range: float):
     prefect_logger = get_run_logger()
     num_processors = os.cpu_count()
-    prefect_logger.info("Number of processors available:", num_processors)
+    prefect_logger.info(f"Number of processors available:{num_processors}")
     args.proc = num_processors
     args.mode = type
 
@@ -350,43 +351,28 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
             raise ValueError("Failed to generate gamma chart")
 
         prefect_logger.info("Successfully created Plotly figure")
-        #prefect_logger.info(f"Figure data: {gamma_chart.to_dict()}")
-        #prefect_logger.info(f"Figure layout: {gamma_chart.layout}")
+
 
         image_width = 1440  # Width in pixels
         image_height = 810  # Height in pixels
         scale_factor = 3  # Increase for better quality, especially for raster formats
+
 
         #prefect_logger.info(f"Before update figure size.... layout: {gamma_chart.layout}")
         gamma_chart.update_layout(
             width=image_width,
             height=image_height
         )
+
+
         # Try different methods to save the figure
         try:
-            img_bytes = gamma_chart.to_image(format="png", scale=3)
+            img_bytes = gamma_chart.to_image(format="png", scale=scale_factor)
             prefect_logger.info(f"Successfully converted figure to image using to_image. Size: {len(img_bytes)} bytes")
+            prefect_logger.info("Sending chart to Discord")
+            send_to_discord(DEV_CHANNEL, img_bytes, title=f"Gamma Heatmap for {effective_datetime}")
         except Exception as e:
             prefect_logger.warning(f"to_image failed: {str(e)}. Trying alternative method.")
-
-            # Alternative method: Save as HTML and capture screenshot
-            html = gamma_chart.to_html(include_plotlyjs='cdn', full_html=False)
-            prefect_logger.info(f"Generated HTML. Length: {len(html)}")
-
-            send_to_discord(DEV_CHANNEL, html, title=f"Gamma Heatmap for {effective_datetime}")
-            # Here you would typically use a headless browser to capture a screenshot
-            # For this example, we'll just encode the HTML as base64
-            scope = PlotlyScope()
-            img_bytes = scope.transform(gamma_chart, format="png", width=1440, height=810)
-            prefect_logger.info(f"Encoded HTML as base64. Size: {len(img_bytes)} bytes")
-
-        if img_bytes:
-            prefect_logger.info(f"Successfully converted figure to image/HTML. Size: {len(img_bytes)} bytes")
-        else:
-            raise ValueError("Image conversion resulted in empty bytes")
-
-        prefect_logger.info("Sending chart to Discord")
-        send_to_discord(DEV_CHANNEL, html, title=f"Gamma Heatmap for {effective_datetime}")
 
     except Exception as e:
         prefect_logger.exception(f"Error in plot_and_send_chart: {str(e)}")
@@ -395,33 +381,36 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
 
 @flow(name="Heatmap Generation Flow")
 def heatmap_generation_flow(
+    df_book: pd.DataFrame = None,
     steps: float = 2.5,
     range: float = 0.025,
     open_price: float = 5600,
-    effective_date: str = '2024-08-21',
-    effective_time: str = '13:00:00'
+    effective_datetime: str = None,
+    effective_date: str = '2024-08-23',
+    effective_time: str = '11:40:00'
 ):
     prefect_logger = get_run_logger()
-
+    #TODO: Effective_date from effective_datetime
     # Input parameters
 
     spx = {"steps": steps, "range": range}
     open_price = open_price
-    effective_date = effective_date
-    effective_time = effective_time
-    effective_datetime = effective_date + ' ' + effective_time
-    datetime_object = pd.to_datetime(effective_datetime)
+    if df_book is None:
+        effective_date = effective_date
+        effective_time = effective_time
+        effective_datetime = effective_date + ' ' + effective_time
 
-    #----------------- Books ----------------------#
-    # Fetch data
-    books_query = f"""
-    SELECT * FROM intraday.intraday_books
-    WHERE effective_date ='{effective_date}'
-    and effective_datetime = '{effective_datetime}'
-    """
-    df_book = fetch_data_from_db(books_query)
-    unique_eff_datetime = df_book["effective_date"].unique()
-    prefect_logger.info(f"{unique_eff_datetime}")
+
+        #----------------- Books ----------------------#
+        # Fetch data
+        books_query = f"""
+        SELECT * FROM intraday.intraday_books
+        WHERE effective_date ='{effective_date}'
+        and effective_datetime = '{effective_datetime}'
+        """
+        df_book = fetch_data_from_db(books_query)
+        unique_eff_datetime = df_book["effective_date"].unique()
+        prefect_logger.info(f"{unique_eff_datetime}")
 
     #------------- Candlesticks -------------#
     # Fetch data
@@ -436,12 +425,15 @@ def heatmap_generation_flow(
     prefect_logger.info(f"{unique_cd_eff_datetime}")
 
     candlesticks_resampled = resample_and_convert_timezone(candlesticks)
-    cd_ed = candlesticks_resampled["effective_datetime"].unique()
-    prefect_logger.info(f"{cd_ed}")
+    candlesticks_resampled = candlesticks_resampled.set_index('effective_datetime', drop=False)
+    #cd_ed = candlesticks_resampled["effective_datetime"].unique()
+    #prefect_logger.info(f"{cd_ed}")
     #----------------------------------------#
     # Compute heatmap
     start_heatmap_computations = time.time()
     args = argparse.Namespace(proc=os.cpu_count(), mode='delta')
+
+    datetime_object = pd.to_datetime(effective_datetime)
     df_charm, df_gamma, minima_df, maxima_df = compute_heatmap(
         args, type='delta', df_book=df_book,
         start_time=datetime_object, price=open_price,
@@ -456,7 +448,6 @@ def heatmap_generation_flow(
 
     gamma_to_push = build_unpivot(df_gamma,effective_datetime, minima_df,maxima_df)
     prefect_logger.info(f"Built unpivoted gamma data. Shape: {gamma_to_push.shape}")
-
     prefect_logger.info(f'{db.get_status()}')
     db.connect()
     prefect_logger.info(f'{db.get_status()}')

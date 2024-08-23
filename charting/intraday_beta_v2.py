@@ -241,24 +241,23 @@ def one_dte_flow(
     webhook_url: str = 'https://discord.com/api/webhooks/1275269470151245938/qNZXtA_ySwcJJJf6bS_myYqU-uDd71zHV--XJBR7xb6uVhs7ccjKE59_c8y9AMZ86OC_'
                     #DEV_CHANNEL
 ):
-    if strike_range:
-        strike_range = parse_strike_range(strike_range)
-
-
-    position_types = ['Net','C','P']
-    expiration = str(get_next_expiration_date(session_date))
-
+    # session_date = '2024-08-21'
+    # participant = 'firm'
+    expiration = '2024-08-26'
 
     # Set default values if not provided
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5500, 5700]
-    if expiration is None:
-        expiration = session_date
+        strike_range = [5300, 5750]
+    # if strike_range:
+    #     strike_range = parse_strike_range(strike_range)
     if position_types is None:
-        position_types = ['C', 'P', 'Net']
+        position_types = ['Net','C','P']
+    if expiration is None:
+        #TODO: Next business day not day
+        expiration = str(get_next_expiration_date(session_date))
     elif 'All' in position_types:
         position_types = ['C', 'P', 'Net']
 
