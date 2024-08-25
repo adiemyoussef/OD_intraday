@@ -472,8 +472,8 @@ def generate_book(ticker:str, date:str):
     Generate the official start of day book
     """,
     version="1.0.0",
-    retries=10,
-    retry_delay_seconds=300, #5 minutes
+    #retries=10,
+    #retry_delay_seconds=300, #5 minutes
     timeout_seconds=3600,
 )
 def generate_revised_book(override=False, sleep_time=600, retry_cycles=6):
