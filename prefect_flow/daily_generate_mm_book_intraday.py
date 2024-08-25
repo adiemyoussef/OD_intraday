@@ -476,7 +476,7 @@ def generate_book(ticker:str, date:str):
     #retry_delay_seconds=300, #5 minutes
     timeout_seconds=3600,
 )
-def generate_revised_book(override=False, sleep_time=600, retry_cycles=6):
+def generate_revised_book(override_entries=False, sleep_time=600, retry_cycles=6):
     """
     This function orchestrates the generation of daily mm_books for export to results.mm_books.
 
@@ -504,6 +504,8 @@ def generate_revised_book(override=False, sleep_time=600, retry_cycles=6):
     merged_df['quote_date'] = pd.to_datetime(merged_df['quote_date'])
     filtered_df = merged_df[merged_df['quote_date'] > '2024-01-01']
     dates_to_run = filtered_df[filtered_df['as_of_date'].isna()]['quote_date'].dt.date.values
+    prefect_logger.info(f'Quote dates to run: {dates_to_run}')
+
     for date in reversed(dates_to_run):
         prefect_logger.info(f'Starting for quote_date: {date}')
 
@@ -511,13 +513,13 @@ def generate_revised_book(override=False, sleep_time=600, retry_cycles=6):
             if tables_are_synced():
                 quote_date = db.execute_query(latest_quote_date).values[0][0]
 
-                if date_isin_books(quote_date, ticker.replace('^', '')) and override:
-                    prefect_logger.info(f'Override entry for {date}')
+                if date_isin_books(quote_date, ticker.replace('^', '')) and override_entries:
+                    prefect_logger.info(f'Override entry for the following quote date: {date}')
                     df_book = generate_book(ticker, date)
                     insert_to_table(df_book, 'intraday', 'new_daily_book_format')
 
                 elif not date_isin_books(quote_date, ticker.replace('^', '')):
-                    prefect_logger.info(f'{date} not in table')
+                    prefect_logger.info(f'Quote date {date} not in table')
                     df_book = generate_book(ticker, date)
                     insert_to_table(df_book, 'intraday', 'new_daily_book_format')
 
