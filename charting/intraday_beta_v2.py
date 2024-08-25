@@ -353,6 +353,6 @@ def GEX_flow(
     pass
 
 if __name__ == "__main__":
-    zero_dte_flow()
-    one_dte_flow()
-    #GEX_flow()
+    #zero_dte_flow()
+    #one_dte_flow()
+    GEX_flow()
