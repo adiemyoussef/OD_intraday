@@ -63,7 +63,8 @@ def date_isin_books(quote_date:str, ticker:str):
         'ticker': ticker
     }
 
-    result = db.execute_query(is_date_in_mm_books, params=parameters)
+    result = db.execute_query(is_date_in_books, params=parameters)
+
     # Assuming the result is a DataFrame with the count in the first cell
     count = result.iloc[0, 0]
 
@@ -72,7 +73,6 @@ def date_isin_books(quote_date:str, ticker:str):
 
     return count > 0
 
-@task(name='Finding next trading date')
 def calculate_next_trading_date(date:str):
     """
     Calculates the next trading date after a given date using the NYSE trading calendar.
@@ -521,6 +521,7 @@ def generate_revised_book(override_entries=False, sleep_time=600, retry_cycles=6
                 elif not date_isin_books(quote_date, ticker.replace('^', '')):
                     prefect_logger.info(f'Quote date {date} not in table')
                     df_book = generate_book(ticker, date)
+
                     insert_to_table(df_book, 'intraday', 'new_daily_book_format')
 
 

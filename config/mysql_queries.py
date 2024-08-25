@@ -167,8 +167,8 @@ where ticker = 'SPX'
 order by as_of_date asc;
 """
 
-is_date_in_mm_books = """
-SELECT COUNT(*) FROM dev_environment.charts_mmbook_holidays
+is_date_in_books = """
+SELECT COUNT(*) FROM intraday.new_daily_book_format
 -- SELECT COUNT(*) FROM optionsdepth_stage.charts_mmbook
 WHERE as_of_date = %(quote_date)s
 and
