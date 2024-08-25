@@ -266,7 +266,8 @@ class DatabaseUtilities:
     def execute_query(
             self,
             query: str,
-            params: Optional[tuple] = None,
+            #params: Optional[tuple] = None,
+            params: Optional[Union[tuple, dict]] = None,
             return_type: str = 'dataframe'
     ) -> Union[pd.DataFrame, List[Dict], List[tuple]]:
         if not self.connection:
@@ -274,7 +275,14 @@ class DatabaseUtilities:
 
         try:
             with self.connection.cursor(dictionary=True) as cursor:
-                cursor.execute(query, params)
+                # Check the type of params and execute accordingly
+                if isinstance(params, dict):
+                    cursor.execute(query, params)
+                elif isinstance(params, tuple) or params is None:
+                    cursor.execute(query, params)
+                else:
+                    raise ValueError("params must be either a dictionary, tuple, or None")
+
                 results = cursor.fetchall()
                 columns = [column[0] for column in cursor.description]
 

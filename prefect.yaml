@@ -128,7 +128,7 @@ deployments:
   parameters: {}
 
 - name: Gather Options Chain
-  entrypoint: gather_options_chains.py:poly_flow
+  entrypoint: prefect_flow/gather_options_chains.py:poly_flow
   work_pool:
     name: intraday-paperspace-agent
     work_queue_name:
@@ -152,6 +152,33 @@ deployments:
   version:
   tags: []
   description:
+  parameters: {}
+
+- name: Revised Book
+  entrypoint: prefect_flow/daily_generate_mm_book_intraday.py:generate_revised_book
+  work_pool:
+    name: intraday-paperspace-agent
+    work_queue_name:
+    job_variables: {}
+  schedules:
+  - cron: 30 2 * * 2-6
+    timezone: America/New_York
+    day_or: true
+    active: true
+  storage:
+    type: github
+    repository: https://github.com/adiemyoussef/OD_intraday.git
+    reference: dev_test
+    access_token:
+      token:
+  pull:
+  - prefect.deployments.steps.git_clone:
+      repository: https://github.com/adiemyoussef/OD_intraday.git
+      branch: dev_test
+      access_token: '{{ prefect.blocks.github-credentials.my-github-credentials }}'
+  version:
+  tags: []
+  description: "\n    Generate the official start of day book\n    "
   parameters: {}
 
 
