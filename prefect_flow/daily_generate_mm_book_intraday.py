@@ -522,7 +522,7 @@ def generate_revised_book(override=False, sleep_time=600, retry_cycles=6):
                     insert_to_table(df_book, 'intraday', 'new_daily_book_format')
 
 
-                prefect_logger.info(f"{date} already in results.mm_books. No Override")
+                prefect_logger.info(f"{date} already in intraday.new_daily_book_format. No Override")
                 break
             else:
                 time.sleep(sleep_time)  # Wait for 10 minutes
