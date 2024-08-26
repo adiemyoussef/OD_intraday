@@ -24,6 +24,8 @@ print(f'{db.get_status()}')
 def get_next_expiration_date(current_date: date) -> date:
     # This function should return the next expiration date (usually the next Friday)
     # For simplicity, let's assume it's always the next day
+
+    #TODO: Use NEXT trading day, not next day
     return current_date + timedelta(days=1)
 
 @task
@@ -366,5 +368,5 @@ def GEX_flow(
 
 if __name__ == "__main__":
     #zero_dte_flow()
-    #one_dte_flow()
-    GEX_flow()
+    one_dte_flow()
+    #GEX_flow()
