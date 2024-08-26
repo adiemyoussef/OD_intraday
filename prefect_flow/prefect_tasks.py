@@ -870,10 +870,6 @@ def Intraday_Flow():
     flow_start_time = time_module.time()
     current_time = datetime.now(ZoneInfo("America/New_York")).time()
 
-
-
-
-
     expected_file_override = None #'/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-15_15_00_1.csv.zip'
 
     db_utils.connect()

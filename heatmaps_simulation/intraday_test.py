@@ -104,7 +104,7 @@ def get_gamma_effective_datetime(effective_date):
     query = f"""
     SELECT distinct(effective_datetime) from intraday.intraday_gamma
     where effective_date = '{effective_date}'
-    and time(effective_datetime) >= '09:00:00'
+    and time(effective_datetime) >= '09:50:00'
     """
     return db.execute_query(query)
 
@@ -127,7 +127,7 @@ def fetch_gamma_data(db, effective_date, effective_datetime):
         FROM intraday.intraday_gamma
         WHERE effective_datetime <= '{effective_datetime}' -- (SELECT max(effective_datetime) FROM intraday.intraday_gamma)
         and effective_date = '{effective_date}'
-        and time(effective_datetime) >= '09:00:00'
+        and time(effective_datetime) >= '09:50:00'
     ),
     consumed_gamma AS (
         SELECT 
@@ -255,6 +255,8 @@ def heatmap_generation_flow(
         effective_date = '{effective_date}'
         AND 
         effective_datetime <= '{cd_formatted_datetime}'
+        AND
+        effective_datetime > '2024-08-26 13:50:00'
         """
 
         candlesticks = db.execute_query(cd_query)
@@ -297,7 +299,7 @@ def heatmap_generation_flow(
         maxima_df = maxima_df.reindex_like(df_gamma).fillna(np.nan)
 
         # Generate and send heatma
-        breakpoint()
+
         gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
                                  effective_datetime=effective_datetime, spx=spx_candlesticks)
 
@@ -319,6 +321,9 @@ def heatmap_generation_flow(
     # Generate video from saved frames
     output_video = f'heatmap_video_{effective_date}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.mp4'
     create_video_from_frames(frame_paths, output_video, fps=5)
+
+    #send to discord both the video and the last frame
+    # webhook: https://discord.com/api/webhooks/1277632021828599931/A5S1TsZmN3kJsN1ubUxkk3pmaRY3UsNp4WhQfPctvNqwiazwXakL6OV_IvD91zD7Aq6J
 
     # Clean up temporary files
     for file in frame_paths:

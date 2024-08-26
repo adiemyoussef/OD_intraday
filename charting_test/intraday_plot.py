@@ -128,8 +128,11 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
     else:
         title_stamp = effective_datetime  # Keep it as is if it's already a string
 
-    z_min = minima_df.values.transpose()
-    z_max = maxima_df.values.transpose()
+    # z_min = minima_df.values.transpose()
+    # z_max = maxima_df.values.transpose()
+
+    z_max = minima_df.values.transpose()
+    z_min = maxima_df.values.transpose()
 
     times_to_show = np.arange(0, len(x), 6)
     bonbhay = [x[time] for time in times_to_show]
