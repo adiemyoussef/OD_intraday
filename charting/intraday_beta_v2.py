@@ -251,7 +251,7 @@ def one_dte_flow(
 ):
     # session_date = '2024-08-21'
     # participant = 'firm'
-    expiration = '2024-08-26'
+    expiration = '2024-08-27'
 
     # Set default values if not provided
     if session_date is None:
