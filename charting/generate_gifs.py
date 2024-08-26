@@ -89,7 +89,7 @@ def process_single_strike_original(group, participant):
 
     return {'date': date, 'strike_price': strike, **results}
 
-def process_single_strike(group, participant, metric):
+def process_single_strike(group, participant, metric, last_price=1):
 
     date = group['effective_date'].iloc[0]
     strike = group['strike_price'].iloc[0]
@@ -99,7 +99,8 @@ def process_single_strike(group, participant, metric):
         flag_group = group[group['call_put_flag'] == flag].sort_values('effective_datetime')
         if not flag_group.empty:
             if metric == "GEX":
-                metric_values = flag_group[f'{participant}_posn'] * flag_group['gamma']
+
+                metric_values = flag_group[f'{participant}_posn'] * flag_group['gamma'] * float(last_price) * 100  #/ 1000000
             elif metric == "DEX":
                 metric_values = flag_group[f'{participant}_posn'] * flag_group['delta']
             else:
@@ -163,8 +164,16 @@ def generate_color_scale(base_color, is_positive):
     return f'rgb({int(rgb[0] * 255)},{int(rgb[1] * 255)},{int(rgb[2] * 255)})'
 
 
-def generate_frame(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type,metric,
+def generate_frame(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type,metric_to_compute,last_price,
                    full_img_path):
+
+
+    if metric_to_compute == 'GEX':
+        x_axis_title = "Notional Gamma (M$)"
+    elif metric_to_compute == 'DEX':
+        x_axis_title = "Delta Exposure"
+    else:
+        x_axis_title = "Position"
 
 
     try:
@@ -229,7 +238,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
     grouped = metrics_data.groupby('strike_price')
 
     # Process each group
-    results = [process_single_strike(group, participant, metric) for _, group in grouped]
+    results = [process_single_strike(group, participant, metric_to_compute,last_price) for _, group in grouped]
 
     # Convert results to DataFrame and sort by strike price
     results_df = pd.DataFrame(results).sort_values('strike_price', ascending=True)
@@ -263,10 +272,10 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
 
     for pos_type in position_types:
         if pos_type in results_df.columns:
-            metric = ['current', 'start_of_day', 'prior_update']
+            update_period = ['current', 'start_of_day', 'prior_update']
             symbols = ['line-ns', 'circle', 'x-thin']
 
-            for position, symbol in zip(metric, symbols):
+            for position, symbol in zip(update_period, symbols):
                 def safe_extract(x, key):
                     if isinstance(x, dict) and key in x:
                         return x[key]['value'] if isinstance(x[key], dict) else x[key]
@@ -318,7 +327,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
                     )
                     fig.add_trace(trace_negative)
                 else:
-                    # For non-current metric, use the same color scheme as before
+                    # For non-current update_period, use the same color scheme as before
                     trace = go.Scatter(
                         x=x_values[valid_mask],
                         y=results_df['strike_price'][valid_mask],
@@ -411,7 +420,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
     fig.update_layout(
         title=dict(
             text=(f"<b>Breakdown By Strike</b><br>"
-                  f"<sup>SPX: {participant_mapping.get(participant, 'Unknown Participant')} {position_type} {metric} as of {timestamp}</sup><br>"
+                  f"<sup>SPX: {participant_mapping.get(participant, 'Unknown Participant')} {position_type} {metric_to_compute} as of {timestamp}</sup><br>"
                   f"<sup>{subtitle_strike} | {subtitle_expiration}</sup>"),
             font=dict(family="Arial", size=24, color="black"),
             x=0.0,
@@ -431,7 +440,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
         paper_bgcolor='white',
         font=dict(family="Arial", color='black', size=12),
         xaxis=dict(
-            title="Position",
+            title=f"{x_axis_title}",
             showgrid=True,
             gridcolor='lightgrey',
             zeroline=True,
@@ -481,7 +490,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
     return fig
 
 
-def generate_gif(data,candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
+def generate_gif(data,candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,last_price,
                  metric = "positioning",
                  img_path='config/images/logo_dark.png',
                  output_gif='animated_chart.gif'):
@@ -506,7 +515,7 @@ def generate_gif(data,candlesticks, session_date, participant_input, position_ty
     for i, timestamp in enumerate(timestamps):
         print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
         fig = generate_frame(data,candlesticks, timestamp, participant_input, strike_input, expiration_input, position_type_input,
-                             full_img_path, metric)
+                             full_img_path, metric, last_price)
 
         # Save the frame as an image
         frame_path = os.path.join(temp_dir, f'frame_{i:03d}.png')
@@ -567,9 +576,10 @@ def generate_discord_compatible_video(input_video_path, output_video_path):
 
 
 def generate_video(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
-                   metric,
+                   metric,last_price,
                    img_path='config/images/logo_dark.png',
                    output_video='None.mp4'):
+
 
     # Get the project root directory
     project_root = Path(__file__).parent.parent
@@ -589,8 +599,9 @@ def generate_video(data, candlesticks, session_date, participant_input, position
 
     for i, timestamp in enumerate(timestamps):
         print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
+
         fig = generate_frame(data, candlesticks, timestamp, participant_input, strike_input, expiration_input, position_type_input,
-                             metric,
+                             metric,last_price,
                              full_img_path)
 
         # Save the frame as an image
@@ -692,7 +703,7 @@ def send_to_discord(webhook_url, file_paths, content=None, title=None, descripti
     return response.status_code == 200
 
 #---------------------#
-def generate_and_send_gif(data, session_date, participant, position_type , strike_input, expiration,webhook_url):
+def generate_and_send_gif(data, session_date, participant, position_type , strike_input, expiration,last_price,webhook_url):
     gif_path = generate_gif(
         data,
         session_date,
@@ -700,6 +711,7 @@ def generate_and_send_gif(data, session_date, participant, position_type , strik
         position_type_input=position_type,
         strike_input=strike_input,
         expiration_input=expiration,
+        last_price= last_price
         )
 
 
@@ -763,14 +775,16 @@ def generate_and_send_gif(data, session_date, participant, position_type , strik
     return success
 
 
-def generate_and_send_video(data, session_date, participant, position_type , strike_input, expiration,webhook_url):
+def generate_and_send_video(data, session_date, participant, position_type , strike_input, expiration,metric,last_price,webhook_url):
     video_path = generate_video(
         data,
         session_date,
         participant_input = participant,
         position_type_input=position_type,
         strike_input=strike_input,
-        expiration_input=expiration,)
+        expiration_input=expiration,
+        metric=metric,
+        last_price=last_price)
 
 
 

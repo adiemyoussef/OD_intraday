@@ -117,14 +117,16 @@ def get_traces(result_df, key_values, key_prices, line_color):
 
 
 def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None, save_fig=False, fig_show = False):
-    prefect_logger = get_run_logger()
+    # prefect_logger = get_run_logger()
     x = df_heatmap.index
     y = df_heatmap.columns.values
     z = df_heatmap.values.transpose()
 
-
-
-    title_stamp = effective_datetime.strftime("%Y-%m-%d %H:%M")
+    # Format the effective_datetime for the title
+    if not isinstance(effective_datetime, str):
+        title_stamp = effective_datetime.strftime("%Y-%m-%d %H:%M")
+    else:
+        title_stamp = effective_datetime  # Keep it as is if it's already a string
 
     z_min = minima_df.values.transpose()
     z_max = maxima_df.values.transpose()
@@ -252,7 +254,8 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
     #----- Adding OHLC -----
 
     if spx is not None:
-        prefect_logger.info("Entering OHLC overlay")
+        #prefect_logger.info("Entering OHLC overlay")
+        print("Entering OHLC overlay")
         candlestick = go.Candlestick(
             x=spx.index,
             open=spx['open'],
@@ -304,6 +307,7 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
     image_height = 810  # Height in pixels
     scale_factor = 3  # Increase for better quality, especially for raster formats
 
+    #breakpoint()
     if fig_show:
         fig.show()
 

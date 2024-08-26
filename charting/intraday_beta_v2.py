@@ -37,7 +37,7 @@ def fetch_data(session_date: str, strike_range: List[int], expiration: str, star
     start_of_video = f'{session_date} {start_video}'
 
     metrics_query =f"""
-    SELECT * FROM intraday.intraday_books_test_posn
+    SELECT * FROM intraday.intraday_books
     WHERE effective_date = '{session_date}'
     and effective_datetime >= '{start_of_video}'
     and strike_price between {strike_range[0]} and {strike_range[1]}
@@ -51,9 +51,16 @@ def fetch_data(session_date: str, strike_range: List[int], expiration: str, star
     ticker = 'SPX'
     """
 
+    last_price_query = f"""
+    SELECT close FROM optionsdepth_stage.charts_candlestick 
+    WHERE id = (SELECT MAX(id) FROM optionsdepth_stage.charts_candlestick WHERE ticker = 'SPX')
+    """
+
 
     metrics = db.execute_query(metrics_query)
     candlesticks = db.execute_query(candlesticks_query)
+    last_price = db.execute_query(last_price_query)
+
 
     if candlesticks.empty:
         print("No candlesticks Available")
@@ -67,7 +74,7 @@ def fetch_data(session_date: str, strike_range: List[int], expiration: str, star
         candlesticks.drop_duplicates(keep='first', inplace=False)
 
 
-    return metrics, candlesticks
+    return metrics, candlesticks, last_price
 
 @task
 def process_data(metric: pd.DataFrame,candlesticks: pd.DataFrame, session_date: str, participant: str,
@@ -87,7 +94,7 @@ def process_data(metric: pd.DataFrame,candlesticks: pd.DataFrame, session_date: 
 
 @task
 def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
-                        strike_range: List[int], expiration: str, position_type: list, metric:str = '') -> str:
+                        strike_range: List[int], expiration: str, position_type: list, last_price:float, metric:str = 'positioning') -> str:
 
     videos_paths =[]
 
@@ -95,7 +102,7 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
 
         video_path = generate_video(
             data, candlesticks, session_date, participant, pos_type,
-            strike_range, expiration, "positioning",
+            strike_range, expiration, metric, last_price,
             output_video=f'{pos_type}_{expiration}_animated_chart.mp4'
         )
         videos_paths.append(video_path)
@@ -213,14 +220,15 @@ def zero_dte_flow(
     print(f"Start time set to: {start_time}")
 
     # Fetch data
-    metrics, candlesticks = fetch_data(session_date, strike_range, expiration, start_time)
+    metrics, candlesticks, last_price = fetch_data(session_date, strike_range, expiration, start_time)
 
     as_of_time_stamp = str(metrics["effective_datetime"].max())
+    last_price = last_price.values[0][0]
     # Process data and generate GIFs
     #gif_paths = process_data(metrics, candlesticks, session_date, participant, strike_range, expiration, position_types)
 
     videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
-                                       position_types, 'positioning')
+                                       position_types, last_price ,'positioning')
     print(f"Video generated at: {videos_paths}")
 
     # Send Discord message with Videos
@@ -275,14 +283,15 @@ def one_dte_flow(
     print(f"Start time set to: {start_time}")
 
     # Fetch data
-    data, candlesticks = fetch_data(session_date, strike_range, expiration, start_time)
+    data, candlesticks, last_price = fetch_data(session_date, strike_range, expiration, start_time)
 
     as_of_time_stamp = str(data["effective_datetime"].max())
+    last_price = last_price.values[0][0]
     # Process data and generate GIFs
     #gif_paths = process_data(data, candlesticks, session_date, participant, strike_range, expiration, position_types)
 
     videos_paths = generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration,
-                                       position_types, 'positioning')
+                                       position_types,last_price ,'positioning')
     print(f"Video generated at: {videos_paths}")
 
     # Send Discord message with Videos
@@ -312,16 +321,17 @@ def GEX_flow(
         expiration: Optional[str] = None,
         participant: str = 'mm',
         position_types: Optional[List[str]] = None,
-        webhook_url: str = DEV_CHANNEL
+        webhook_url: str = 'https://discord.com/api/webhooks/1277599354932428842/c2Ix3cPdLzI0fzxDdoGRye8nyKPLZj0dqmIxOiRQP2DYFx7YbgphUe8rAsWqkZUKiD0f'
+                            #DEV_CHANNEL
 ):
-    expiration= '2024-08-23'
+    expiration= '2024-08-26'
 
     if session_date is None:
         #TODO: the latest effective_date of the book
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5500, 5700]
+        strike_range = [5500, 5750]
     if position_types is None:
         position_types = ['Net']
 
@@ -336,11 +346,13 @@ def GEX_flow(
 
     print(f"Start time set to: {start_time}")
     # Fetch data
-    metrics, candlesticks = fetch_data(session_date, strike_range, expiration, start_time)
+    metrics, candlesticks,last_price = fetch_data(session_date, strike_range, expiration, start_time)
     as_of_time_stamp = str(metrics["effective_datetime"].max())
 
+    last_price = last_price.values[0][0]
+
     videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
-                                       position_types, "GEX")
+                                       position_types, last_price,"GEX")
     print(f"Video generated at: {videos_paths}")
 
     # Send Discord message with Videos

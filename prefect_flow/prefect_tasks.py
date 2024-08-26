@@ -866,6 +866,8 @@ def Intraday_Flow():
 
 
     flow_start_time = time_module.time()
+    current_time = datetime.now(ZoneInfo("America/New_York")).time()
+
 
     expected_file_override = None #'/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-15_15_00_1.csv.zip'
 
@@ -1120,13 +1122,21 @@ def Intraday_Flow():
 
                     logger.info(f"Data flow finished in {time_module.time() - flow_start_time} sec.")
 
-                    #breakpoint()
-                    #Heatmap flow
-                    effective_datetime = str(final_book_clean_insert["effective_datetime"].unique()[0])
-                    heatmap_generation_flow(final_book_clean_insert,effective_datetime=effective_datetime)
-                    # Discord MP4
-                    #zero_dte_flow()
-                    #one_dte_flow()
+                    if current_time < time(16, 0):
+                        effective_datetime = str(final_book_clean_insert["effective_datetime"].unique()[0])
+                        heatmap_generation_flow(final_book_clean_insert,effective_datetime=effective_datetime)
+
+                        #Generate 1DTE heatmap
+                        #heatmap_generation_flow(final_book_clean_insert,)
+                    else:
+
+                        logger.info("It's past 4 PM ET. Skipping heatmap generation.")
+
+                        #Generate 1DTE heatmap
+                        #heatmap_generation_flow(final_book_clean_insert,)
+
+
+
                     logger.info(f"Finished flow in {time_module.time()-flow_start_time} sec.")
 
 

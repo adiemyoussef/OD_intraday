@@ -70,7 +70,6 @@ def simulation_times(start_time: datetime):
     :return: List of simulation times.
     """
     close_time = start_time.replace(second=0, microsecond=0, minute=0, hour=16)
-    #close_time = start_time.replace(second=0, microsecond=0, minute=30, hour=9)
     incoming_sim_times = []
 
     while start_time <= close_time:
