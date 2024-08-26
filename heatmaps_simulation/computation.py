@@ -332,7 +332,7 @@ def filter_datetimes_specific_date(datetimes, target_date='2024-07-25', start_ho
 
 
 if __name__ == "__main__":
-    spx = {"steps": HEATMAP_PRICE_STEPS, "range": HEATMAP_PRICE_RANGE}
+    spx = {"steps": HEATMAP_PRICE_STEPS, "range": 0.015}#HEATMAP_PRICE_RANGE}
 
     #------------- INPUTS ------------#
 
@@ -396,7 +396,7 @@ if __name__ == "__main__":
         logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
     # Generate video from saved frames
-    output_video = f'heatmap_video_{effective_date}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.mp4'
+    output_video = f'heatmap_video_1dte.mp4'
     create_video_from_frames(frame_paths, output_video, fps=3)
 
     # Send the video to Discord
