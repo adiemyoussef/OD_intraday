@@ -421,7 +421,7 @@ if __name__ == "__main__":
 
     if video_created:
         # Send the video to Discord
-        send_video_to_discord(DEV_CHANNEL, output_video, f"Heatmap video for {effective_date}")
+        send_video_to_discord(DEV_CHANNEL, output_video, f"Upcoming day Heatmap evolution")
     else:
         logger.error("Failed to create video, not sending to Discord.")
 
