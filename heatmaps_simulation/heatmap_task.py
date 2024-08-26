@@ -442,7 +442,7 @@ def heatmap_generation_flow(
     prefect_logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
 
     # Plot and send chart
-    plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks = candlesticks_resampled)
+    #plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks = candlesticks_resampled)
 
     prefect_logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
