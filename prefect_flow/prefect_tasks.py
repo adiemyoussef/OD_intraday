@@ -1123,6 +1123,8 @@ def Intraday_Flow():
 
                     logger.info(f"Data flow finished in {time_module.time() - flow_start_time} sec.")
 
+                    # next_day_heatmap, next_day_effective_datetim = prepare_next_day_heatmap()
+
                     if current_time < datetime_time(16, 0):
                         prefect_logger.info("It's before 4 PM ET. Proceeding with heatmap generation.")
                         effective_datetime = str(final_book_clean_insert["effective_datetime"].unique()[0])

@@ -146,7 +146,7 @@ def fetch_gamma_data(db, effective_date, effective_datetime):
     upcoming_gamma AS (
         SELECT * 
         FROM intraday.intraday_gamma
-        WHERE effective_datetime >= (SELECT max(effective_datetime) FROM intraday.intraday_gamma)
+        WHERE effective_datetime = '{effective_datetime}' -- (SELECT max(effective_datetime) FROM intraday.intraday_gamma)
         and
         effective_date = '{effective_date}'
     ),
@@ -301,7 +301,7 @@ def heatmap_generation_flow(
         # Generate and send heatma
 
         gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
-                                 effective_datetime=effective_datetime, spx=spx_candlesticks)
+                                 effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5550, y_max=5700)
 
         # Save the figure as an image
         frame_path = os.path.join(temp_dir, f'frame_{len(frame_paths):03d}.png')
@@ -311,7 +311,7 @@ def heatmap_generation_flow(
             height=1080,  # Full HD height
             font=dict(size=16)  # Increase font size for better readability
         )
-        gamma_chart.write_image(frame_path, scale=2)
+        gamma_chart.write_image(frame_path, scale=3)
 
         frame_paths.append(frame_path)
 
@@ -320,7 +320,7 @@ def heatmap_generation_flow(
 
     # Generate video from saved frames
     output_video = f'heatmap_video_{effective_date}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.mp4'
-    create_video_from_frames(frame_paths, output_video, fps=5)
+    create_video_from_frames(frame_paths, output_video, fps=3)
 
     #send to discord both the video and the last frame
     # webhook: https://discord.com/api/webhooks/1277632021828599931/A5S1TsZmN3kJsN1ubUxkk3pmaRY3UsNp4WhQfPctvNqwiazwXakL6OV_IvD91zD7Aq6J
@@ -332,7 +332,6 @@ def heatmap_generation_flow(
 
     print(f"Video generated: {output_video}")
 
-    print(f"Video generated: {output_video}")
 if __name__ == "__main__":
     db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
     db.connect()

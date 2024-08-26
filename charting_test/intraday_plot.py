@@ -116,7 +116,7 @@ def get_traces(result_df, key_values, key_prices, line_color):
     return traces
 
 
-def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None, save_fig=False, fig_show = False):
+def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None,y_min=None, y_max=None, save_fig=False, fig_show = False):
     # prefect_logger = get_run_logger()
     x = df_heatmap.index
     y = df_heatmap.columns.values
@@ -305,10 +305,12 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
     )
 
     fig.update_xaxes(rangeslider_visible=False)
-
+    fig.update_yaxes(range=[y_min, y_max])
     image_width = 1440  # Width in pixels
     image_height = 810  # Height in pixels
     scale_factor = 3  # Increase for better quality, especially for raster formats
+
+
 
     #breakpoint()
     if fig_show:

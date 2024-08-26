@@ -1,4 +1,7 @@
 import time
+import uuid
+
+import cv2
 import pandas as pd
 import pytz
 from cupy_numba.main import compute_all
@@ -33,6 +36,61 @@ parser.add_argument("--mode", help="Calculation mode", choices=['delta', 'vanna'
 parser.add_argument("--proc", help="Number of processors to use", default=32)
 args = parser.parse_args()
 
+DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
+
+import requests
+
+
+def send_video_to_discord(webhook_url, video_path, content="New heatmap video"):
+    """
+    Sends a video file to a Discord channel using a webhook.
+
+    :param webhook_url: The Discord webhook URL
+    :param video_path: The path to the video file
+    :param content: The message content to send with the video
+    """
+    try:
+        with open(video_path, 'rb') as video_file:
+            files = {'file': ('heatmap_video.mp4', video_file, 'video/mp4')}
+            payload = {"content": content}
+
+            response = requests.post(webhook_url, data=payload, files=files)
+
+        if response.status_code == 200:
+            print(f"Successfully sent video to Discord: {video_path}")
+        else:
+            print(f"Failed to send video. Status code: {response.status_code}")
+            print(f"Response: {response.text}")
+
+    except Exception as e:
+        print(f"An error occurred while sending the video: {str(e)}")
+def create_video_from_frames(frame_paths, output_path, fps=5):
+    """
+    Create a video from a list of image frames.
+
+    :param frame_paths: List of paths to the image frames
+    :param output_path: Path where the output video will be saved
+    :param fps: Frames per second for the output video
+    """
+    if not frame_paths:
+        print("No frames to create video.")
+        return
+
+    # Read the first frame to get the frame size
+    frame = cv2.imread(frame_paths[0])
+    height, width, layers = frame.shape
+
+    # Define the codec and create VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+    for frame_path in frame_paths:
+        frame = cv2.imread(frame_path)
+        out.write(frame)
+
+    # Release the VideoWriter
+    out.release()
+    print(f"Video created successfully: {output_path}")
 
 
 def insert_heatmap_simulation(df, minima, maxima, ticker):
@@ -279,30 +337,17 @@ if __name__ == "__main__":
 
     #------------- INPUTS ------------#
 
-
-
-    EXPIRATIONS_TO_KEEP = 100         # Allows to filter on expirations for positionning
-    # trading_view_file = "SPREADEX_SPX_5_20240731.csv"
-    # spx_data_raw = pd.read_csv(trading_view_file)
-    # spx_data_raw.rename(columns={'time': 'effective_datetime'}, inplace = True)
-
     #----------------------------------#
     # -----------DATA READING----------#
     query = """
     SELECT * FROM intraday.intraday_books
-    WHERE effective_date ='2024-08-16'
-    and effective_datetime >= '2024-08-16 09:30:00'
-    and expiration_date != '2024-08-16 09:15:00'
+    WHERE effective_date ='2024-08-26'
+    and effective_datetime >= '2024-08-26 09:30:00'
+    and expiration_date_original >= '2024-08-27'
     """
 
     df_books = db.execute_query(query)
-    # breakpoint()
-    #
-    # df_book.to_pickle('20240725_books.pkl')
 
-
-    #df_books = pd.read_pickle('20240725_books.pkl')
-    #spx_data_raw_db = pd.read_csv('spx_20240725.csv')
 
     #------- TRADINGVIEW DATA-------- #
 
@@ -318,9 +363,13 @@ if __name__ == "__main__":
     #spx_data_chart = spx_data[spx_data.index.time >= pd.Timestamp('07:00').time()]
     # target_date = pd.Timestamp('2024-07-31').date()
     # start_time = pd.Timestamp('12:00').time()
+    # Create a unique temporary directory to store frames
+    temp_dir = f'temp_frames_{uuid.uuid4().hex}'
+    os.makedirs(temp_dir, exist_ok=True)
 
+    frame_paths = []
 
-    open_price = 5500
+    open_price = 5650
 
     unique_effective_datetimes = df_books['effective_datetime'].unique()
     cumulative_df = pd.DataFrame()
@@ -328,12 +377,6 @@ if __name__ == "__main__":
         logger.info(f"Processing effective_datetime: {effective_datetime}")
 
         effective_datetime = pd.to_datetime(effective_datetime)
-        # spx_data_chart = spx_data[
-        #     (spx_data.index.date == target_date) &
-        #     (spx_data.index.time >= start_time) &
-        #     (spx_data.index <= effective_datetime)
-        #     ]
-
 
         datetime_object = pd.to_datetime(effective_datetime)
 
@@ -348,22 +391,23 @@ if __name__ == "__main__":
 
 
         logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
-        breakpoint()
-        # Filter SPX data for charting
-        # spx_data_chart = spx_data[(spx_data.index <= effective_datetime) &
-        #                           (spx_data.index.date == datetime_object.date())]
-
-
-        # Plot the cumulative heatmap
-        #plot_heatmap_cumul(cumulative_df, spx=spx_data_chart, show_fig=True)
-        #df_to_plot = current_cumulative_heatmap.drop(columns=["effective_datetime"])
-        #plot_heatmap(df_to_plot,effective_datetime, spx=spx_data_chart, show_fig=False)
-
 
         plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df, effective_datetime=effective_datetime, spx=None)
         breakpoint()
         logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
+    # Generate video from saved frames
+    output_video = f'heatmap_video_{effective_date}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.mp4'
+    create_video_from_frames(frame_paths, output_video, fps=3)
 
+    # Send the video to Discord
+    send_video_to_discord(DEV_CHANNEL, output_video, f"Heatmap video for {effective_date}")
+
+    # Clean up temporary files
+    for file in frame_paths:
+        os.remove(file)
+    os.rmdir(temp_dir)
+
+    print(f"Video generated: {output_video}")
 
     logger.info("All heatmaps have been processed !!!!")
