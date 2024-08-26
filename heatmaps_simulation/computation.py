@@ -338,9 +338,11 @@ if __name__ == "__main__":
 
     #----------------------------------#
     # -----------DATA READING----------#
-    query = """
+    effective_date = '2024-08-26'
+
+    query = f"""
     SELECT * FROM intraday.intraday_books
-    WHERE effective_date ='2024-08-26'
+    WHERE effective_date ='{effective_date}'
     and effective_datetime >= '2024-08-26 09:30:00'
     and expiration_date_original >= '2024-08-27'
     """
