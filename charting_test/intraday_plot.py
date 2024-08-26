@@ -116,7 +116,7 @@ def get_traces(result_df, key_values, key_prices, line_color):
     return traces
 
 
-def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None,y_min=None, y_max=None, save_fig=False, fig_show = False):
+def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None,y_min=None, y_max=None, save_fig=False, fig_show = False, fig_path=None):
     # prefect_logger = get_run_logger()
     x = df_heatmap.index
     y = df_heatmap.columns.values
@@ -337,7 +337,19 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
         )
         print(f"Image saved to: {save_path}")
 
-    return fig
+    if save_fig and fig_path:
+        fig.write_image(
+            fig_path,
+            width=image_width,
+            height=image_height,
+            scale=scale_factor
+        )
+        print(f"Image saved to: {fig_path}")
+    elif save_fig:
+        print("save_fig is True but no fig_path provided. Figure not saved.")
+
+    return fig  # Return the figure object if needed
+
 
 
 def plot_gamma_intraday(df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None, save_fig=False, fig_show=False):

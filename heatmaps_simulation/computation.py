@@ -63,34 +63,43 @@ def send_video_to_discord(webhook_url, video_path, content="New heatmap video"):
 
     except Exception as e:
         print(f"An error occurred while sending the video: {str(e)}")
+
+
 def create_video_from_frames(frame_paths, output_path, fps=5):
     """
     Create a video from a list of image frames.
-
-    :param frame_paths: List of paths to the image frames
-    :param output_path: Path where the output video will be saved
-    :param fps: Frames per second for the output video
     """
     if not frame_paths:
-        print("No frames to create video.")
-        return
+        logger.error("No frames to create video.")
+        return False
 
-    # Read the first frame to get the frame size
-    frame = cv2.imread(frame_paths[0])
-    height, width, layers = frame.shape
+    try:
+        # Read the first frame to get the frame size
+        frame = cv2.imread(frame_paths[0])
+        if frame is None:
+            logger.error(f"Failed to read frame: {frame_paths[0]}")
+            return False
 
-    # Define the codec and create VideoWriter object
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        height, width, layers = frame.shape
 
-    for frame_path in frame_paths:
-        frame = cv2.imread(frame_path)
-        out.write(frame)
+        # Define the codec and create VideoWriter object
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
-    # Release the VideoWriter
-    out.release()
-    print(f"Video created successfully: {output_path}")
+        for frame_path in frame_paths:
+            frame = cv2.imread(frame_path)
+            if frame is not None:
+                out.write(frame)
+            else:
+                logger.error(f"Failed to read frame: {frame_path}")
 
+        # Release the VideoWriter
+        out.release()
+        logger.info(f"Video created successfully: {output_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Error creating video: {str(e)}")
+        return False
 
 def insert_heatmap_simulation(df, minima, maxima, ticker):
 
@@ -343,7 +352,7 @@ if __name__ == "__main__":
     query = f"""
     SELECT * FROM intraday.intraday_books
     WHERE effective_date ='{effective_date}'
-    and effective_datetime >= '2024-08-26 09:30:00'
+    and effective_datetime >= '2024-08-26 15:20:00'
     and expiration_date_original >= '2024-08-27'
     """
 
@@ -393,22 +402,41 @@ if __name__ == "__main__":
 
         logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
 
-        plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df, effective_datetime=effective_datetime, spx=None)
+        # Save the plot as an image
+        frame_path = os.path.join(temp_dir, f'frame_{len(frame_paths):03d}.png')
+        plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
+                   effective_datetime=effective_datetime, spx=None, save_fig=True,
+                   fig_path=frame_path)
 
+        if os.path.exists(frame_path):
+            frame_paths.append(frame_path)
+            logger.info(f"Frame saved: {frame_path}")
+        else:
+            logger.error(f"Failed to save frame: {frame_path}")
         logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
     # Generate video from saved frames
     output_video = f'heatmap_video_1dte.mp4'
-    create_video_from_frames(frame_paths, output_video, fps=3)
+    video_created = create_video_from_frames(frame_paths, output_video, fps=3)
 
-    # Send the video to Discord
-    send_video_to_discord(DEV_CHANNEL, output_video, f"Heatmap video for {effective_date}")
+    if video_created:
+        # Send the video to Discord
+        send_video_to_discord(DEV_CHANNEL, output_video, f"Heatmap video for {effective_date}")
+    else:
+        logger.error("Failed to create video, not sending to Discord.")
 
     # Clean up temporary files
     for file in frame_paths:
-        os.remove(file)
-    os.rmdir(temp_dir)
+        try:
+            os.remove(file)
+            logger.info(f"Removed temporary file: {file}")
+        except Exception as e:
+            logger.error(f"Failed to remove temporary file {file}: {str(e)}")
 
-    print(f"Video generated: {output_video}")
+    try:
+        os.rmdir(temp_dir)
+        logger.info(f"Removed temporary directory: {temp_dir}")
+    except Exception as e:
+        logger.error(f"Failed to remove temporary directory {temp_dir}: {str(e)}")
 
     logger.info("All heatmaps have been processed !!!!")
