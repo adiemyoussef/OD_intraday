@@ -104,7 +104,7 @@ def get_gamma_effective_datetime(effective_date):
     query = f"""
     SELECT distinct(effective_datetime) from intraday.intraday_gamma
     where effective_date = '{effective_date}'
-    and time(effective_datetime) > '09:00:00'
+    and time(effective_datetime) >= '09:00:00'
     """
     return db.execute_query(query)
 
@@ -127,8 +127,7 @@ def fetch_gamma_data(db, effective_date, effective_datetime):
         FROM intraday.intraday_gamma
         WHERE effective_datetime <= '{effective_datetime}' -- (SELECT max(effective_datetime) FROM intraday.intraday_gamma)
         and effective_date = '{effective_date}'
-        and time(effective_datetime) >= '09:30:00'
-        -- and price between 5600 and 5650
+        and time(effective_datetime) >= '09:00:00'
     ),
     consumed_gamma AS (
         SELECT 
@@ -298,7 +297,7 @@ def heatmap_generation_flow(
         maxima_df = maxima_df.reindex_like(df_gamma).fillna(np.nan)
 
         # Generate and send heatma
-
+        breakpoint()
         gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
                                  effective_datetime=effective_datetime, spx=spx_candlesticks)
 
@@ -333,4 +332,4 @@ if __name__ == "__main__":
     db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
     db.connect()
     print(f'{db.get_status()}')
-    heatmap_generation_flow(db, effective_date='2024-08-23')
+    heatmap_generation_flow(db, effective_date='2024-08-26')
