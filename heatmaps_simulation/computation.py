@@ -341,7 +341,7 @@ def filter_datetimes_specific_date(datetimes, target_date='2024-07-25', start_ho
 
 
 if __name__ == "__main__":
-    spx = {"steps": HEATMAP_PRICE_STEPS, "range": 0.015}#HEATMAP_PRICE_RANGE}
+    spx = {"steps": HEATMAP_PRICE_STEPS, "range": HEATMAP_PRICE_RANGE}
 
     #------------- INPUTS ------------#
 
@@ -352,7 +352,7 @@ if __name__ == "__main__":
     query = f"""
     SELECT * FROM intraday.intraday_books
     WHERE effective_date ='{effective_date}'
-    and effective_datetime >= '2024-08-26 15:20:00'
+    and effective_datetime >= '2024-08-26 09:30:00'
     and expiration_date_original >= '2024-08-27'
     """
 
@@ -405,7 +405,7 @@ if __name__ == "__main__":
         # Save the plot as an image
         frame_path = os.path.join(temp_dir, f'frame_{len(frame_paths):03d}.png')
         plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
-                   effective_datetime=effective_datetime, spx=None, save_fig=True,
+                   effective_datetime=effective_datetime, spx=None, y_min=5550, y_max=5750,save_fig=True,
                    fig_path=frame_path)
 
         if os.path.exists(frame_path):
