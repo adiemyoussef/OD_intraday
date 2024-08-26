@@ -1,6 +1,5 @@
 import time
 import uuid
-
 import cv2
 import pandas as pd
 import pytz
@@ -393,7 +392,7 @@ if __name__ == "__main__":
         logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
 
         plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df, effective_datetime=effective_datetime, spx=None)
-        breakpoint()
+
         logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
     # Generate video from saved frames
