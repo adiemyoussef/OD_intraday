@@ -388,7 +388,9 @@ if __name__ == "__main__":
 
         effective_datetime = pd.to_datetime(effective_datetime)
 
-        datetime_object = pd.to_datetime(effective_datetime)
+        # datetime_object = pd.to_datetime(effective_datetime)
+        datetime_object = pd.to_datetime('2024-08-27 09:30:00')
+
 
         df_subset = df_books[df_books['effective_datetime'] == effective_datetime].copy()
 
