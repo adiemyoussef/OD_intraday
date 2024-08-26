@@ -8,7 +8,8 @@ import time as time_module
 from prefect import task, flow, get_run_logger
 from prefect.tasks import task_input_hash
 from prefect_dask import DaskTaskRunner
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time  # This imports the time class from datetime
+from datetime import time as datetime_time
 from zoneinfo import ZoneInfo
 from config.config import *
 import dill
@@ -864,9 +865,13 @@ def post_processing_flow_2():
 )
 def Intraday_Flow():
 
+    prefect_logger = get_run_logger()
 
     flow_start_time = time_module.time()
     current_time = datetime.now(ZoneInfo("America/New_York")).time()
+
+
+
 
 
     expected_file_override = None #'/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-15_15_00_1.csv.zip'
@@ -1122,15 +1127,14 @@ def Intraday_Flow():
 
                     logger.info(f"Data flow finished in {time_module.time() - flow_start_time} sec.")
 
-                    if current_time < time(16, 0):
+                    if current_time < datetime_time(16, 0):
+                        prefect_logger.info("It's before 4 PM ET. Proceeding with heatmap generation.")
                         effective_datetime = str(final_book_clean_insert["effective_datetime"].unique()[0])
                         heatmap_generation_flow(final_book_clean_insert,effective_datetime=effective_datetime)
 
-                        #Generate 1DTE heatmap
-                        #heatmap_generation_flow(final_book_clean_insert,)
                     else:
+                        prefect_logger.info("It's past 4 PM ET. Skipping heatmap generation.")
 
-                        logger.info("It's past 4 PM ET. Skipping heatmap generation.")
 
                         #Generate 1DTE heatmap
                         #heatmap_generation_flow(final_book_clean_insert,)
