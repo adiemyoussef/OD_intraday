@@ -134,7 +134,7 @@ def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_da
         {"name": "", "value": "", "inline": True},
         {"name": "", "value": "", "inline": True},
         {"name": "", "value": "", "inline": True},
-        {"name": "📈 Analysis Type", "value": "Intraday Positional Movement", "inline": True},
+        {"name": "📈 Analysis Type", "value": f"Intraday {metric} Movement", "inline": True},
         {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
         {"name": "", "value":"", "inline": True},
         {"name": "👥 Participant(s)", "value": participant_text, "inline": True},
