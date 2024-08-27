@@ -248,21 +248,20 @@ def one_dte_flow(
     expiration: Optional[str] = None,
     participant: str = 'total_customers',
     position_types: Optional[List[str]] = None,
-    webhook_url: str = 'https://discord.com/api/webhooks/1275269470151245938/qNZXtA_ySwcJJJf6bS_myYqU-uDd71zHV--XJBR7xb6uVhs7ccjKE59_c8y9AMZ86OC_'
-                    #DEV_CHANNEL
+    webhook_url: str = #'https://discord.com/api/webhooks/1275269470151245938/qNZXtA_ySwcJJJf6bS_myYqU-uDd71zHV--XJBR7xb6uVhs7ccjKE59_c8y9AMZ86OC_'
+                    DEV_CHANNEL
 ):
-    # session_date = '2024-08-21'
+    # session_date = '2024-08-26'
     # participant = 'firm'
-    #expiration = '2024-08-27'
-
+    # expiration = '2024-08-30'
+    # strike_range = [5300, 5750]
     # Set default values if not provided
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
         strike_range = [5300, 5750]
-    # if strike_range:
-    #     strike_range = parse_strike_range(strike_range)
+
     if position_types is None:
         position_types = ['Net','C','P']
     if expiration is None:
@@ -326,7 +325,7 @@ def GEX_flow(
         webhook_url: str = 'https://discord.com/api/webhooks/1277599354932428842/c2Ix3cPdLzI0fzxDdoGRye8nyKPLZj0dqmIxOiRQP2DYFx7YbgphUe8rAsWqkZUKiD0f'
                             #DEV_CHANNEL
 ):
-    expiration= '2024-08-26'
+    expiration= '2024-08-27'
 
     if session_date is None:
         #TODO: the latest effective_date of the book
