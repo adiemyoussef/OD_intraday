@@ -22,9 +22,7 @@ import io
 from typing import List
 from datetime import datetime
 import plotly.graph_objects as go
-from discord_webhook import DiscordWebhook, DiscordEmbed
-
-
+import json
 
 
 # Import your utility classes
@@ -186,12 +184,12 @@ def ensure_all_connections_are_open():
 @task
 def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_date: str,
                          y_min: int, y_max: int, webhook_url: str) -> bool:
-    title = f"📊 Latest {session_date} Intraday Gamma Heatmap"
+    title = f"📊 {session_date} Intraday Gamma Heatmap"
     description = (
         f"Detailed analysis of SPX Gamma for the {session_date} session.\n"
         f"This heatmap provides insights into market movements and positioning within the specified strike range.\n"
     )
-    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    current_time = datetime.utcnow().isoformat()
     fields = [
         {"name": "📈 Analysis Type", "value": "Intraday Gamma Heatmap", "inline": True},
         {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
@@ -199,39 +197,48 @@ def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_
         {"name": "💡 Interpretation", "value": (
             "• Darker colors indicate higher gamma concentration\n"
             "• Light colors indicate lower gamma concentration\n"
+            "• White line represents the current SPX price\n"
             "• Dotted lines represent significant gamma levels\n"
         ), "inline": False},
     ]
     footer_text = f"Generated on {current_time} | By OptionsDepth Inc."
 
+    # Prepare the embed
+    embed = {
+        "title": title,
+        "description": description,
+        "color": 3447003,  # A nice blue color
+        "fields": fields,
+        "footer": {"text": footer_text},
+        "timestamp": current_time,
+        "image": {"url": "attachment://heatmap.png"}  # Reference the attached image
+    }
+
     # Convert Plotly figure to image bytes
     img_bytes = gamma_chart.to_image(format="png", scale=3)
 
-    # Create file-like object from bytes
-    img_io = io.BytesIO(img_bytes)
+    # Prepare the payload
+    payload = {
+        "content": "🚀 New Gamma Heatmap analysis is ready! Check out the latest market insights below.",
+        "embeds": [embed]
+    }
 
-    # Create Discord webhook
-    webhook = DiscordWebhook(url=webhook_url)
+    # Prepare the files dictionary
+    files = {
+        "payload_json": (None, json.dumps(payload), "application/json"),
+        "file": ("heatmap.png", img_bytes, "image/png")
+    }
 
-    # Create embed
-    embed = DiscordEmbed(title=title, description=description, color=242424)
-    for field in fields:
-        embed.add_embed_field(name=field["name"], value=field["value"], inline=field.get("inline", False))
-    embed.set_footer(text=footer_text)
+    # Send the request
+    response = requests.post(webhook_url, files=files)
 
-    # Add image to embed
-    embed.set_image(url="attachment://heatmap.png")
-
-    # Add embed to webhook
-    webhook.add_embed(embed)
-
-    # Add file to webhook
-    webhook.add_file(file=img_io.getvalue(), filename=f"{as_of_time_stamp}_heatmap.png")
-
-    # Send webhook
-    response = webhook.execute()
-
-    return response.status_code == 200
+    if response.status_code == 200 or response.status_code == 204:
+        print(f"Heatmap for {session_date} sent successfully to Discord!")
+        return True
+    else:
+        print(f"Failed to send heatmap. Status code: {response.status_code}")
+        print(f"Response content: {response.content}")
+        return False
 
 @task(name= "Send latest heatmap to discord", task_run_name= "Latest heatmap to discord")
 def intraday_heatmap(effective_datetime:str, effective_date:str):
