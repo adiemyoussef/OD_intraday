@@ -978,7 +978,9 @@ def Intraday_Flow():
 
     db_utils.connect()
 
-    intraday_heatmap(db,"2024-08-27 12:00:00", "2024-08-27")
+    intraday_heatmap(db,"2024-08-27 09:30:00", "2024-08-27")
+    intraday_heatmap(db,"2024-08-27 12:30:00", "2024-08-27")
+    intraday_heatmap(db,"2024-08-27 15:10:00", "2024-08-27")
 
     breakpoint()
 
