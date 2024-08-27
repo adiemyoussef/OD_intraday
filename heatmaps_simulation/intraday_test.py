@@ -100,7 +100,7 @@ def get_gamma_effective_datetime(effective_date):
     query = f"""
     SELECT distinct(effective_datetime) from intraday.intraday_gamma
     where effective_date = '{effective_date}'
-    and time(effective_datetime) >= '09:50:00'
+    and time(effective_datetime) >= '09:20:00'
     """
     return db.execute_query(query)
 
@@ -123,7 +123,7 @@ def fetch_gamma_data(db, effective_date, effective_datetime):
         FROM intraday.intraday_gamma
         WHERE effective_datetime <= '{effective_datetime}' -- (SELECT max(effective_datetime) FROM intraday.intraday_gamma)
         and effective_date = '{effective_date}'
-        and time(effective_datetime) >= '09:50:00'
+        and time(effective_datetime) >= '09:20:00'
     ),
     consumed_gamma AS (
         SELECT 
@@ -243,8 +243,8 @@ def heatmap_generation_flow(
         effective_date = '{effective_date}'
         AND 
         effective_datetime <= '{cd_formatted_datetime}'
-        AND
-        effective_datetime > '2024-08-26 13:50:00'
+        -- AND
+        -- effective_datetime > '2024-08-26 09:20:00'
         """
 
         candlesticks = db.execute_query(cd_query)
@@ -308,4 +308,4 @@ if __name__ == "__main__":
     db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
     db.connect()
     print(f'{db.get_status()}')
-    heatmap_generation_flow(db, effective_date='2024-08-26')
+    heatmap_generation_flow(db, effective_date='2024-08-27')

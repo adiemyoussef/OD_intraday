@@ -49,8 +49,7 @@ logger = get_logger(debug_mode=False)
 #-------- Initializing the Classes -------#
 polygon_client = RESTClient("sOqWsfC0sRZpjEpi7ppjWsCamGkvjpHw")
 DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
-
-
+HEATMAP_CHANNEL = 'https://discord.com/api/webhooks/1278125396671332393/Y02pRK5XTUKURHoSF6tIlSDzHBPUzUqDHzA8ybsat4Z-zCN8EeyXmyjir7SwMB_OQm42'
 
 db_utils = DatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, logger=logger)
 logger.info(f"Initializing db status: {db_utils.get_status()}")
@@ -143,7 +142,7 @@ def prepare_to_fetch_historical_poly(current_time=None, shift_previous_minutes=0
                  f"Current Datetime: {current_datetime_str}, "
                  f"Shift Previous Minutes: {shift_previous_minutes}, "
                  f"Shift Current Minutes: {shift_current_minutes}")
-    #breakpoint()
+
     return previous_date_str, current_date_str, previous_datetime_str, current_datetime_str
 
 def filter_and_log_nan_values(final_book: pd.DataFrame) -> pd.DataFrame:
@@ -303,7 +302,7 @@ def intraday_heatmap(db,effective_datetime:str, effective_date:str):
         session_date=effective_date,
         y_min=5550,
         y_max=5700,
-        webhook_url=DEV_CHANNEL  # Make sure to define this
+        webhook_url=HEATMAP_CHANNEL  # Make sure to define this
     )
 
     if success:
@@ -478,7 +477,7 @@ def get_unrevised_book():
     #     if unrevised_book.empty:
     #         #TODO; send notification
     #         pass
-    #         breakpoint()
+
     #         #unrevised_book = generate_unrevised_book(current_date)
     #         #TODO: verify it makes sens
     #         #unrevised_book
@@ -978,12 +977,6 @@ def Intraday_Flow():
 
     db_utils.connect()
 
-    intraday_heatmap(db,"2024-08-27 15:30:00", "2024-08-27")
-    intraday_heatmap(db,"2024-08-27 15:40:00", "2024-08-27")
-    intraday_heatmap(db,"2024-08-27 15:50:00", "2024-08-27")
-
-    breakpoint()
-
     try:
 
         #TODO: initial_price, last_price = get_prices()
@@ -1224,7 +1217,11 @@ def Intraday_Flow():
                         prefect_logger.info("It's before 4 PM ET. Proceeding with heatmap generation.")
                         effective_datetime = str(final_book_clean_insert["effective_datetime"].unique()[0])
                         heatmap_generation_flow(final_book_clean_insert,effective_datetime=effective_datetime)
-                        #intraday_heatmap(effective_datetime, "2024-08-27")
+
+                        #TODO: modify the other params to remove this and start at the same time as the book generation
+                        if current_time > datetime_time(9, 0):
+                            intraday_heatmap(db, effective_datetime, "2024-08-28")
+
 
                     else:
                         prefect_logger.info("It's past 4 PM ET. Skipping heatmap generation.")
