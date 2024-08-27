@@ -241,11 +241,11 @@ def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_
         return False
 
 @task(name= "Send latest heatmap to discord", task_run_name= "Latest heatmap to discord")
-def intraday_heatmap(effective_datetime:str, effective_date:str):
+def intraday_heatmap(db,effective_datetime:str, effective_date:str):
 
     prefect_logger = get_run_logger()
 
-    raw_gamma_data = fetch_gamma_data(effective_date, effective_datetime)
+    raw_gamma_data = fetch_gamma_data(db,effective_date, effective_datetime)
     processed_gamma_data = process_gamma_data(raw_gamma_data)
     cd_formatted_datetime = et_to_utc(effective_date)
 
@@ -977,7 +977,7 @@ def Intraday_Flow():
 
     db_utils.connect()
 
-    intraday_heatmap("2024-08-27 12:00:00", "2024-08-27")
+    intraday_heatmap(db,"2024-08-27 12:00:00", "2024-08-27")
 
     breakpoint()
 
