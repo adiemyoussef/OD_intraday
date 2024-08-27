@@ -96,10 +96,6 @@ def format_effective_datetime(effective_datetime):
         raise ValueError(f"Unsupported type for effective_datetime: {type(effective_datetime)}")
 
 
-# Example usage:
-datetime_array = np.array(['2024-08-23T07:30:00.000000000'], dtype='datetime64[ns]')
-formatted_datetime = format_effective_datetime(datetime_array)
-print(formatted_datetime)  # Output: '2024-08-23 07:30:00'
 def get_gamma_effective_datetime(effective_date):
     query = f"""
     SELECT distinct(effective_datetime) from intraday.intraday_gamma
@@ -218,17 +214,9 @@ def process_gamma_data(df):
     df['maxima'] = df['maxima'].astype(float)
     return df
 
-def generate_heatmap(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks=None):
-    # Your existing plot_gamma function here
-    # Make sure to adapt it to work with the new data structure
-    pass
-
-
 def heatmap_generation_flow(
         db,
         effective_date: str,
-        steps: float = 2.5,
-        range: float = 0.025,
 ):
     effective_datetimes = get_gamma_effective_datetime(effective_date).values
 
@@ -272,23 +260,7 @@ def heatmap_generation_flow(
         # Filter data for current effective_datetime
         current_data = processed_gamma_data.copy() #[processed_gamma_data['effective_datetime'] == effective_datetime]
 
-        # print(f'Len of current_data: {current_data.shape}')
-        #
-        # duplicates = current_data.duplicated(subset=['sim_datetime', 'price'], keep=False)
-        # if duplicates.any():
-        #     print(f"Found {duplicates.sum()} duplicate entries.")
-        #
-        # # Reshape data into heatmap format
-        #
-        # #----------TEST----------#
-        # current_data = current_data.groupby(['sim_datetime', 'price']).agg({
-        #     'value': 'sum',
-        #     'minima': lambda x: x.dropna().iloc[0] if x.dropna().any() else np.nan,
-        #     'maxima': lambda x: x.dropna().iloc[0] if x.dropna().any() else np.nan
-        # }).reset_index()
-
         df_gamma = current_data.pivot_table(index='sim_datetime', columns='price', values='value') #, aggfunc='first')
-
 
         # For minima_df and maxima_df, use the same index and columns as df_gamma
         minima_df = current_data.pivot_table(index='sim_datetime', columns='price', values='minima') #, aggfunc='first')

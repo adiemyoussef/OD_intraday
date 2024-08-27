@@ -117,6 +117,9 @@ def get_traces(result_df, key_values, key_prices, line_color):
 
 
 def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None,y_min=None, y_max=None, save_fig=False, fig_show = False, fig_path=None):
+
+    #COUCOUUUUU
+
     # prefect_logger = get_run_logger()
     x = df_heatmap.index
     y = df_heatmap.columns.values

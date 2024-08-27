@@ -18,6 +18,14 @@ from dask import delayed, compute
 import dask
 import requests
 from polygon import RESTClient
+import io
+from typing import List
+from datetime import datetime
+import plotly.graph_objects as go
+from discord_webhook import DiscordWebhook, DiscordEmbed
+
+
+
 
 # Import your utility classes
 from utilities.sftp_utils import *
@@ -42,6 +50,9 @@ logger = get_logger(debug_mode=False)
 
 #-------- Initializing the Classes -------#
 polygon_client = RESTClient("sOqWsfC0sRZpjEpi7ppjWsCamGkvjpHw")
+DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
+
+
 
 db_utils = DatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, logger=logger)
 logger.info(f"Initializing db status: {db_utils.get_status()}")
@@ -86,6 +97,7 @@ def process_greek(greek_name, poly_data, book):
         print(f"\nWarning: {update_col} not found in merged DataFrame. No updates performed.")
 
     return book
+
 def prepare_to_fetch_historical_poly(current_time=None, shift_previous_minutes=0, shift_current_minutes=0):
     """
     Prepare parameters for the poly data fetch query based on the current time.
@@ -170,7 +182,132 @@ def ensure_all_connections_are_open():
     logger.error("Failed to establish connections after maximum attempts.")
     return False
 
-#------------------ TASKS ------------------#
+#------------------ UPDATED HEATMAP ------------------#
+@task
+def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_date: str,
+                         y_min: int, y_max: int, webhook_url: str) -> bool:
+    title = f"📊 Latest {session_date} Intraday Gamma Heatmap"
+    description = (
+        f"Detailed analysis of SPX Gamma for the {session_date} session.\n"
+        f"This heatmap provides insights into market movements and positioning within the specified strike range.\n"
+    )
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    fields = [
+        {"name": "📈 Analysis Type", "value": "Intraday Gamma Heatmap", "inline": True},
+        {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
+        {"name": "🎯 Strike Range", "value": f"{y_min} - {y_max}", "inline": True},
+        {"name": "💡 Interpretation", "value": (
+            "• Darker colors indicate higher gamma concentration\n"
+            "• Light colors indicate lower gamma concentration\n"
+            "• Dotted lines represent significant gamma levels\n"
+        ), "inline": False},
+    ]
+    footer_text = f"Generated on {current_time} | By OptionsDepth Inc."
+
+    # Convert Plotly figure to image bytes
+    img_bytes = gamma_chart.to_image(format="png", scale=3)
+
+    # Create file-like object from bytes
+    img_io = io.BytesIO(img_bytes)
+
+    # Create Discord webhook
+    webhook = DiscordWebhook(url=webhook_url)
+
+    # Create embed
+    embed = DiscordEmbed(title=title, description=description, color=242424)
+    for field in fields:
+        embed.add_embed_field(name=field["name"], value=field["value"], inline=field.get("inline", False))
+    embed.set_footer(text=footer_text)
+
+    # Add image to embed
+    embed.set_image(url="attachment://heatmap.png")
+
+    # Add embed to webhook
+    webhook.add_embed(embed)
+
+    # Add file to webhook
+    webhook.add_file(file=img_io.getvalue(), filename=f"{as_of_time_stamp}_heatmap.png")
+
+    # Send webhook
+    response = webhook.execute()
+
+    return response.status_code == 200
+
+@task(name= "Send latest heatmap to discord", task_run_name= "Latest heatmap to discord")
+def intraday_heatmap(effective_datetime:str, effective_date:str):
+
+    prefect_logger = get_run_logger()
+
+    raw_gamma_data = fetch_gamma_data(effective_date, effective_datetime)
+    processed_gamma_data = process_gamma_data(raw_gamma_data)
+    cd_formatted_datetime = et_to_utc(effective_date)
+
+    # Fetch candlestick data (assuming you still need this)
+    cd_query = f"""
+    SELECT * FROM optionsdepth_stage.charts_candlestick
+    WHERE ticker = 'SPX' 
+    AND 
+    effective_date = '{effective_date}'
+    AND 
+    effective_datetime <= '{cd_formatted_datetime}'
+    AND
+    effective_datetime > '2024-08-26 13:50:00'
+    """
+
+    candlesticks = db.execute_query(cd_query)
+
+    if candlesticks.empty:
+        spx_candlesticks = None
+    else:
+        prefect_logger.info(f"Fetched candlesticks")
+        candlesticks_resampled = resample_and_convert_timezone(candlesticks)
+        spx_candlesticks = candlesticks_resampled.set_index('effective_datetime', drop=False)
+
+    # Filter data for current effective_datetime
+    current_data = processed_gamma_data.copy()  # [processed_gamma_data['effective_datetime'] == effective_datetime]
+
+    df_gamma = current_data.pivot_table(index='sim_datetime', columns='price', values='value')  # , aggfunc='first')
+
+    # For minima_df and maxima_df, use the same index and columns as df_gamma
+    minima_df = current_data.pivot_table(index='sim_datetime', columns='price', values='minima')  # , aggfunc='first')
+    maxima_df = current_data.pivot_table(index='sim_datetime', columns='price', values='maxima')  # , aggfunc='first')
+
+    # Fill NaN values in minima_df and maxima_df
+    minima_df = minima_df.reindex_like(df_gamma).fillna(np.nan)
+    maxima_df = maxima_df.reindex_like(df_gamma).fillna(np.nan)
+
+    # Generate and send heatmap
+    gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
+                             effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5550, y_max=5700)
+
+
+    gamma_chart.update_layout(
+        width=1920,  # Full HD width
+        height=1080,  # Full HD height
+        font=dict(size=16)  # Increase font size for better readability
+
+    )
+
+    # Call the new function
+    success = send_heatmap_discord(
+        gamma_chart=gamma_chart,
+        as_of_time_stamp=effective_datetime,
+        session_date=effective_date,
+        y_min=5550,
+        y_max=5700,
+        webhook_url=DEV_CHANNEL  # Make sure to define this
+    )
+
+    if success:
+        print(f"Heatmap for {effective_datetime} has been processed and sent to Discord.")
+    else:
+        print(f"Failed to send heatmap for {effective_datetime} to Discord.")
+
+
+
+    print(f"Heatmap for {effective_datetime} has been processed and saved.")
+
+#----------------- TASKS -------------------#
 @task(name= "fetch_historical_poly_data", task_run_name= "Fetching historical greeks")
 def fetch_historical_poly_data(previous_date, current_date, previous_datetime, current_datetime):
     start_time = time_module.time()
@@ -625,8 +762,6 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     # Merge latest book with the latest poly data
     merged_book = pd.merge(book, latest_poly, on='contract_id', how='left', suffixes=('', '_update'))
 
-    #breakpoint()
-
     # Log merge results
     total_contracts = len(book)
     merged_contracts = merged_book['iv_update'].notna().sum()
@@ -680,28 +815,11 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
 
             historical_updates = updated_unmerged['iv_historical'].notna().sum()
 
-
-    # Clean up the merged book
-    # for greek in ['iv', 'delta', 'gamma', 'vega']:
-    #     update_column = f'{greek}_update'
-    #     historical_column = f'{greek}_historical'
-    #
-    #     if historical_column in merged_book.columns:
-    #         merged_book[greek] = merged_book[update_column].combine_first(
-    #             merged_book[historical_column]).combine_first(merged_book[greek])
-    #     else:
-    #         merged_book[greek] = merged_book[update_column].combine_first(merged_book[greek])
-    #
-    #     # Drop temporary columns
-    #     merged_book.drop(columns=[update_column, historical_column], errors='ignore', inplace=True)
-
     #------- INVESTIGATION----------#
-    # breakpoint()
+
     # After all updates, identify contracts that weren't updated
     not_updated_mask = merged_book[['iv_update', 'delta_update', 'gamma_update', 'vega_update']].isna().all(axis=1)
-                       #  & \
-                       # merged_book[['iv_historical', 'delta_historical', 'gamma_historical', 'vega_historical']].isna().all(
-                       #     axis=1))
+
 
     not_updated_contracts = merged_book[not_updated_mask]
 
@@ -722,8 +840,6 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     mm_posn_sum = contracts_without_greeks_df['mm_posn'].sum()
 
     # Calculate final statistics
-    #
-    # breakpoint()
     # Clean up the merged book
     for greek in ['iv', 'delta', 'gamma', 'vega']:
         update_column = f'{greek}_update'
@@ -748,10 +864,6 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     mm_posn_sum = contracts_without_greeks_df['mm_posn'].sum()
 
 
-
-
-
-
     # Prepare log message
     log_data = f"""
     #---------- Greeks Updates Summary ----------#
@@ -767,31 +879,15 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     # Log using both loggers
     logger.info(log_data)
     prefect_logger.info(log_data)
-    # Log using custom logger
-    #log_greeks_update_summary(custom_logger, log_data)
-    #
-    #breakpoint()
-    # Log using Prefect's logger
-    #log_message = "\n".join([f"{key}: {value}" for key, value in log_data.items()])
-    #
-    # formatted_log = f"""
-    # #---------- Greeks Updates Summary ----------#
-    # {log_message}
-    # #-------------------------------------------------#
-    # """
-    # print(formatted_log)
 
     # Filter and keep the rows without NaN values in greeks
     mask = ~merged_book[['iv', 'delta', 'gamma', 'vega']].isna().any(axis=1)
     merged_book = merged_book[mask]
 
-
     columns_to_keep = book.columns[:-1]
     merged_book = merged_book[columns_to_keep]
     merged_book.loc[:,'time_stamp'] = get_eastern_time()
 
-
-    # breakpoint()
     return merged_book
 
 def compare_dataframes(posn_only, final_book_clean_insert):
@@ -873,7 +969,11 @@ def Intraday_Flow():
     expected_file_override = None #'/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-15_15_00_1.csv.zip'
 
     db_utils.connect()
-    # sftp_utils.connect()
+
+    intraday_heatmap("2024-08-27 12:00:00", "2024-08-27")
+
+    breakpoint()
+
     try:
 
         #TODO: initial_price, last_price = get_prices()
@@ -881,21 +981,19 @@ def Intraday_Flow():
         # parallel_subflows = [zero_dte_flow(), one_dte_flow()]
         # await asyncio.gather(*parallel_subflows)
 
-
         initial_book = get_initial_book(get_unrevised_book)
-
         book_date_loaded = initial_book["effective_date"].unique()
-        logger.info(f"Initial Book of {book_date_loaded} loaded")
+        prefect_logger.info(f"Initial Book of {book_date_loaded} loaded")
 
         previous_date, current_date, previous_datetime, current_datetime = prepare_to_fetch_historical_poly(
             shift_previous_minutes=60 * 8, shift_current_minutes=0)
 
+        #TODO: Will be faster on postgre
         # Fetch poly data: Slow
         poly_historical_data = fetch_historical_poly_data(previous_date, current_date, previous_datetime, current_datetime)
 
+        #--------- Connections --------#
         rabbitmq_utils.connect()
-
-        # Ensure connections are established
         connections_ready = ensure_all_connections_are_open()
         if not connections_ready:
             logger.error("Unable to establish necessary connections. Aborting flow.")
@@ -957,14 +1055,14 @@ def Intraday_Flow():
                     diff_rows = merged_book[merged_book['total_customers_posn_diff'] != 0]
 
                     # Display the differences
-                    print("Rows with differences in total_customers_posn:")
-                    print(diff_rows[['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag',
+                    prefect_logger.info("Rows with differences in total_customers_posn:")
+                    prefect_logger.info(diff_rows[['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag',
                                      'total_customers_posn_latest', 'total_customers_posn_final',
                                      'total_customers_posn_diff']])
 
                     # Calculate some statistics
-                    print("\nStatistics of differences:")
-                    print(diff_rows['total_customers_posn_diff'].describe())
+                    prefect_logger.info("\nStatistics of differences:")
+                    prefect_logger.info(diff_rows['total_customers_posn_diff'].describe())
 
                     # Check for missing rows
                     latest_book_rows = set(
@@ -976,8 +1074,8 @@ def Intraday_Flow():
                     missing_in_final = latest_book_rows - final_book_rows
                     missing_in_latest = final_book_rows - latest_book_rows
 
-                    print(f"\nRows in latest_book but missing in final_book: {len(missing_in_final)}")
-                    print(f"Rows in final_book but missing in latest_book: {len(missing_in_latest)}")
+                    prefect_logger.info(f"\nRows in latest_book but missing in final_book: {len(missing_in_final)}")
+                    prefect_logger.info(f"Rows in final_book but missing in latest_book: {len(missing_in_latest)}")
 
                     #The contracts that have a position but that don't have greeks
                     if missing_in_final:
@@ -1001,76 +1099,67 @@ def Intraday_Flow():
                         missing_in_final_df = missing_in_final_df.sort_values(
                             ['expiration_date', 'total_customers_posn'], ascending=[True, False])
 
-                        print(
+                        prefect_logger.info(
                             "\nSample of rows missing in final_book (ordered by expiration_date and total_customers_posn):")
-                        print(missing_in_final_df.head())
+                        prefect_logger.info(missing_in_final_df.head())
 
                         # Save to CSV
                         missing_in_final_df.to_csv('missing_in_final_book.csv', index=False)
-                        print("Full list of missing rows in final_book saved to 'missing_in_final_book.csv'")
+                        prefect_logger.info("Full list of missing rows in final_book saved to 'missing_in_final_book.csv'")
 
                         # Count contracts for each distinct expiration_date
                         expiration_counts = missing_in_final_df['expiration_date'].value_counts().sort_index()
-                        print("\nNumber of contracts for each distinct expiration_date:")
-                        print(expiration_counts)
+                        prefect_logger.info("\nNumber of contracts for each distinct expiration_date:")
+                        prefect_logger.info(expiration_counts)
 
                         # List strikes and total_customers_posn for each distinct expiration date
-                        print("\nList of strikes and total_customers_posn for each distinct expiration date:")
+                        prefect_logger.info("-----------------------------------------------")
+                        prefect_logger.info("\nList of strikes and total_customers_posn for each distinct expiration date:")
                         for date in missing_in_final_df['expiration_date'].unique():
                             date_df = missing_in_final_df[missing_in_final_df['expiration_date'] == date]
                             strikes = date_df['strike_price'].unique()
                             strikes.sort()
-                            print(f"Expiration Date: {date.date()}")
-                            print(f"Strikes: {', '.join(map(str, strikes))}")
-                            print(f"Number of strikes: {len(strikes)}")
-                            print("Top 5 contracts by total_customers_posn:")
-                            print(date_df.nlargest(5, 'total_customers_posn')[
+                            prefect_logger.info(f"Expiration Date: {date.date()}")
+                            prefect_logger.info(f"Strikes: {', '.join(map(str, strikes))}")
+                            prefect_logger.info(f"Number of strikes: {len(strikes)}")
+                            prefect_logger.info("Top 5 contracts by total_customers_posn:")
+                            prefect_logger.info(date_df.nlargest(5, 'total_customers_posn')[
                                       ['strike_price', 'call_put_flag', 'total_customers_posn']])
-                            print("-------------------------")
+                            prefect_logger.info("-------------------------")
 
                         # Calculate and print total_customers_posn statistics
                         total_posn = missing_in_final_df['total_customers_posn'].sum()
                         max_posn = missing_in_final_df['total_customers_posn'].max()
-                        print(f"\nTotal total_customers_posn for all missing contracts: {total_posn}")
-                        print(f"Maximum total_customers_posn among missing contracts: {max_posn}")
-                        print("\nTop 10 missing contracts by total_customers_posn:")
-                        print(missing_in_final_df.nlargest(10, 'total_customers_posn')[
+                        prefect_logger.info(f"\nTotal total_customers_posn for all missing contracts: {total_posn}")
+                        prefect_logger.info(f"Maximum total_customers_posn among missing contracts: {max_posn}")
+                        prefect_logger.info("\nTop 10 missing contracts by total_customers_posn:")
+                        prefect_logger.info(missing_in_final_df.nlargest(10, 'total_customers_posn')[
                                   ['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag',
                                    'total_customers_posn']])
 
                     else:
-                        print("No missing rows in final_book")
+                        prefect_logger.info("No missing rows in final_book")
 
                     if missing_in_latest:
-                        print("\nSample of rows missing in latest_book:")
-                        print(final_book[
+                        prefect_logger.info("\nSample of rows missing in latest_book:")
+                        prefect_logger.info(final_book[
                                   final_book[['symbol', 'strike_price', 'expiration_date', 'call_put_flag']].apply(
                                       tuple, axis=1).isin(list(missing_in_latest)[:5])])
 
                     # Check for NaN values
-                    print("\nNaN values in latest_book:")
-                    print(latest_book['total_customers_posn'].isna().sum())
+                    prefect_logger.info("\nNaN values in latest_book:")
+                    prefect_logger.info(latest_book['total_customers_posn'].isna().sum())
 
-                    print("\nNaN values in final_book:")
-                    print(final_book['total_customers_posn'].isna().sum())
+                    prefect_logger.info("\nNaN values in final_book:")
+                    prefect_logger.info(final_book['total_customers_posn'].isna().sum())
 
                     # Check for infinity values
-                    print("\nInfinity values in latest_book:")
-                    print(np.isinf(latest_book['total_customers_posn']).sum())
+                    prefect_logger.info("\nInfinity values in latest_book:")
+                    prefect_logger.info(np.isinf(latest_book['total_customers_posn']).sum())
 
-                    print("\nInfinity values in final_book:")
-                    print(np.isinf(final_book['total_customers_posn']).sum())
-
-                    # breakpoint()
-
-
-
-
-
+                    prefect_logger.info("\nInfinity values in final_book:")
+                    prefect_logger.info(np.isinf(final_book['total_customers_posn']).sum())
                     #-------------------------------------------------#
-
-
-                    # breakpoint()
 
                     # Filter out NaN values and log
                     filtered_final_book = filter_and_log_nan_values(final_book)
@@ -1098,11 +1187,8 @@ def Intraday_Flow():
                     db_utils.insert_progress('intraday', 'intraday_books',final_book_clean_insert)
                     pg_data.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
 
-                    # # Get the current price (you'll need to implement this function)
+                    # Get the current price (you'll need to implement this function)
                     # current_price = get_current_price()
-                    #
-                    # # Generate and store the heatmap
-                    # heatmap = generate_and_store_heatmap(filtered_final_book, db_utils, current_price)
 
                     # TODO: if it's the 1800 file: export as unrevised initial book for the next effective datge
 
@@ -1123,21 +1209,17 @@ def Intraday_Flow():
 
                     logger.info(f"Data flow finished in {time_module.time() - flow_start_time} sec.")
 
-                    # next_day_heatmap, next_day_effective_datetim = prepare_next_day_heatmap()
 
                     if current_time < datetime_time(16, 0):
                         prefect_logger.info("It's before 4 PM ET. Proceeding with heatmap generation.")
                         effective_datetime = str(final_book_clean_insert["effective_datetime"].unique()[0])
                         heatmap_generation_flow(final_book_clean_insert,effective_datetime=effective_datetime)
+                        #intraday_heatmap(effective_datetime, "2024-08-27")
 
                     else:
                         prefect_logger.info("It's past 4 PM ET. Skipping heatmap generation.")
-
-
                         #Generate 1DTE heatmap
                         #heatmap_generation_flow(final_book_clean_insert,)
-
-
 
                     logger.info(f"Finished flow in {time_module.time()-flow_start_time} sec.")
 

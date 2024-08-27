@@ -421,14 +421,126 @@ def analyze_duplicates(df, df_name, key_columns, logger):
 def send_notification(message: str, logger):
     # Implement your notification logic here
     logger.warning(f"Notification: {message}")
-# Example usage:
-# polygon_client = ... # Initialize your Polygon client
-# latest_data = get_latest_poly(polygon_client)
 
-# Example usage within your flow
-# send_webhook_to_discord(file_info, flow_start_time)
 
-# Usage example:
-# s3_utils = S3Utilities(DO_SPACES_URL, DO_SPACES_KEY, DO_SPACES_SECRET, DO_SPACES_BUCKET)
-# seen_files = s3_utils.load_json(LOG_FILE_KEY)
-# s3_utils.save_json(LOG_FILE_KEY, list(seen_files))
+def fetch_gamma_data(db, effective_date, effective_datetime):
+    query = f"""
+    WITH ranked_gamma AS (
+        SELECT 
+            id,
+            ticker,
+            effective_date,
+            effective_datetime,
+            price,
+            value,
+            sim_datetime,
+            NULL as minima,
+            NULL as maxima,
+            ROW_NUMBER() OVER (PARTITION BY sim_datetime,price ORDER BY effective_datetime DESC) AS rn
+        FROM intraday.intraday_gamma
+        WHERE effective_datetime <= '{effective_datetime}' -- (SELECT max(effective_datetime) FROM intraday.intraday_gamma)
+        and effective_date = '{effective_date}'
+        and time(effective_datetime) >= '09:50:00'
+    ),
+    consumed_gamma AS (
+        SELECT 
+            id,
+            ticker,
+            effective_date,
+            effective_datetime,
+            price,
+            value,
+            sim_datetime,
+            minima,
+            maxima
+        FROM ranked_gamma
+        WHERE rn = 1
+    ),
+    upcoming_gamma AS (
+        SELECT * 
+        FROM intraday.intraday_gamma
+        WHERE effective_datetime = '{effective_datetime}' -- (SELECT max(effective_datetime) FROM intraday.intraday_gamma)
+        and
+        effective_date = '{effective_date}'
+    ),
+    final_gamma as(
+    SELECT * FROM consumed_gamma
+    UNION ALL
+    SELECT * FROM upcoming_gamma
+    )
+    SELECT * from final_gamma
+    -- group by effective_datetime;
+
+    -- SELECT * from final_gamma
+    """
+
+    return db.execute_query(query)
+
+def resample_and_convert_timezone(df:pd.DataFrame, datetime_column='effective_datetime', resample_interval='5T',
+                                  target_timezone='US/Eastern'):
+    """
+    Resample a dataframe with 1-minute OHLCV data to a specified interval and convert timezone.
+
+    Parameters:
+    df (pandas.DataFrame): Input dataframe with OHLCV data
+    datetime_column (str): Name of the datetime column (default: 'effective_datetime')
+    resample_interval (str): Pandas resample rule (default: '5T' for 5 minutes)
+    timezone (str): Timezone to convert to (default: 'US/Eastern')
+
+    Returns:
+    pandas.DataFrame: Resampled dataframe with converted timezone
+    """
+
+    # Ensure the datetime column is in the correct format
+    df[datetime_column] = pd.to_datetime(df[datetime_column])
+
+    # Set the datetime column as index
+    df = df.set_index(datetime_column)
+
+    # Check if the index is timezone-aware
+    if df.index.tzinfo is None:
+        # If timezone-naive, assume it's UTC and localize
+        df.index = df.index.tz_localize('UTC')
+
+    # Convert to target timezone
+    target_tz = pytz.timezone(target_timezone)
+    df.index = df.index.tz_convert(target_tz)
+
+    # Resample to the specified interval
+    df_resampled = df.resample(resample_interval).agg({
+        'open': 'first',
+        'high': 'max',
+        'low': 'min',
+        'close': 'last',
+    })
+
+    # Reset index to make datetime a column again
+    df_resampled.reset_index(inplace=True)
+
+    # Remove timezone information after conversion if needed
+    df_resampled[datetime_column] = df_resampled[datetime_column].dt.tz_localize(None)
+
+    return df_resampled
+
+def process_gamma_data(df):
+    df['effective_datetime'] = pd.to_datetime(df['effective_datetime'])
+    df['sim_datetime'] = pd.to_datetime(df['sim_datetime'])
+    df['price'] = df['price'].astype(float)
+    df['value'] = df['value'].astype(float)
+    df['minima'] = df['minima'].astype(float)
+    df['maxima'] = df['maxima'].astype(float)
+    return df
+
+def et_to_utc(et_time_str):
+    # Parse the input string to a datetime object
+    et_time = datetime.strptime(et_time_str, '%Y-%m-%d %H:%M:%S')
+
+    # Set the timezone to Eastern Time
+    eastern = pytz.timezone('US/Eastern')
+    et_time = eastern.localize(et_time)
+
+    # Convert to UTC
+    utc_time = et_time.astimezone(pytz.UTC)
+
+    # Format the UTC time as a string
+    return utc_time.strftime('%Y-%m-%d %H:%M:%S')
