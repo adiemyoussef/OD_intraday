@@ -246,9 +246,10 @@ def intraday_heatmap(db,effective_datetime:str, effective_date:str):
     prefect_logger = get_run_logger()
 
     raw_gamma_data = fetch_gamma_data(db,effective_date, effective_datetime)
+    prefect_logger.info("Fetched raw_gamma_data")
     processed_gamma_data = process_gamma_data(raw_gamma_data)
     cd_formatted_datetime = et_to_utc(effective_date)
-
+    prefect_logger.info("Fetched all Data")
     # Fetch candlestick data (assuming you still need this)
     cd_query = f"""
     SELECT * FROM optionsdepth_stage.charts_candlestick
