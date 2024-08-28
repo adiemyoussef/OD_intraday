@@ -258,7 +258,7 @@ def intraday_heatmap(db,effective_datetime:str, effective_date:str):
     AND 
     effective_datetime <= '{cd_formatted_datetime}'
     AND
-    effective_datetime > '2024-08-26 13:50:00'
+    effective_datetime > '{effective_date} 09:20:00'
     """
 
     candlesticks = db.execute_query(cd_query)
