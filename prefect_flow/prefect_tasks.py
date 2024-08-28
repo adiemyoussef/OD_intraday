@@ -186,17 +186,16 @@ def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_
     title = f"📊 {session_date} Intraday Gamma Heatmap"
     description = (
         f"Detailed analysis of SPX Gamma for the {session_date} session.\n"
-        f"This heatmap provides insights into market movements and positioning within the specified strike range.\n"
+        f"This heatmap provides insights into market makers gamma exposure within the specified price range.\n"
     )
     current_time = datetime.utcnow().isoformat()
     fields = [
         {"name": "📈 Analysis Type", "value": "Intraday Gamma Heatmap", "inline": True},
         {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
-        {"name": "🎯 Strike Range", "value": f"{y_min} - {y_max}", "inline": True},
+        {"name": "🎯 Price Range", "value": f"{y_min} - {y_max}", "inline": True},
         {"name": "💡 Interpretation", "value": (
             "• Darker colors indicate higher gamma concentration\n"
             "• Light colors indicate lower gamma concentration\n"
-            "• White line represents the current SPX price\n"
             "• Dotted lines represent significant gamma levels\n"
         ), "inline": False},
     ]
@@ -218,7 +217,7 @@ def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_
 
     # Prepare the payload
     payload = {
-        "content": "🚀 New Gamma Heatmap analysis is ready! Check out the latest market insights below.",
+        "content": "🚀[UPDATE]: New Gamma Heatmap analysis is ready!",
         "embeds": [embed]
     }
 
