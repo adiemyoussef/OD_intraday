@@ -325,7 +325,7 @@ def GEX_flow(
         webhook_url: str = 'https://discord.com/api/webhooks/1277599354932428842/c2Ix3cPdLzI0fzxDdoGRye8nyKPLZj0dqmIxOiRQP2DYFx7YbgphUe8rAsWqkZUKiD0f'
                             #DEV_CHANNEL
 ):
-    expiration= '2024-08-27'
+
 
     if session_date is None:
         #TODO: the latest effective_date of the book
@@ -335,6 +335,9 @@ def GEX_flow(
         strike_range = [5500, 5750]
     if position_types is None:
         position_types = ['Net']
+
+    if expiration is None:
+        expiration = session_date
 
     current_time = datetime.now().time()
 
