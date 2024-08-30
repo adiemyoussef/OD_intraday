@@ -331,7 +331,7 @@ def GEX_flow(
         #TODO: +/- 200 pts from SPOT Open
         strike_range = [5500, 5700]
     if position_types is None:
-        position_types = ['Net']
+        position_types = ['Net','C','P']
 
     if expiration is None:
         expiration = session_date
