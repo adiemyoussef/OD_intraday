@@ -1219,7 +1219,7 @@ def Intraday_Flow():
 
                         #TODO: modify the other params to remove this and start at the same time as the book generation
                         if current_time > datetime_time(7, 0):
-                            intraday_heatmap(db, effective_datetime, "2024-08-29")
+                            intraday_heatmap(db, effective_datetime, "2024-08-30")
 
 
                     else:

@@ -251,16 +251,13 @@ def one_dte_flow(
     webhook_url: str = 'https://discord.com/api/webhooks/1275269470151245938/qNZXtA_ySwcJJJf6bS_myYqU-uDd71zHV--XJBR7xb6uVhs7ccjKE59_c8y9AMZ86OC_'
                        #DEV_CHANNEL
 ):
-    # session_date = '2024-08-26'
-    # participant = 'firm'
-    # expiration = '2024-08-30'
-    # strike_range = [5300, 5750]
+
     # Set default values if not provided
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5300, 5750]
+        strike_range = [5450, 5750]
 
     if position_types is None:
         position_types = ['Net','C','P']
@@ -332,7 +329,7 @@ def GEX_flow(
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5500, 5750]
+        strike_range = [5500, 5700]
     if position_types is None:
         position_types = ['Net']
 
