@@ -251,7 +251,7 @@ def one_dte_flow(
     webhook_url: str = 'https://discord.com/api/webhooks/1275269470151245938/qNZXtA_ySwcJJJf6bS_myYqU-uDd71zHV--XJBR7xb6uVhs7ccjKE59_c8y9AMZ86OC_'
                        #DEV_CHANNEL
 ):
-    expiration = "2024-09-02"
+    expiration = "2024-09-03"
 
     # Set default values if not provided
     if session_date is None:
