@@ -183,12 +183,12 @@ def ensure_all_connections_are_open():
 @task
 def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_date: str,
                          y_min: int, y_max: int, webhook_url: str) -> bool:
-    title = f"📊 {session_date} Intraday Gamma Heatmap as of {as_of_time_stamp}"
+    title = f"📊 {session_date} Intraday Gamma Heatmap" # as of {as_of_time_stamp}"
     # description = (
     #     f"Detailed analysis of SPX Gamma for the {session_date} session.\n"
     #     f"This heatmap provides insights into market makers gamma exposure within the specified price range.\n"
     # )
-    current_time = datetime.utcnow().isoformat()
+    current_time = datetime.utcnow()
     fields = [
         # {"name": "📈 Analysis Type", "value": "Intraday Gamma Heatmap", "inline": True},
         {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},

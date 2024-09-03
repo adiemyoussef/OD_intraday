@@ -223,7 +223,6 @@ def zero_dte_flow(
 
     # Fetch data
     metrics, candlesticks, last_price = fetch_data(session_date, strike_range, expiration, start_time)
-
     as_of_time_stamp = str(metrics["effective_datetime"].max())
     last_price = last_price.values[0][0]
     # Process data and generate GIFs
@@ -367,6 +366,6 @@ def GEX_flow(
     pass
 
 if __name__ == "__main__":
-    #zero_dte_flow()
-    one_dte_flow()
+    zero_dte_flow()
+    #one_dte_flow()
     #GEX_flow()
