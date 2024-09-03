@@ -1,5 +1,4 @@
 import uuid
-
 import pytz
 from prefect import task, flow, get_run_logger
 import pandas as pd
@@ -117,6 +116,8 @@ def fetch_gamma_data(db, effective_date, effective_datetime):
             price,
             value,
             sim_datetime,
+            -- minima,
+            -- maxima,
             NULL as minima,
             NULL as maxima,
             ROW_NUMBER() OVER (PARTITION BY sim_datetime,price ORDER BY effective_datetime DESC) AS rn
@@ -244,7 +245,7 @@ def heatmap_generation_flow(
         AND 
         effective_datetime <= '{cd_formatted_datetime}'
         -- AND
-        -- effective_datetime > '2024-08-26 09:20:00'
+        -- effective_datetime > '{effective_date} 09:20:00'
         """
 
         candlesticks = db.execute_query(cd_query)
@@ -273,7 +274,10 @@ def heatmap_generation_flow(
         # Generate and send heatma
 
         gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
-                                 effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5550, y_max=5700)
+                                 effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5500, y_max=5730)
+
+        gamma_chart = plot_gamma_intraday(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
+                                 effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5500, y_max=5730)
 
         # Save the figure as an image
         frame_path = os.path.join(temp_dir, f'frame_{len(frame_paths):03d}.png')
@@ -308,4 +312,4 @@ if __name__ == "__main__":
     db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
     db.connect()
     print(f'{db.get_status()}')
-    heatmap_generation_flow(db, effective_date='2024-08-27')
+    heatmap_generation_flow(db, effective_date='2024-08-30')

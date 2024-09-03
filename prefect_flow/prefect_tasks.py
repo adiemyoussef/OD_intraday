@@ -183,32 +183,26 @@ def ensure_all_connections_are_open():
 @task
 def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_date: str,
                          y_min: int, y_max: int, webhook_url: str) -> bool:
-    title = f"📊 {session_date} Intraday Gamma Heatmap"
-    description = (
-        f"Detailed analysis of SPX Gamma for the {session_date} session.\n"
-        f"This heatmap provides insights into market makers gamma exposure within the specified price range.\n"
-    )
+    title = f"📊 {session_date} Intraday Gamma Heatmap as of {as_of_time_stamp}"
+    # description = (
+    #     f"Detailed analysis of SPX Gamma for the {session_date} session.\n"
+    #     f"This heatmap provides insights into market makers gamma exposure within the specified price range.\n"
+    # )
     current_time = datetime.utcnow().isoformat()
     fields = [
-        {"name": "📈 Analysis Type", "value": "Intraday Gamma Heatmap", "inline": True},
+        # {"name": "📈 Analysis Type", "value": "Intraday Gamma Heatmap", "inline": True},
         {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
-        {"name": "🎯 Price Range", "value": f"{y_min} - {y_max}", "inline": True},
-        {"name": "💡 Interpretation", "value": (
-            "• Darker colors indicate higher gamma concentration\n"
-            "• Light colors indicate lower gamma concentration\n"
-            "• Dotted lines represent significant gamma levels\n"
-        ), "inline": False},
     ]
     footer_text = f"Generated on {current_time} | By OptionsDepth Inc."
 
     # Prepare the embed
     embed = {
         "title": title,
-        "description": description,
+        # "description": description,
         "color": 3447003,  # A nice blue color
         "fields": fields,
         "footer": {"text": footer_text},
-        "timestamp": current_time,
+        # "timestamp": current_time,
         "image": {"url": "attachment://heatmap.png"}  # Reference the attached image
     }
 
@@ -217,7 +211,7 @@ def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_
 
     # Prepare the payload
     payload = {
-        "content": "🚀[UPDATE]: New Gamma Heatmap analysis is ready!",
+        # "content": "🚀[UPDATE]: New Gamma Heatmap analysis is ready!",
         "embeds": [embed]
     }
 
@@ -238,8 +232,8 @@ def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_
         print(f"Response content: {response.content}")
         return False
 
-@task(name= "Send latest heatmap to discord", task_run_name= "Latest heatmap to discord")
-def intraday_heatmap(db,effective_datetime:str, effective_date:str):
+@task(name= "Send latest gamma heatmap to discord", task_run_name= "Latest gamma heatmap to discord")
+def intraday_gamma_heatmap(db,effective_datetime:str, effective_date:str):
 
     prefect_logger = get_run_logger()
 
@@ -1219,7 +1213,10 @@ def Intraday_Flow():
 
                         #TODO: modify the other params to remove this and start at the same time as the book generation
                         if current_time > datetime_time(7, 0):
-                            intraday_heatmap(db, effective_datetime, "2024-08-30")
+                            #intraday_gamma_heatmap(db, effective_datetime, "2024-09-03")
+                            intraday_gamma_heatmap(db, effective_datetime, current_date)
+                            #intraday_charm_heatmap(db, effective_datetime, current_date)
+
 
 
                     else:

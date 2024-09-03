@@ -395,39 +395,7 @@ def heatmap_generation_flow(
 
     spx = {"steps": steps, "range": range}
     open_price = open_price
-    if df_book is None:
-        effective_date = effective_date
-        effective_time = effective_time
-        effective_datetime = effective_date + ' ' + effective_time
 
-
-        #----------------- Books ----------------------#
-        # Fetch data
-        books_query = f"""
-        SELECT * FROM intraday.intraday_books
-        WHERE effective_date ='{effective_date}'
-        and effective_datetime = '{effective_datetime}'
-        """
-        df_book = fetch_data_from_db(books_query)
-        unique_eff_datetime = df_book["effective_date"].unique()
-        prefect_logger.info(f"{unique_eff_datetime}")
-
-    #------------- Candlesticks -------------#
-    # Fetch data
-    cd_query = f"""
-    SELECT * FROM optionsdepth_stage.charts_candlestick
-    where ticker = 'SPX'
-    and
-    effective_date = '{effective_date}'
-    """
-    candlesticks = fetch_data_from_db(cd_query)
-    unique_cd_eff_datetime = candlesticks["effective_date"].unique()
-    prefect_logger.info(f"{unique_cd_eff_datetime}")
-
-    candlesticks_resampled = resample_and_convert_timezone(candlesticks)
-    candlesticks_resampled = candlesticks_resampled.set_index('effective_datetime', drop=False)
-    #cd_ed = candlesticks_resampled["effective_datetime"].unique()
-    #prefect_logger.info(f"{cd_ed}")
     #----------------------------------------#
     # Compute heatmap
     start_heatmap_computations = time.time()
@@ -443,20 +411,26 @@ def heatmap_generation_flow(
     )
     prefect_logger.info(f'It took {time.time() - start_heatmap_computations} to generate the heatmap')
 
-    # Plot and send chart
-    #plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks = candlesticks_resampled)
-
     prefect_logger.info(f"{effective_datetime} heatmap has been processed and plotted.")
 
-
+    # Gamma
     gamma_to_push = build_unpivot(df_gamma,effective_datetime, minima_df,maxima_df)
-    prefect_logger.info(f"Built unpivoted gamma data. Shape: {gamma_to_push.shape}")
+    prefect_logger.info(f"Built unpivoted Gamma data. Shape: {gamma_to_push.shape}")
     prefect_logger.info(f'{db.get_status()}')
     db.connect()
     prefect_logger.info(f'{db.get_status()}')
     db.insert_progress('intraday','intraday_gamma',gamma_to_push)
     prefect_logger.info("Inserted gamma data into database")
 
+    # Charm
+
+    charm_to_push = build_unpivot(df_charm,effective_datetime, minima_df,maxima_df)
+    prefect_logger.info(f"Built unpivoted Charm data. Shape: {charm_to_push.shape}")
+    prefect_logger.info(f'{db.get_status()}')
+    db.connect()
+    prefect_logger.info(f'{db.get_status()}')
+    db.insert_progress('intraday','intraday_charm',charm_to_push)
+    prefect_logger.info("Inserted Charm data into database")
 
 if __name__ == "__main__":
     heatmap_generation_flow()
