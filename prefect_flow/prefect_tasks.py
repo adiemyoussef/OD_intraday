@@ -189,11 +189,17 @@ def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_
     #     f"This heatmap provides insights into market makers gamma exposure within the specified price range.\n"
     # )
     current_time = datetime.utcnow()
+    # Define the Eastern Time zone
+    eastern_tz = pytz.timezone('America/New_York')
+    # Convert UTC time to Eastern Time
+    eastern_time = current_time.replace(tzinfo=pytz.utc).astimezone(eastern_tz)
+    # Format the time in a friendly way
+    friendly_time = eastern_time.strftime("%B %d, %Y at %I:%M %p %Z")
     fields = [
         # {"name": "📈 Analysis Type", "value": "Intraday Gamma Heatmap", "inline": True},
         {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
     ]
-    footer_text = f"Generated on {current_time} | By OptionsDepth Inc."
+    footer_text = f"Generated on {friendly_time} | By OptionsDepth Inc."
 
     # Prepare the embed
     embed = {
