@@ -284,6 +284,81 @@ def intraday_gamma_heatmap(db,effective_datetime:str, effective_date:str):
 
     # Generate and send heatmap
     gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
+                             effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5500, y_max=5700)
+
+
+    gamma_chart.update_layout(
+        width=1920,  # Full HD width
+        height=1080,  # Full HD height
+        font=dict(size=16)  # Increase font size for better readability
+
+    )
+
+    # Call the new function
+    success = send_heatmap_discord(
+        gamma_chart=gamma_chart,
+        as_of_time_stamp=effective_datetime,
+        session_date=effective_date,
+        y_min=5550,
+        y_max=5700,
+        webhook_url=HEATMAP_CHANNEL  # Make sure to define this
+    )
+
+    if success:
+        print(f"Heatmap for {effective_datetime} has been processed and sent to Discord.")
+    else:
+        print(f"Failed to send heatmap for {effective_datetime} to Discord.")
+
+
+
+    print(f"Heatmap for {effective_datetime} has been processed and saved.")
+
+@task(name= "Send latest gamma heatmap to discord", task_run_name= "Latest gamma heatmap to discord")
+def intraday_charm_heatmap(db,effective_datetime:str, effective_date:str):
+
+    prefect_logger = get_run_logger()
+
+    raw_gamma_data = fetch_gamma_data(db,effective_date, effective_datetime)
+    prefect_logger.info("Fetched raw_gamma_data")
+    processed_gamma_data = process_gamma_data(raw_gamma_data)
+    cd_formatted_datetime = et_to_utc(effective_datetime)
+    prefect_logger.info("Fetched all Data")
+    # Fetch candlestick data (assuming you still need this)
+    cd_query = f"""
+    SELECT * FROM optionsdepth_stage.charts_candlestick
+    WHERE ticker = 'SPX' 
+    AND 
+    effective_date = '{effective_date}'
+    AND 
+    effective_datetime <= '{cd_formatted_datetime}'
+    AND
+    effective_datetime > '{effective_date} 09:20:00'
+    """
+
+    candlesticks = db.execute_query(cd_query)
+
+    if candlesticks.empty:
+        spx_candlesticks = None
+    else:
+        prefect_logger.info(f"Fetched candlesticks")
+        candlesticks_resampled = resample_and_convert_timezone(candlesticks)
+        spx_candlesticks = candlesticks_resampled.set_index('effective_datetime', drop=False)
+
+    # Filter data for current effective_datetime
+    current_data = processed_gamma_data.copy()  # [processed_gamma_data['effective_datetime'] == effective_datetime]
+
+    df_gamma = current_data.pivot_table(index='sim_datetime', columns='price', values='value')  # , aggfunc='first')
+
+    # For minima_df and maxima_df, use the same index and columns as df_gamma
+    minima_df = current_data.pivot_table(index='sim_datetime', columns='price', values='minima')  # , aggfunc='first')
+    maxima_df = current_data.pivot_table(index='sim_datetime', columns='price', values='maxima')  # , aggfunc='first')
+
+    # Fill NaN values in minima_df and maxima_df
+    minima_df = minima_df.reindex_like(df_gamma).fillna(np.nan)
+    maxima_df = maxima_df.reindex_like(df_gamma).fillna(np.nan)
+
+    # Generate and send heatmap
+    gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
                              effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5550, y_max=5700)
 
 
