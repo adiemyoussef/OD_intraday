@@ -284,7 +284,7 @@ def intraday_gamma_heatmap(db,effective_datetime:str, effective_date:str):
 
     # Generate and send heatmap
     gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
-                             effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5500, y_max=5700)
+                             effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5400, y_max=5650)
 
 
     gamma_chart.update_layout(
