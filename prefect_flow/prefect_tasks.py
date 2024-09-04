@@ -388,6 +388,16 @@ def intraday_charm_heatmap(db,effective_datetime:str, effective_date:str):
 
     print(f"Heatmap for {effective_datetime} has been processed and saved.")
 
+
+#-----------------DEPTHVIEW-----------------#
+@task(name= "Send latest depthview to discord", task_run_name= "Latest depthview to discord")
+def intraday_depthview():
+    pass
+
+@task(name= "Send latest depthflow to discord", task_run_name= "Latest depthview to discord")
+def intraday_depthflow():
+    pass
+
 #----------------- TASKS -------------------#
 @task(name= "fetch_historical_poly_data", task_run_name= "Fetching historical greeks")
 def fetch_historical_poly_data(previous_date, current_date, previous_datetime, current_datetime):
@@ -474,7 +484,7 @@ async def process_last_message_in_queue(rabbitmq_utils:RabbitMQUtilities, expect
 
       )
 def get_initial_book(get_unrevised_book: Callable):
-
+    prefect_logger = get_run_logger()
     try:
         current_time = datetime.now(ZoneInfo("America/New_York"))
         current_date = current_time.date()
@@ -484,24 +494,24 @@ def get_initial_book(get_unrevised_book: Callable):
         #TODO: Verify that the current_date is a business date
 
         if limit2am <= current_time.time() < limit7pm:  # Between 2 AM and 7 PM
-            logger.info(f"Operating during Revised book hours")
+            prefect_logger.info(f"Operating during Revised book hours")
             query = f"""
             SELECT * FROM intraday.new_daily_book_format 
             WHERE effective_date = '{current_date}' AND revised = 'Y'
             """
             session_book = db_utils.execute_query(query)
 
-            logger.info(f"Got Revised book of {session_book['effective_date']}")
+            prefect_logger.info(f"Got Revised book of {session_book['effective_date']}")
 
             if session_book.empty:
                 query = f"""
                 SELECT * FROM intraday.new_daily_book_format 
-                WHERE effective_date = '{current_date}'
+                WHERE effective_date = '{current_date}' AND revised = 'N'
                 """
                 session_book = db_utils.execute_query(query)
-                logger.info("Getting Unrevised book")
+                prefect_logger.info("Getting Unrevised book")
                 if session_book.empty:
-                    #send_notification(f"No session_book found for {current_date}. Using unrevised session_book.")
+                    send_notification(f"No session_book found for {current_date}. Using unrevised session_book.")
                     return get_unrevised_book()
                 else:
                     #send_notification(f"Unrevised session_book found for {current_date}. Proceeding with caution.")
@@ -1286,10 +1296,12 @@ def Intraday_Flow():
 
                     logger.info(f"Data flow finished in {time_module.time() - flow_start_time} sec.")
 
+                    #------- Send Charts -------- #
+                    effective_datetime = str(final_book_clean_insert["effective_datetime"].unique()[0])
+                    
 
                     if current_time < datetime_time(16, 0):
                         prefect_logger.info("It's before 4 PM ET. Proceeding with heatmap generation.")
-                        effective_datetime = str(final_book_clean_insert["effective_datetime"].unique()[0])
                         heatmap_generation_flow(final_book_clean_insert,effective_datetime=effective_datetime)
 
                         #TODO: modify the other params to remove this and start at the same time as the book generation
@@ -1304,6 +1316,7 @@ def Intraday_Flow():
                         prefect_logger.info("It's past 4 PM ET. Skipping heatmap generation.")
                         #Generate 1DTE heatmap
                         #heatmap_generation_flow(final_book_clean_insert,)
+                        generate_charts(final_book_clean_insert,effective_datetime=effective_datetime)
 
                     logger.info(f"Finished flow in {time_module.time()-flow_start_time} sec.")
 

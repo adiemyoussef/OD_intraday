@@ -331,6 +331,7 @@ def GEX_flow(
         strike_range = [5350, 5700]
     if position_types is None:
         position_types = ['Net','C','P']
+        #position_types = ['Net']
 
     if expiration is None:
         expiration = session_date
@@ -363,6 +364,9 @@ def GEX_flow(
     else:
         print(f"Failed to process or send intraday data for {session_date}")
     pass
+
+
+
 
 if __name__ == "__main__":
     zero_dte_flow()

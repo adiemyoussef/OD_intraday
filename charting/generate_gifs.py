@@ -640,6 +640,69 @@ def generate_video(data, candlesticks, session_date, participant_input, position
         print("Failed to generate Discord-compatible video")
         return None
 
+def generate_snapshot(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
+                   metric,last_price,
+                   img_path='config/images/logo_dark.png',
+                   output_video='None.mp4'):
+
+
+    # Get the project root directory
+    project_root = Path(__file__).parent.parent
+
+    # Construct the full path to the image
+    full_img_path = project_root / img_path
+
+    # Get unique timestamps
+    timestamp = data['effective_datetime'].max()
+
+    # Create a unique temporary directory to store frames
+    temp_dir = f'snapshot_{uuid.uuid4().hex}'
+    os.makedirs(temp_dir, exist_ok=True)
+
+    # Generate frames
+    frame_paths = []
+
+
+    fig = generate_frame(data, candlesticks, timestamp, participant_input, strike_input, expiration_input, position_type_input,
+                         metric,last_price,
+                         full_img_path)
+
+    # Save the frame as an image
+    frame_path = os.path.join(temp_dir, f'frame_{metric}_{timestamp}.png')
+    fig.write_image(frame_path)
+    frame_paths.append(frame_path)
+
+    # Use the frame_paths directly, no need for additional processing
+    file_paths = frame_paths
+
+    # Create the writer with the correct output path
+    temp_output = f'temp_{output_video}'
+    writer = imageio.get_writer(temp_output, fps=3)
+
+    # Read and write images
+    for file_path in file_paths:
+        image = imageio.imread(file_path)
+        writer.append_data(image)
+
+    print('Finished writing temporary video')
+    writer.close()
+
+    # Convert to Discord-compatible format
+    final_output = generate_discord_compatible_video(temp_output, output_video)
+
+    # Clean up temporary files
+    for file in frame_paths:
+        os.remove(file)
+    os.rmdir(temp_dir)
+    os.remove(temp_output)
+
+    if final_output:
+        print(f"Video saved as {final_output}")
+        return final_output
+    else:
+        print("Failed to generate Discord-compatible video")
+        return None
+
 def send_to_discord(webhook_url, file_paths, content=None, title=None, description=None, fields=None,
                     footer_text=None):
     """
