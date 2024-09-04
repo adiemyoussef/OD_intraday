@@ -205,7 +205,9 @@ def determine_expected_file_name(current_time=None):
     else:
         expected_file_time = current_time.replace(minute=(current_time.minute // 10) * 10, second=0, microsecond=0)
 
-    expected_file_name = f"Cboe_OpenClose_{file_date.strftime('%Y-%m-%d')}_{expected_file_time.strftime('%H_%M')}_2.csv.zip"
+    expected_file_name = f"Cboe_OpenClose_{file_date.strftime('%Y-%m-%d')}_{expected_file_time.strftime('%H_%M')}_1.csv.zip"
+    # Holiday
+    #expected_file_name = f"Cboe_OpenClose_{file_date.strftime('%Y-%m-%d')}_{expected_file_time.strftime('%H_%M')}_2.csv.zip"
 
     logger.info(f"Expected file name: {expected_file_name}")
     return expected_file_name
