@@ -383,7 +383,7 @@ def plot_and_send_chart(df_gamma, minima_df, maxima_df, effective_datetime, spx_
 def heatmap_generation_flow(
     df_book: pd.DataFrame = None,
     steps: float = 2.5,
-    range: float = 0.025,
+    range: float = 0.0275,
     open_price: float = 5500,
     effective_datetime: str = None,
     effective_date: str = '2024-08-26',
