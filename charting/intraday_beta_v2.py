@@ -200,7 +200,7 @@ def zero_dte_flow(
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5500, 5700]
+        strike_range = [5350, 5700]
     if expiration is None:
         expiration = session_date
     if position_types is None:
@@ -256,7 +256,7 @@ def one_dte_flow(
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5450, 5750]
+        strike_range = [5300, 5700]
 
     if position_types is None:
         position_types = ['Net','C','P']
@@ -328,7 +328,7 @@ def GEX_flow(
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5500, 5700]
+        strike_range = [5350, 5700]
     if position_types is None:
         position_types = ['Net','C','P']
 
