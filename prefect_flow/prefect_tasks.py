@@ -50,7 +50,7 @@ logger = get_logger(debug_mode=False)
 polygon_client = RESTClient("sOqWsfC0sRZpjEpi7ppjWsCamGkvjpHw")
 DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 HEATMAP_CHANNEL = 'https://discord.com/api/webhooks/1278125396671332393/Y02pRK5XTUKURHoSF6tIlSDzHBPUzUqDHzA8ybsat4Z-zCN8EeyXmyjir7SwMB_OQm42'
-
+CHARM_HEATMAP_CHANNEL = 'https://discord.com/api/webhooks/1281065101805359134/pJzUD5GQufw3W9wUa4E9_GbwcZPgAsx61A6JssGiNbebUZ94SyOkWk83FurbEpxvFeb4'
 db_utils = DatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, logger=logger)
 logger.info(f"Initializing db status: {db_utils.get_status()}")
 
@@ -313,14 +313,73 @@ def intraday_gamma_heatmap(db,effective_datetime:str, effective_date:str):
 
     print(f"Heatmap for {effective_datetime} has been processed and saved.")
 
+
+@task
+def send_charm_heatmap_discord(charm_chart: go.Figure, as_of_time_stamp: str, session_date: str,
+                         y_min: int, y_max: int, webhook_url: str) -> bool:
+    title = f"📊 {session_date} Intraday Gamma Heatmap" # as of {as_of_time_stamp}"
+    # description = (
+    #     f"Detailed analysis of SPX Gamma for the {session_date} session.\n"
+    #     f"This heatmap provides insights into market makers gamma exposure within the specified price range.\n"
+    # )
+    current_time = datetime.utcnow()
+    # Define the Eastern Time zone
+    eastern_tz = pytz.timezone('America/New_York')
+    # Convert UTC time to Eastern Time
+    eastern_time = current_time.replace(tzinfo=pytz.utc).astimezone(eastern_tz)
+    # Format the time in a friendly way
+    friendly_time = eastern_time.strftime("%B %d, %Y at %I:%M %p %Z")
+    fields = [
+        # {"name": "📈 Analysis Type", "value": "Intraday Gamma Heatmap", "inline": True},
+        {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
+    ]
+    footer_text = f"Generated on {friendly_time} | By OptionsDepth Inc."
+
+    # Prepare the embed
+    embed = {
+        "title": title,
+        # "description": description,
+        "color": 3447003,  # A nice blue color
+        "fields": fields,
+        "footer": {"text": footer_text},
+        # "timestamp": current_time,
+        "image": {"url": "attachment://heatmap.png"}  # Reference the attached image
+    }
+
+    # Convert Plotly figure to image bytes
+    img_bytes = charm_chart.to_image(format="png", scale=3)
+
+    # Prepare the payload
+    payload = {
+        # "content": "🚀[UPDATE]: New Gamma Heatmap analysis is ready!",
+        "embeds": [embed]
+    }
+
+    # Prepare the files dictionary
+    files = {
+        "payload_json": (None, json.dumps(payload), "application/json"),
+        "file": ("heatmap.png", img_bytes, "image/png")
+    }
+
+    # Send the request
+    response = requests.post(webhook_url, files=files)
+
+    if response.status_code == 200 or response.status_code == 204:
+        print(f"Heatmap for {session_date} sent successfully to Discord!")
+        return True
+    else:
+        print(f"Failed to send heatmap. Status code: {response.status_code}")
+        print(f"Response content: {response.content}")
+        return False
 @task(name= "Send latest gamma heatmap to discord", task_run_name= "Latest gamma heatmap to discord")
 def intraday_charm_heatmap(db,effective_datetime:str, effective_date:str):
 
+
     prefect_logger = get_run_logger()
 
-    raw_gamma_data = fetch_gamma_data(db,effective_date, effective_datetime)
+    raw_charm_data = fetch_charm_data(db,effective_date, effective_datetime)
     prefect_logger.info("Fetched raw_gamma_data")
-    processed_gamma_data = process_gamma_data(raw_gamma_data)
+    processed_charm_data = process_charm_data(raw_charm_data)
     cd_formatted_datetime = et_to_utc(effective_datetime)
     prefect_logger.info("Fetched all Data")
     # Fetch candlestick data (assuming you still need this)
@@ -345,24 +404,17 @@ def intraday_charm_heatmap(db,effective_datetime:str, effective_date:str):
         spx_candlesticks = candlesticks_resampled.set_index('effective_datetime', drop=False)
 
     # Filter data for current effective_datetime
-    current_data = processed_gamma_data.copy()  # [processed_gamma_data['effective_datetime'] == effective_datetime]
+    current_data = processed_charm_data.copy()  # [processed_gamma_data['effective_datetime'] == effective_datetime]
 
-    df_gamma = current_data.pivot_table(index='sim_datetime', columns='price', values='value')  # , aggfunc='first')
-
-    # For minima_df and maxima_df, use the same index and columns as df_gamma
-    minima_df = current_data.pivot_table(index='sim_datetime', columns='price', values='minima')  # , aggfunc='first')
-    maxima_df = current_data.pivot_table(index='sim_datetime', columns='price', values='maxima')  # , aggfunc='first')
-
-    # Fill NaN values in minima_df and maxima_df
-    minima_df = minima_df.reindex_like(df_gamma).fillna(np.nan)
-    maxima_df = maxima_df.reindex_like(df_gamma).fillna(np.nan)
+    df_charm = current_data.pivot_table(index='sim_datetime', columns='price', values='value')  # , aggfunc='first')
 
     # Generate and send heatmap
-    gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
-                             effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5550, y_max=5700)
+    charm_chart = plot_charm(df=df_charm,
+                             effective_datetime=effective_datetime,
+                             spx=spx_candlesticks)
 
 
-    gamma_chart.update_layout(
+    charm_chart.update_layout(
         width=1920,  # Full HD width
         height=1080,  # Full HD height
         font=dict(size=16)  # Increase font size for better readability
@@ -370,21 +422,19 @@ def intraday_charm_heatmap(db,effective_datetime:str, effective_date:str):
     )
 
     # Call the new function
-    success = send_heatmap_discord(
-        gamma_chart=gamma_chart,
+    success = send_charm_heatmap_discord(
+        charm_chart=charm_chart,
         as_of_time_stamp=effective_datetime,
         session_date=effective_date,
         y_min=5550,
         y_max=5700,
-        webhook_url=HEATMAP_CHANNEL  # Make sure to define this
+        webhook_url=CHARM_HEATMAP_CHANNEL  # Make sure to define this
     )
 
     if success:
         print(f"Heatmap for {effective_datetime} has been processed and sent to Discord.")
     else:
         print(f"Failed to send heatmap for {effective_datetime} to Discord.")
-
-
 
     print(f"Heatmap for {effective_datetime} has been processed and saved.")
 
@@ -1061,6 +1111,8 @@ def Intraday_Flow():
 
     db_utils.connect()
 
+    # intraday_charm_heatmap(db, "2024-09-05 08:20:00", "2024-09-05")
+    # breakpoint()
     try:
 
         #TODO: initial_price, last_price = get_prices()
@@ -1306,9 +1358,10 @@ def Intraday_Flow():
 
                         #TODO: modify the other params to remove this and start at the same time as the book generation
                         if current_time > datetime_time(7, 0):
-                            #intraday_gamma_heatmap(db, effective_datetime, "2024-09-03")
+
                             intraday_gamma_heatmap(db, effective_datetime, current_date)
-                            #intraday_charm_heatmap(db, effective_datetime, current_date)
+                            intraday_charm_heatmap(db, effective_datetime, current_date)
+
 
 
 
@@ -1316,7 +1369,7 @@ def Intraday_Flow():
                         prefect_logger.info("It's past 4 PM ET. Skipping heatmap generation.")
                         #Generate 1DTE heatmap
                         #heatmap_generation_flow(final_book_clean_insert,)
-                        generate_charts(final_book_clean_insert,effective_datetime=effective_datetime)
+                        #generate_charts(final_book_clean_insert,effective_datetime=effective_datetime)
 
                     logger.info(f"Finished flow in {time_module.time()-flow_start_time} sec.")
 

@@ -584,7 +584,7 @@ def plot_gamma(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.
 
     return fig  # Return the figure object if needed
 
-def plot_gamma_intraday(df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None, save_fig=False, fig_show=False):
+def plot_charm_intraday(df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None, save_fig=False, fig_show=False):
 
 
     unique_times = sorted(df['sim_datetime'].unique())
@@ -783,27 +783,167 @@ def plot_gamma_intraday(df: pd.DataFrame, effective_datetime, spx: pd.DataFrame 
     if fig_show:
         fig.show()
 
-    # if save_fig:
-    #     # Create a directory for saving images
-    #     save_dir = os.path.join(os.path.expanduser("~"), "heatmap_images")
-    #     os.makedirs(save_dir, exist_ok=True)
-    #
-    #     # Generate the filename
-    #     stamp = df_heatmap.index[0].strftime("%Y-%m-%d_%H-%M")
-    #     filename = f"heatmap_{stamp}.png"
-    #
-    #     # Full path for saving the image
-    #     save_path = os.path.join(save_dir, filename)
-    #
-    #     # Save the image
-    #     fig.write_image(
-    #         save_path,
-    #         width=image_width,
-    #         height=image_height,
-    #         scale=scale_factor
-    #     )
-    #     print(f"Image saved to: {save_path}")
     fig.show()
+
+    return fig
+
+def plot_charm(df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None, save_fig=False, fig_show=False, grid= False):
+    x = df.index
+    y = df.columns.values
+    z = df.values.transpose()
+
+
+    title_date = effective_datetime
+
+    y_traces = np.arange(10 * round(y[0] / 10), 10 * round(y[-1] / 10) + 10, 10)
+
+    # find number of hours in the range
+    num_hours = (max(x) - min(x) + timedelta(minutes=5)).total_seconds() / 3600
+
+    times_to_show = np.arange(0, len(x), 6)
+    bonbhay = [x[time] for time in times_to_show]
+    x_values = [simtime.strftime("%H:%M") for simtime in bonbhay]
+
+
+    max_val = np.percentile(z, 95)
+    min_val = np.percentile(-z, 95)
+    max_val = np.max([abs(max_val), abs(min_val)])
+
+    fig = go.Figure()
+
+
+    heatmap = go.Contour(
+        z=z,
+        y=y,
+        x=x,
+        contours_coloring='heatmap',
+        colorscale=[[0.0, "rgb(0, 59, 99)"],
+                    [0.499, "rgb(186, 227, 255)"],
+                    [0.501, "rgb(255, 236, 196)"],
+                    [1.0, "rgb(255, 148, 71)"]],
+        # colorscale= "Spectral",
+        zmax=max_val,
+        zmin=-max_val,
+        line_color='#404040',
+        line_width=2,
+        contours_start=0,
+        contours_end=0,
+        colorbar=dict(
+            x=0.5,  # Centered below the plot
+            y=-0.15,  # Position below the plot
+            len=0.5,  # Length of the colorbar
+            orientation='h'  # Horizontal orientation
+        )
+
+    )
+
+    fig.add_trace(heatmap)
+
+    fig.update_layout(
+        xaxis=dict(
+            tickmode='array',
+            tickvals=bonbhay,
+            ticktext=x_values
+        ),
+        yaxis=dict(
+            tickmode='array',
+            tickvals=y_traces,
+            ticktext=y_traces
+        )
+    )
+
+    if grid == True:
+
+        for y_ in y_traces:
+            fig.add_hline(y=y_, line_width=1, line_dash='solid', line_color="rgb(222, 222, 222, 0.2)")
+        for x_ in bonbhay:
+            fig.add_vline(x=x_, line_width=1, line_dash="solid", line_color="rgb(222, 222, 222, 0.2)")
+
+    if spx is not None:
+        #prefect_logger.info("Entering OHLC overlay")
+        print("Entering OHLC overlay")
+        candlestick = go.Candlestick(
+            x=spx.index,
+            open=spx['open'],
+            high=spx['high'],
+            low=spx['low'],
+            close=spx['close'],
+            name= 'SPX',
+
+
+        )
+        fig.add_trace(candlestick)
+
+    fig.add_layout_image(
+        dict(
+            source=img,
+            xref="paper",
+            yref="y domain",
+            x=0.5,
+            y=0.5,
+            yanchor="middle",
+            xanchor="center",
+            sizex=1,
+            sizey=1,
+            sizing="contain",
+            opacity=0.08,
+            layer="above")
+    )
+    fig.add_layout_image(
+        dict(
+            source=img,
+            xref="paper",
+            yref="paper",
+            x=1,
+            y=1.01,
+            yanchor="bottom",
+            xanchor="right",
+
+            sizex=0.175,
+            sizey=0.175,
+            # sizing="contain",
+            # opacity=1,
+            # layer="above",
+        )
+    )
+
+    fig.update_xaxes(rangeslider_visible=False)
+
+    # ----------------------------------------
+    # ----------------------------------------
+
+
+    fig.update_layout(
+        title=f"Market Makers Charm Exposure Map Forecast <br><sup>All expirations, as of {title_date}</sup>",
+    )
+
+    fig.update_layout(
+        plot_bgcolor='rgba(255, 255, 255,0)',
+        paper_bgcolor='#053061',  # 053061
+        title=dict(
+            font=dict(size=40, family="Noto Sans SemiBold", color="white"),
+            yref='container',
+            # automargin=True,
+            # y=0.90,
+            x=0.0,
+            xanchor='left',
+            yanchor='top',
+            # automargin=True,  # Adjust the left margin (example: 100 pixels)
+
+            pad=dict(t=60, b=30, l=80)
+        ),
+        font=dict(
+            family="Noto Sans Medium",
+            color='white',
+            size=16,
+        ),
+        # style of new shapes
+        newshape=dict(line_color='yellow'),
+    )
+
+    fig.update_layout(
+        yaxis={'side': 'right'}
+    )
 
     return fig
 
@@ -1016,220 +1156,7 @@ def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=N
         scale=scale_factor
     )
 
-def plot_charm(df_heatmap, trade_date, string, min_max, symbol_yf, grid: bool):
-    x = df_heatmap.index
-    y = df_heatmap.columns.values
-    z = df_heatmap.values.transpose()
-    date_string = trade_date
-    date_dt = datetime.strptime(trade_date, "%Y-%m-%d")
-    date_end_yf = (date_dt + timedelta(days=1)).strftime("%Y-%m-%d")
 
-
-    title_date = format_date(date_dt)
-
-    y_traces = np.arange(10 * round(y[0] / 10), 10 * round(y[-1] / 10) + 10, 10)
-
-    # find number of hours in the range
-    num_hours = (max(x) - min(x) + timedelta(minutes=5)).total_seconds() / 3600
-
-    times_to_show = np.arange(0, len(x), 6)
-    bonbhay = [x[time] for time in times_to_show]
-    x_values = [simtime.strftime("%H:%M") for simtime in bonbhay]
-
-    if string == "Gamma":
-
-        max_val = np.max(z)
-        min_val = np.min(z)
-        max_val = np.max([abs(max_val), abs(min_val)])
-    else:
-        max_val = np.percentile(z, 95)
-        min_val = np.percentile(-z, 95)
-        max_val = np.max([abs(max_val), abs(min_val)])
-
-    fig = go.Figure()
-
-
-    heatmap = go.Contour(
-        z=z,
-        y=y,
-        x=x,
-        contours_coloring='heatmap',
-        colorscale=[[0.0, "rgb(0, 59, 99)"],
-                    [0.499, "rgb(186, 227, 255)"],
-                    [0.501, "rgb(255, 236, 196)"],
-                    [1.0, "rgb(255, 148, 71)"]],
-        # colorscale= "Spectral",
-        zmax=max_val,
-        zmin=-max_val,
-        line_color='#404040',
-        line_width=2,
-        contours_start=0,
-        contours_end=0,
-        colorbar=dict(
-            x=0.5,  # Centered below the plot
-            y=-0.15,  # Position below the plot
-            len=0.5,  # Length of the colorbar
-            orientation='h'  # Horizontal orientation
-        )
-
-    )
-
-    fig.add_trace(heatmap)
-
-    fig.update_layout(
-        xaxis=dict(
-            tickmode='array',
-            tickvals=bonbhay,
-            ticktext=x_values
-        ),
-        yaxis=dict(
-            tickmode='array',
-            tickvals=y_traces,
-            ticktext=y_traces
-        )
-    )
-
-    if grid == True:
-
-        for y_ in y_traces:
-            fig.add_hline(y=y_, line_width=1, line_dash='solid', line_color="rgb(222, 222, 222, 0.2)")
-        for x_ in bonbhay:
-            fig.add_vline(x=x_, line_width=1, line_dash="solid", line_color="rgb(222, 222, 222, 0.2)")
-
-    fig.add_trace(go.Candlestick(
-        x=spx.index,
-        open=spx['Open'],
-        high=spx['High'],
-        low=spx['Low'],
-        close=spx['Close'],
-        name='Candlestick',
-        showlegend=False
-    ))
-    fig.add_layout_image(
-        dict(
-            source=img,
-            xref="paper",
-            yref="y domain",
-            x=0.5,
-            y=0.5,
-            yanchor="middle",
-            xanchor="center",
-            sizex=1,
-            sizey=1,
-            sizing="contain",
-            opacity=0.08,
-            layer="above")
-    )
-    fig.add_layout_image(
-        dict(
-            source=img2,
-            xref="paper",
-            yref="paper",
-            x=1,
-            y=1.01,
-            yanchor="bottom",
-            xanchor="right",
-
-            sizex=0.175,
-            sizey=0.175,
-            # sizing="contain",
-            # opacity=1,
-            # layer="above",
-        )
-    )
-
-    fig.update_xaxes(rangeslider_visible=False)
-
-    # ----------------------------------------
-    if min_max == True:
-        df = df_heatmap.copy()
-        results = []
-        for _, row in df.iterrows():
-            x = row.index.values
-            y = row.values
-
-            # Compute discrete gradient (approximating the first derivative)
-            derivative1 = np.gradient(y, x)
-            spline1 = interpolate.UnivariateSpline(x, derivative1, s=0)
-
-            # Find roots of the first derivative (potential minima/maxima locations)
-            stationary_points = spline1.roots().tolist()
-
-            # Compute the second derivative
-            derivative2 = np.gradient(derivative1, x)
-            spline2 = interpolate.UnivariateSpline(x, derivative2, s=0)
-
-            # Separate minima and maxima
-            minima_locations = []
-            maxima_locations = []
-            for loc in stationary_points:
-                second_derivative_at_loc = spline2(loc)
-                if second_derivative_at_loc > 0:
-                    minima_locations.append(loc)
-                elif second_derivative_at_loc < 0:
-                    maxima_locations.append(loc)
-
-            # Get corresponding values for minima and maxima
-            min_values = [np.interp(loc, x, y) for loc in minima_locations]
-            max_values = [np.interp(loc, x, y) for loc in maxima_locations]
-
-            results.append({
-                'minima_values': min_values,
-                'prices_of_minima': minima_locations,
-                'maxima_values': max_values,
-                'prices_of_maxima': maxima_locations
-            })
-
-        result_df = pd.DataFrame(results, index=df.index)
-
-        # Minima traces (yellow lines)
-        minima_traces = get_traces(result_df, 'minima_values', 'prices_of_minima', "yellow")
-        for trace in minima_traces:
-            fig.add_trace(trace)
-
-        # Maxima traces (green lines)
-
-        maxima_traces = get_traces(result_df, 'maxima_values', 'prices_of_maxima', "green")
-        for trace in maxima_traces:
-            fig.add_trace(trace)
-    # ----------------------------------------
-
-    if string == "Gamma" or string == "Charm":
-        fig.update_layout(
-            title=f"Dealer's {string.capitalize()} Exposure Map Forecast <br><sup>All expirations, trading session of {title_date}</sup>",
-        )
-    else:
-        fig.update_layout(
-            title=f"Dealer's {string.upper()} Forecast <br><sup>All expirations, trading session of {title_date}</sup>",
-        )
-
-    fig.update_layout(
-        plot_bgcolor='rgba(255, 255, 255,0)',
-        paper_bgcolor='#053061',  # 053061
-        title=dict(
-            font=dict(size=40, family="Noto Sans SemiBold", color="white"),
-            yref='container',
-            # automargin=True,
-            # y=0.90,
-            x=0.0,
-            xanchor='left',
-            yanchor='top',
-            # automargin=True,  # Adjust the left margin (example: 100 pixels)
-
-            pad=dict(t=60, b=30, l=80)
-        ),
-        font=dict(
-            family="Noto Sans Medium",
-            color='white',
-            size=16,
-        ),
-        # style of new shapes
-        newshape=dict(line_color='yellow'),
-    )
-
-    fig.update_layout(
-        yaxis={'side': 'right'}
-    )
 
 
 

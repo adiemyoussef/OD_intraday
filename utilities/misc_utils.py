@@ -442,7 +442,7 @@ def fetch_gamma_data(db, effective_date, effective_datetime):
         FROM intraday.intraday_gamma
         WHERE effective_datetime <= '{effective_datetime}' -- (SELECT max(effective_datetime) FROM intraday.intraday_gamma)
         and effective_date = '{effective_date}'
-        and time(effective_datetime) >= '07:30:00'
+        and time(effective_datetime) >= '07:00:00'
     ),
     consumed_gamma AS (
         SELECT 
@@ -477,6 +477,57 @@ def fetch_gamma_data(db, effective_date, effective_datetime):
     """
 
     return db.execute_query(query)
+
+def fetch_charm_data(db, effective_date, effective_datetime):
+    query = f"""
+    WITH ranked_charm AS (
+        SELECT 
+            id,
+            ticker,
+            effective_date,
+            effective_datetime,
+            price,
+            value,
+            sim_datetime,
+            NULL as minima,
+            NULL as maxima,
+            ROW_NUMBER() OVER (PARTITION BY sim_datetime,price ORDER BY effective_datetime DESC) AS rn
+        FROM intraday.intraday_charm
+        WHERE effective_datetime <= '{effective_datetime}' -- (SELECT max(effective_datetime) FROM intraday.intraday_charm)
+        and effective_date = '{effective_date}'
+        and time(effective_datetime) >= '07:00:00'
+    ),
+    consumed_charm AS (
+        SELECT 
+            id,
+            ticker,
+            effective_date,
+            effective_datetime,
+            price,
+            value,
+            sim_datetime,
+            NULL as minima,
+            NULL as maxima
+        FROM ranked_charm
+        WHERE rn = 1
+    ),
+    upcoming_charm AS (
+        SELECT * 
+        FROM intraday.intraday_charm
+        WHERE effective_datetime = '{effective_datetime}' -- (SELECT max(effective_datetime) FROM intraday.intraday_charm)
+        and
+        effective_date = '{effective_date}'
+    ),
+    final_charm as(
+    SELECT * FROM consumed_charm
+    UNION ALL
+    SELECT * FROM upcoming_charm
+    )
+    SELECT * from final_charm
+    """
+
+    return db.execute_query(query)
+
 
 def resample_and_convert_timezone(df:pd.DataFrame, datetime_column='effective_datetime', resample_interval='5T',
                                   target_timezone='US/Eastern'):
@@ -531,6 +582,14 @@ def process_gamma_data(df):
     df['value'] = df['value'].astype(float)
     df['minima'] = df['minima'].astype(float)
     df['maxima'] = df['maxima'].astype(float)
+    return df
+
+def process_charm_data(df):
+    df['effective_datetime'] = pd.to_datetime(df['effective_datetime'])
+    df['sim_datetime'] = pd.to_datetime(df['sim_datetime'])
+    df['price'] = df['price'].astype(float)
+    df['value'] = df['value'].astype(float)
+
     return df
 
 def et_to_utc(et_time_str):
