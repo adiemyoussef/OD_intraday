@@ -1,4 +1,8 @@
+import json
+
 import pandas as pd
+import pytz
+import requests
 from prefect import flow, task
 from prefect.tasks import task_input_hash, Task
 from datetime import timedelta, datetime, date
@@ -9,6 +13,11 @@ from utilities.db_utils import DatabaseUtilities
 from config.config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 import os
 from datetime import datetime, time
+import numpy as np
+import plotly.graph_objects as go
+from PIL import Image
+from config.config import *
+
 
 DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 #https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ
@@ -20,6 +29,17 @@ LIST_PART = ['total_customers', 'broker', 'firm', 'retail', 'institution']
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()
 print(f'{db.get_status()}')
+
+
+
+
+def load_logo():
+    try:
+        return Image.open(LOGO_dark)
+    except FileNotFoundError:
+        print(f"Warning: Logo file not found at {LOGO_dark}. Using placeholder.")
+        return Image.new('RGBA', (100, 100), color=(73, 109, 137))
+
 
 def get_next_expiration_date(current_date: date) -> date:
     # This function should return the next expiration date (usually the next Friday)
@@ -38,13 +58,15 @@ def fetch_data(session_date: str, strike_range: List[int], expiration: str, star
 
     start_of_video = f'{session_date} {start_video}'
 
-    metrics_query =f"""
+    metrics_query = f"""
     SELECT * FROM intraday.intraday_books
     WHERE effective_date = '{session_date}'
-    and effective_datetime >= '{start_of_video}'
-    and strike_price between {strike_range[0]} and {strike_range[1]}
-    and expiration_date_original = '{expiration}'
+    AND effective_datetime >= '{start_of_video}'
+    AND strike_price BETWEEN {strike_range[0]} AND {strike_range[1]}
     """
+
+    if expiration is not None:
+        metrics_query += f"AND expiration_date_original = '{expiration}'"
 
     candlesticks_query = f"""
     SELECT * FROM optionsdepth_stage.charts_candlestick
@@ -365,10 +387,235 @@ def GEX_flow(
         print(f"Failed to process or send intraday data for {session_date}")
     pass
 
+#------------------ DEPTHVIEW ------------------#
+@flow(name="Depthview flow")
+def plot_depthview(
+    session_date: Optional[date] = default_date,
+    strike_range: Optional[List[int]] = None,
+    expiration: Optional[str] = None,
+    participant: str = 'total_customers',
+    position_types: Optional[List[str]] = None,
+    webhook_url: str = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
+    ):
+
+
+    # Replace the original Image.open(LOGO_dark) with:
+    img = load_logo()
+
+    current_time = datetime.now().time()
+
+    if current_time < time(12, 0):  # Before 12:00 PM
+        start_time = '07:00:00'
+    elif time(12, 0) <= current_time < time(23, 0):  # Between 12:00 PM and 7:00 PM
+        start_time = '09:00:00'
+    else:  # 7:00 PM or later
+        start_time = '07:00:00'  # You might want to adjust this for the after 7:00 PM case
+
+    print(f"Start time set to: {start_time}")
+    strike_range = [5400,5650]
+    metric_type = "position"
+
+
+    metrics, candlesticks, last_price = fetch_data(session_date, strike_range, None, start_time)
+
+    #title formatting
+    if metric_type == "GEX":
+        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Market Makers' GEX</span>"
+        colorscale = "RdBu"
+        title_colorbar = f"{metric_type}<br>(M$/point)"
+
+    elif metric_type == "DEX":
+        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer DEX</span>"
+        title_colorbar = f"{metric_type}<br>(δ)"
+
+    elif metric_type == "position":
+        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer Position</span>"
+        title_colorbar = f"{metric_type}<br>(contracts #)"
+
+
+    if position_types == "calls":
+        option_types_title = "Filtered for calls only"
+
+    elif position_types == "puts":
+        option_types_title = "Filtered for puts only"
+
+    elif position_types == "all":
+        option_types_title = "All contracts, puts and calls combined"
+
+
+
+    # Ensure that the DataFrame values are floats
+    # metrics[metric_type] = metrics[metric_type].astype(float)
+    metrics['strike_price'] = metrics['strike_price'].astype(float)
+    metrics['expiration_date_original'] = metrics['expiration_date_original'].astype(str)
+
+    z = metrics.pivot_table(index='strike_price', columns='expiration_date_original', values="gamma").values
+
+    if type != "GEX":
+        colorscale = [
+            [0.0, 'red'],  # Lowest value
+            [0.5, 'white'],  # Mid value at zero
+            [1.0, 'green'],  # Highest value
+        ]
+
+    # Calculate the mid value for the color scale (centered at zero)
+    # zmin = metrics[metric_type].min()
+    # zmax = metrics[metric_type].max()
+    breakpoint()
+    zmin = metrics.min()
+    zmax = metrics.max()
+    val_range = max(abs(zmin), abs(zmax))
+
+
+
+    # Apply symmetric log scale transformation
+    def symmetric_log_scale(value, log_base=10):
+        return np.sign(value) * np.log1p(np.abs(value)) / np.log(log_base)
+
+    z_log = symmetric_log_scale(z)
+
+
+    # Round the original values for display in hover text
+    rounded_z = np.around(z, decimals=2)
+
+
+    # Create the heatmap using Plotly
+    fig = go.Figure(data=go.Heatmap(
+        z=z_log,
+        x=metrics['expiration_date_original'].unique(),
+        y=metrics['strike_price'].unique(),
+        text=np.where(np.isnan(rounded_z), '', rounded_z),
+        texttemplate="%{text}",
+        colorscale=colorscale,
+        zmin=-symmetric_log_scale(val_range),
+        zmax=symmetric_log_scale(val_range),
+        colorbar=dict(
+            title=title_colorbar,
+            tickvals=symmetric_log_scale(np.array([-val_range, 0, val_range])),
+            ticktext=[-round(val_range), 0, round(val_range)]
+        ),
+        zmid=0,
+        hovertemplate='Expiration: %{x}<br>Strike: %{y}<br>' + type + ': %{text}<extra></extra>'
+    ))
+
+
+    fig.update_layout(
+        title=dict(
+            text=(
+                  f"{dynamic_title}"
+                  # f"<br><span style='font-size:20px;'>As of {effective_datetime}</span>"
+                  f"<br><span style='font-size:20px;'>{option_types_title}</span>"
+
+            ),
+            font=dict(family="Noto Sans SemiBold", color="white"),
+            y=0.96,  # Adjust to control the vertical position of the title
+            x=0.0,
+
+            # xanchor='left',
+            # yanchor='top',
+            pad=dict(t=10, b=10, l=40)  # Adjust padding around the title
+        ),
+        # width=width,
+        # height=height,
+
+        margin=dict(l=40, r=40, t=130, b=30),  # Adjust overall margins
+        xaxis=dict(
+            title='Expiration Date',
+            tickangle=-45,
+            tickmode='linear',
+            type='category'
+        ),
+        yaxis=dict(
+            title='Strike Price',
+            tickmode='linear',
+            dtick=10
+        ),
+        font=dict(family="Noto Sans Medium", color='white'),
+        autosize=True,
+        # paper_bgcolor='white',  # Set paper background to white
+        plot_bgcolor='white',
+        paper_bgcolor='#053061',  # Dark blue background
+
+    )
+
+    fig.add_layout_image(
+        dict(
+            source=img,
+            xref="paper",
+            yref="paper",
+            x=1,
+            y=1.11,
+            xanchor="right",
+            yanchor="top",
+            sizex=0.175,
+            sizey=0.175,
+            sizing="contain",
+            layer="above"
+        )
+    )
+
+    fig.update_layout(
+        width=1920,  # Full HD width
+        height=1080,  # Full HD height
+        font=dict(size=16)  # Increase font size for better readability
+
+    )
+
+
+    title = f"📊 {session_date} Intraday DepthView"
+
+    # Define the Eastern Time zone, Convert UTC time to Eastern Time, then Format the time in a friendly way
+    current_time = datetime.utcnow()
+    eastern_tz = pytz.timezone('America/New_York')
+    eastern_time = current_time.replace(tzinfo=pytz.utc).astimezone(eastern_tz)
+    friendly_time = eastern_time.strftime("%B %d, %Y at %I:%M %p %Z")
+    fields = [
+        #{"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
+        {"name": "⏰ As of:", "value": "TEST", "inline": True},
+    ]
+    footer_text = f"Generated on {friendly_time} | By OptionsDepth Inc."
+
+    # Prepare the embed
+    embed = {
+        "title": title,
+        "color": 3447003,
+        "fields": fields,
+        "footer": {"text": footer_text},
+        "image": {"url": "attachment://depthview.png"}  # Reference the attached image
+    }
+
+    # Convert Plotly figure to image bytes
+    img_bytes = fig.to_image(format="png", scale=3)
+
+    # Prepare the payload
+    payload = {
+        # "content": "🚀[UPDATE]: New Gamma Heatmap analysis is ready!",
+        "embeds": [embed]
+    }
+
+    # Prepare the files dictionary
+    files = {
+        "payload_json": (None, json.dumps(payload), "application/json"),
+        "file": ("heatmap.png", img_bytes, "image/png")
+    }
+
+    # Send the request
+    response = requests.post(webhook_url, files=files)
+
+    if response.status_code == 200 or response.status_code == 204:
+        print(f"Heatmap for {session_date} sent successfully to Discord!")
+        return True
+    else:
+        print(f"Failed to send heatmap. Status code: {response.status_code}")
+        print(f"Response content: {response.content}")
+        return False
+
+
 
 
 
 if __name__ == "__main__":
-    zero_dte_flow()
+    #zero_dte_flow()
     #one_dte_flow()
     #GEX_flow()
+    plot_depthview()

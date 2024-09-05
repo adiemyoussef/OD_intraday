@@ -415,4 +415,3 @@ def plot_depthview(
         print(f"Response content: {response.content}")
         return False
 
-    # return fig
