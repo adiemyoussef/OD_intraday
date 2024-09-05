@@ -624,7 +624,7 @@ def generate_heatmap_gif(
     session_date: Optional[date] = default_date,
     webhook_url: str = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
     ):
-
+    pass
 
 
 if __name__ == "__main__":
