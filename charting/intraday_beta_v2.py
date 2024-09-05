@@ -17,7 +17,7 @@ import numpy as np
 import plotly.graph_objects as go
 from PIL import Image
 from config.config import *
-
+from enum import Enum
 
 DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 #https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ
@@ -388,6 +388,12 @@ def GEX_flow(
     pass
 
 #------------------ DEPTHVIEW ------------------#
+class WebhookUrl(Enum):
+    DEFAULT = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
+    URL_1 = 'https://discord.com/api/webhooks/your-webhook-url-1'
+    URL_2 = 'https://discord.com/api/webhooks/your-webhook-url-2'
+    # Add more webhook URLs as needed
+
 @flow(name="Depthview flow")
 def plot_depthview(
     session_date: Optional[date] = default_date,
@@ -395,10 +401,10 @@ def plot_depthview(
     expiration: Optional[str] = None,
     participant: str = 'total_customers',
     position_types: Optional[List[str]] = None,
-    webhook_url: str = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
+    #webhook_url: str = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
+    webhook_url: WebhookUrl = WebhookUrl.DEFAULT
     ):
-
-
+    print(f"Using webhook URL: {webhook_url.value}")
     # Replace the original Image.open(LOGO_dark) with:
     img = load_logo()
 
@@ -612,7 +618,12 @@ def plot_depthview(
         print(f"Response content: {response.content}")
         return False
 
+#---------------- HEATMAP GIF -------------------- #
 
+def generate_heatmap_gif(
+    session_date: Optional[date] = default_date,
+    webhook_url: str = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
+    ):
 
 
 
@@ -621,3 +632,4 @@ if __name__ == "__main__":
     #one_dte_flow()
     #GEX_flow()
     plot_depthview()
+    #generate_heatmap_gif()
