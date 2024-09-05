@@ -317,7 +317,7 @@ def intraday_gamma_heatmap(db,effective_datetime:str, effective_date:str):
 @task
 def send_charm_heatmap_discord(charm_chart: go.Figure, as_of_time_stamp: str, session_date: str,
                          y_min: int, y_max: int, webhook_url: str) -> bool:
-    title = f"📊 {session_date} Intraday Gamma Heatmap" # as of {as_of_time_stamp}"
+    title = f"📊 {session_date} Intraday Charm Heatmap" # as of {as_of_time_stamp}"
     # description = (
     #     f"Detailed analysis of SPX Gamma for the {session_date} session.\n"
     #     f"This heatmap provides insights into market makers gamma exposure within the specified price range.\n"
@@ -1111,8 +1111,7 @@ def Intraday_Flow():
 
     db_utils.connect()
 
-    # intraday_charm_heatmap(db, "2024-09-05 08:20:00", "2024-09-05")
-    # breakpoint()
+
     try:
 
         #TODO: initial_price, last_price = get_prices()

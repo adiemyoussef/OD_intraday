@@ -805,8 +805,10 @@ def plot_charm(df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None, s
     x_values = [simtime.strftime("%H:%M") for simtime in bonbhay]
 
 
-    max_val = np.percentile(z, 95)
-    min_val = np.percentile(-z, 95)
+    # max_val = np.percentile(z, 95)
+    # min_val = np.percentile(-z, 95)
+    max_val = 150
+    min_val = -150
     max_val = np.max([abs(max_val), abs(min_val)])
 
     fig = go.Figure()
