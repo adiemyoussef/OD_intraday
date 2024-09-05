@@ -414,7 +414,7 @@ def plot_depthview(
     print(f"Start time set to: {start_time}")
     strike_range = [5400,5650]
     metric_type = "position"
-
+    position_types = "all"
 
     metrics, candlesticks, last_price = fetch_data(session_date, strike_range, None, start_time)
 
@@ -457,13 +457,14 @@ def plot_depthview(
             [0.5, 'white'],  # Mid value at zero
             [1.0, 'green'],  # Highest value
         ]
-
+    else:
+        print("Totoooooo")
     # Calculate the mid value for the color scale (centered at zero)
     # zmin = metrics[metric_type].min()
     # zmax = metrics[metric_type].max()
-    breakpoint()
-    zmin = metrics.min()
-    zmax = metrics.max()
+
+    zmin = metrics["gamma"].min()
+    zmax = metrics["gamma"].max()
     val_range = max(abs(zmin), abs(zmax))
 
 
@@ -495,7 +496,7 @@ def plot_depthview(
             ticktext=[-round(val_range), 0, round(val_range)]
         ),
         zmid=0,
-        hovertemplate='Expiration: %{x}<br>Strike: %{y}<br>' + type + ': %{text}<extra></extra>'
+        hovertemplate='Expiration: %{x}<br>Strike: %{y}<br>' + metric_type + ': %{text}<extra></extra>'
     ))
 
 
