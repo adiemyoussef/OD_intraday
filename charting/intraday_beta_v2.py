@@ -562,6 +562,7 @@ def plot_depthview(
 
     )
 
+    breakpoint()
 
     title = f"📊 {session_date} Intraday DepthView"
 

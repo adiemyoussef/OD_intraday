@@ -28,7 +28,7 @@ import uuid
 from datetime import datetime
 
 
-def create_video_from_frames(frame_paths, output_path, fps=5):
+def create_video_from_frames_original(frame_paths, output_path, fps=5):
     """
     Create a video from a list of image frames.
 
@@ -55,6 +55,44 @@ def create_video_from_frames(frame_paths, output_path, fps=5):
     # Release the VideoWriter
     out.release()
     print(f"Video created successfully: {output_path}")
+
+
+def create_video_from_frames(frame_paths, output_path, fps=5):
+    """
+    Create a video from a list of image frames using H.264 codec.
+
+    :param frame_paths: List of paths to the image frames
+    :param output_path: Path where the output video will be saved
+    :param fps: Frames per second for the output video
+    """
+    if not frame_paths:
+        print("No frames to create video.")
+        return
+
+    # Read the first frame to get the frame size
+    frame = cv2.imread(frame_paths[0])
+    height, width, layers = frame.shape
+
+    # Define the codec and create VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*'avc1')  # H.264 codec
+    temp_output = output_path + '_temp.mp4'
+    out = cv2.VideoWriter(temp_output, fourcc, fps, (width, height))
+
+    for frame_path in frame_paths:
+        frame = cv2.imread(frame_path)
+        out.write(frame)
+
+    # Release the VideoWriter
+    out.release()
+
+    # Use FFmpeg to convert the temporary file to a more compatible format
+    os.system(f"ffmpeg -i {temp_output} -vcodec libx264 -acodec aac {output_path}")
+
+    # Remove the temporary file
+    os.remove(temp_output)
+
+    print(f"Video created successfully: {output_path}")
+
 
 def et_to_utc(et_time_str):
     # Parse the input string to a datetime object
@@ -312,4 +350,4 @@ if __name__ == "__main__":
     db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
     db.connect()
     print(f'{db.get_status()}')
-    heatmap_generation_flow(db, effective_date='2024-09-04')
+    heatmap_generation_flow(db, effective_date='2024-09-05')
