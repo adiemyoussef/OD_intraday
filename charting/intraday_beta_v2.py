@@ -288,7 +288,7 @@ def one_dte_flow(
     elif 'All' in position_types:
         position_types = ['C', 'P', 'Net']
 
-
+    expiration = '2024-09-09'
 
     current_time = datetime.now().time()
 
@@ -399,12 +399,14 @@ def plot_depthview(
     session_date: Optional[date] = default_date,
     strike_range: Optional[List[int]] = None,
     expiration: Optional[str] = None,
-    participant: str = 'total_customers',
+    participant: str = 'mm',
     position_types: Optional[List[str]] = None,
     #webhook_url: str = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
     webhook_url: WebhookUrl = WebhookUrl.DEFAULT
     ):
+
     print(f"Using webhook URL: {webhook_url.value}")
+
     # Replace the original Image.open(LOGO_dark) with:
     img = load_logo()
 
@@ -419,12 +421,12 @@ def plot_depthview(
 
     print(f"Start time set to: {start_time}")
     strike_range = [5400,5650]
-    metric_type = "position"
+    metric_type = "GEX"
     position_types = "all"
 
     metrics, candlesticks, last_price = fetch_data(session_date, strike_range, None, start_time)
 
-    #title formatting
+    # Title formatting
     if metric_type == "GEX":
         dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Market Makers' GEX</span>"
         colorscale = "RdBu"
@@ -451,13 +453,13 @@ def plot_depthview(
 
 
     # Ensure that the DataFrame values are floats
-    # metrics[metric_type] = metrics[metric_type].astype(float)
+    metrics["metric"] = metrics[f"{participant}_posn"] * metrics['gamma']
+    metrics["metric"] = metrics["metric"].astype(float)
     metrics['strike_price'] = metrics['strike_price'].astype(float)
     metrics['expiration_date_original'] = metrics['expiration_date_original'].astype(str)
+    z = metrics.pivot_table(index='strike_price', columns='expiration_date_original', values="metric").values
 
-    z = metrics.pivot_table(index='strike_price', columns='expiration_date_original', values="gamma").values
-
-    if type != "GEX":
+    if metric_type != "GEX":
         colorscale = [
             [0.0, 'red'],  # Lowest value
             [0.5, 'white'],  # Mid value at zero
@@ -469,8 +471,8 @@ def plot_depthview(
     # zmin = metrics[metric_type].min()
     # zmax = metrics[metric_type].max()
 
-    zmin = metrics["gamma"].min()
-    zmax = metrics["gamma"].max()
+    zmin = metrics["metric"].min()
+    zmax = metrics["metric"].max()
     val_range = max(abs(zmin), abs(zmax))
 
 
@@ -518,12 +520,9 @@ def plot_depthview(
             y=0.96,  # Adjust to control the vertical position of the title
             x=0.0,
 
-            # xanchor='left',
-            # yanchor='top',
             pad=dict(t=10, b=10, l=40)  # Adjust padding around the title
         ),
-        # width=width,
-        # height=height,
+
 
         margin=dict(l=40, r=40, t=130, b=30),  # Adjust overall margins
         xaxis=dict(
@@ -539,7 +538,6 @@ def plot_depthview(
         ),
         font=dict(family="Noto Sans Medium", color='white'),
         autosize=True,
-        # paper_bgcolor='white',  # Set paper background to white
         plot_bgcolor='white',
         paper_bgcolor='#053061',  # Dark blue background
 
@@ -551,7 +549,7 @@ def plot_depthview(
             xref="paper",
             yref="paper",
             x=1,
-            y=1.11,
+            y=1.15,
             xanchor="right",
             yanchor="top",
             sizex=0.175,
@@ -568,25 +566,24 @@ def plot_depthview(
 
     )
 
-    breakpoint()
-
-    title = f"📊 {session_date} Intraday DepthView"
-
-    # Define the Eastern Time zone, Convert UTC time to Eastern Time, then Format the time in a friendly way
+    title = f"📊 {session_date} Intraday Depthview"
     current_time = datetime.utcnow()
+    # Define the Eastern Time zone
     eastern_tz = pytz.timezone('America/New_York')
+    # Convert UTC time to Eastern Time
     eastern_time = current_time.replace(tzinfo=pytz.utc).astimezone(eastern_tz)
+    # Format the time in a friendly way
     friendly_time = eastern_time.strftime("%B %d, %Y at %I:%M %p %Z")
     fields = [
-        #{"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
-        {"name": "⏰ As of:", "value": "TEST", "inline": True},
+        # {"name": "📈 Analysis Type", "value": "Intraday Gamma Heatmap", "inline": True},
+        {"name": "⏰ As of:", "value": "2024-09-05 09:30:00", "inline": True},
     ]
     footer_text = f"Generated on {friendly_time} | By OptionsDepth Inc."
 
     # Prepare the embed
     embed = {
         "title": title,
-        "color": 3447003,
+        "color": 3447003,  # A nice blue color
         "fields": fields,
         "footer": {"text": footer_text},
         "image": {"url": "attachment://depthview.png"}  # Reference the attached image
@@ -597,26 +594,27 @@ def plot_depthview(
 
     # Prepare the payload
     payload = {
-        # "content": "🚀[UPDATE]: New Gamma Heatmap analysis is ready!",
         "embeds": [embed]
     }
 
     # Prepare the files dictionary
     files = {
         "payload_json": (None, json.dumps(payload), "application/json"),
-        "file": ("heatmap.png", img_bytes, "image/png")
+        "file": ("depthview.png", img_bytes, "image/png")
     }
 
     # Send the request
-    response = requests.post(webhook_url, files=files)
+    response = requests.post(webhook_url.value, files=files)
 
     if response.status_code == 200 or response.status_code == 204:
         print(f"Heatmap for {session_date} sent successfully to Discord!")
+        fig.show()
         return True
     else:
         print(f"Failed to send heatmap. Status code: {response.status_code}")
         print(f"Response content: {response.content}")
         return False
+
 
 #---------------- HEATMAP GIF -------------------- #
 
@@ -631,5 +629,5 @@ if __name__ == "__main__":
     #zero_dte_flow()
     #one_dte_flow()
     #GEX_flow()
-    plot_depthview()
+    plot_depthview(webhook_url=WebhookUrl.DEFAULT)
     #generate_heatmap_gif()

@@ -183,11 +183,8 @@ def ensure_all_connections_are_open():
 @task
 def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_date: str,
                          y_min: int, y_max: int, webhook_url: str) -> bool:
-    title = f"📊 {session_date} Intraday Gamma Heatmap" # as of {as_of_time_stamp}"
-    # description = (
-    #     f"Detailed analysis of SPX Gamma for the {session_date} session.\n"
-    #     f"This heatmap provides insights into market makers gamma exposure within the specified price range.\n"
-    # )
+
+    title = f"📊 {session_date} Intraday Gamma Heatmap"
     current_time = datetime.utcnow()
     # Define the Eastern Time zone
     eastern_tz = pytz.timezone('America/New_York')
@@ -204,11 +201,9 @@ def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_
     # Prepare the embed
     embed = {
         "title": title,
-        # "description": description,
         "color": 3447003,  # A nice blue color
         "fields": fields,
         "footer": {"text": footer_text},
-        # "timestamp": current_time,
         "image": {"url": "attachment://heatmap.png"}  # Reference the attached image
     }
 
@@ -217,7 +212,6 @@ def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_
 
     # Prepare the payload
     payload = {
-        # "content": "🚀[UPDATE]: New Gamma Heatmap analysis is ready!",
         "embeds": [embed]
     }
 
