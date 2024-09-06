@@ -1,4 +1,5 @@
 import json
+import math
 
 import pandas as pd
 import pytz
@@ -100,6 +101,24 @@ def fetch_data(session_date: str, strike_range: List[int], expiration: str, star
 
     return metrics, candlesticks, last_price
 
+
+@task(cache_key_fn=None, cache_expiration=timedelta(hours=0, minutes=1))
+def fetch_data_depthview(session_date: str, strike_range: List[int], expiration: str = None) -> [pd.DataFrame]:
+
+    metrics_query = f"""
+    SELECT * FROM intraday.intraday_books
+    WHERE effective_date = '{session_date}'
+    AND effective_datetime >= (SELECT MAX(effective_datetime) FROM intraday.intraday_books where effective_date = '{session_date}')
+    AND strike_price BETWEEN {strike_range[0]} AND {strike_range[1]}
+    """
+
+    if expiration is not None:
+        metrics_query += f"AND expiration_date_original = '{expiration}'"
+
+
+    metrics = db.execute_query(metrics_query)
+
+    return metrics
 @task
 def process_data(metric: pd.DataFrame,candlesticks: pd.DataFrame, session_date: str, participant: str,
                  strike_range: List[int], expiration: str, position_types: List[str]) -> List[str]:
@@ -424,13 +443,15 @@ def plot_depthview(
     metric_type = "GEX"
     position_types = "all"
 
-    metrics, candlesticks, last_price = fetch_data(session_date, strike_range, None, start_time)
+    _, candlesticks, last_price = fetch_data(session_date, strike_range, None, start_time)
+    metrics = fetch_data_depthview(session_date, strike_range, None,)
 
     # Title formatting
     if metric_type == "GEX":
         dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Market Makers' GEX</span>"
         colorscale = "RdBu"
         title_colorbar = f"{metric_type}<br>(M$/point)"
+
 
     elif metric_type == "DEX":
         dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer DEX</span>"
@@ -475,7 +496,8 @@ def plot_depthview(
     zmax = metrics["metric"].max()
     val_range = max(abs(zmin), abs(zmax))
 
-
+    y_min = math.floor(metrics['strike_price'].min() / 10) * 10
+    y_max = math.ceil(metrics['strike_price'].max() / 10) * 10
 
     # Apply symmetric log scale transformation
     def symmetric_log_scale(value, log_base=10):
@@ -494,6 +516,9 @@ def plot_depthview(
         x=metrics['expiration_date_original'].unique(),
         y=metrics['strike_price'].unique(),
         text=np.where(np.isnan(rounded_z), '', rounded_z),
+        xgap=1,  # Add small gap between columns
+        ygap=1,  # Add small gap between rows
+        zsmooth='best',  # Smooth the colors
         texttemplate="%{text}",
         colorscale=colorscale,
         zmin=-symmetric_log_scale(val_range),
@@ -543,6 +568,33 @@ def plot_depthview(
 
     )
 
+    # Update layout with rounded y-axis range
+    fig.update_layout(
+        xaxis=dict(
+            showgrid=False,
+            ticks="",
+            showline=False,
+            zeroline=False,
+            constrain="domain",
+        ),
+        yaxis=dict(
+            showgrid=False,
+            ticks="outside",
+            # showline=True,
+            zeroline=False,
+            constrain="domain",
+            #range=[y_min, y_max],  # Set the rounded range
+            dtick=10,  # Set tick interval to 10
+        ),
+        plot_bgcolor='rgba(0,0,0,0)',
+    )
+
+    # Ensure heatmap cells align perfectly with axis ticks
+    fig.update_traces(
+        xaxis='x',
+        yaxis='y'
+    )
+
     fig.add_layout_image(
         dict(
             source=img,
@@ -565,6 +617,9 @@ def plot_depthview(
         font=dict(size=16)  # Increase font size for better readability
 
     )
+
+    fig.show()
+    breakpoint()
 
     title = f"📊 {session_date} Intraday Depthview"
     current_time = datetime.utcnow()
