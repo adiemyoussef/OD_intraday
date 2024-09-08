@@ -312,7 +312,7 @@ def heatmap_generation_flow(
         # Generate and send heatma
 
         gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
-                                 effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5450, y_max=5600)
+                                 effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5350, y_max=5550)
 
         # gamma_chart = plot_gamma_intraday(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
         #                          effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5500, y_max=5730)
@@ -350,4 +350,4 @@ if __name__ == "__main__":
     db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
     db.connect()
     print(f'{db.get_status()}')
-    heatmap_generation_flow(db, effective_date='2024-09-05')
+    heatmap_generation_flow(db, effective_date='2024-09-06')

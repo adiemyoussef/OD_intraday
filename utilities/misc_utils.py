@@ -605,3 +605,18 @@ def et_to_utc(et_time_str):
 
     # Format the UTC time as a string
     return utc_time.strftime('%Y-%m-%d %H:%M:%S')
+
+
+def round_to_nearest_tens(number):
+    """
+    Rounds a number to the nearest lower and upper multiples of 10.
+
+    Args:
+    number (int or float): The number to round.
+
+    Returns:
+    tuple: The nearest lower and upper multiples of 10.
+    """
+    lower = number - (number % 10)  # Find the nearest lower multiple of 10
+    upper = lower + 10  # Find the nearest upper multiple of 10
+    return (lower, upper)

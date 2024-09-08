@@ -34,11 +34,11 @@ from utilities.customized_logger import DailyRotatingFileHandler
 from utilities.logging_config import *
 from charting.intraday_beta_v2 import *
 from heatmaps_simulation.heatmap_task import *
+
 # Setup
 mp.set_start_method("fork", force=True)
 dill.settings['recurse'] = True
 client = RESTClient("sOqWsfC0sRZpjEpi7ppjWsCamGkvjpHw")
-
 
 DEBUG_MODE = False
 LOG_LEVEL = logging.DEBUG

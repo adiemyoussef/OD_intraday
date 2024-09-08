@@ -63,8 +63,11 @@ def fetch_data(session_date: str, strike_range: List[int], expiration: str, star
     SELECT * FROM intraday.intraday_books
     WHERE effective_date = '{session_date}'
     AND effective_datetime >= '{start_of_video}'
-    AND strike_price BETWEEN {strike_range[0]} AND {strike_range[1]}
+    
     """
+
+    if strike_range is not None:
+        metrics_query += f"AND strike_price BETWEEN {strike_range[0]} AND {strike_range[1]}"
 
     if expiration is not None:
         metrics_query += f"AND expiration_date_original = '{expiration}'"
