@@ -63,14 +63,13 @@ def fetch_data(session_date: str, strike_range: List[int], expiration: str, star
     SELECT * FROM intraday.intraday_books
     WHERE effective_date = '{session_date}'
     AND effective_datetime >= '{start_of_video}'
-    
     """
 
     if strike_range is not None:
-        metrics_query += f"AND strike_price BETWEEN {strike_range[0]} AND {strike_range[1]}"
+        metrics_query += f" AND strike_price BETWEEN {strike_range[0]} AND {strike_range[1]}"
 
     if expiration is not None:
-        metrics_query += f"AND expiration_date_original = '{expiration}'"
+        metrics_query += f" AND expiration_date_original = '{expiration}'"
 
     candlesticks_query = f"""
     SELECT * FROM optionsdepth_stage.charts_candlestick
@@ -684,8 +683,8 @@ def generate_heatmap_gif(
 
 
 if __name__ == "__main__":
-    #zero_dte_flow()
+    zero_dte_flow()
     #one_dte_flow()
     #GEX_flow()
-    plot_depthview(webhook_url=WebhookUrl.DEFAULT)
+    #plot_depthview(webhook_url=WebhookUrl.DEFAULT)
     #generate_heatmap_gif()
