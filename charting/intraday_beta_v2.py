@@ -310,7 +310,7 @@ def one_dte_flow(
     elif 'All' in position_types:
         position_types = ['C', 'P', 'Net']
 
-    expiration = '2024-09-09'
+    # expiration = '2024-09-09'
 
     current_time = datetime.now().time()
 
