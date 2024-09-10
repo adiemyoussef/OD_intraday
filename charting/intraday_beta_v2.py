@@ -243,7 +243,7 @@ def zero_dte_flow(
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5350, 5700]
+        strike_range = [5335, 5605]
     if expiration is None:
         expiration = session_date
     if position_types is None:
@@ -299,7 +299,7 @@ def one_dte_flow(
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5300, 5700]
+        strike_range = [5335, 5605]
 
     if position_types is None:
         position_types = ['Net','C','P']
@@ -371,7 +371,7 @@ def GEX_flow(
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5350, 5700]
+        strike_range = [5335, 5605]
     if position_types is None:
         position_types = ['Net','C','P']
         #position_types = ['Net']
@@ -441,7 +441,7 @@ def plot_depthview(
         start_time = '07:00:00'  # You might want to adjust this for the after 7:00 PM case
 
     print(f"Start time set to: {start_time}")
-    strike_range = [5400,5650]
+    strike_range = [5335, 5605]
     metric_type = "GEX"
     position_types = "all"
 
