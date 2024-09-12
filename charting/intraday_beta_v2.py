@@ -55,15 +55,20 @@ def parse_strike_range(strike_range: str) -> List[int]:
     return [min(values), max(values)]
 
 @task(cache_key_fn=None, cache_expiration=timedelta(hours=0, minutes=1))
-def fetch_data(session_date: str, strike_range: List[int], expiration: str, start_video:str) -> [pd.DataFrame]:
+def fetch_data(session_date: str,effective_datetime:str, strike_range: List[int], expiration: str, start_time:str) -> [pd.DataFrame]:
 
-    start_of_video = f'{session_date} {start_video}'
+    start_of_video = f'{session_date} {start_time}'
 
     metrics_query = f"""
     SELECT * FROM intraday.intraday_books
     WHERE effective_date = '{session_date}'
-    AND effective_datetime >= '{start_of_video}'
     """
+
+    if effective_datetime is not None:
+        metrics_query += f" AND effective_datetime = '{effective_datetime}'"
+
+    if start_time is not None:
+        metrics_query += f" AND effective_datetime >= '{start_of_video}'"
 
     if strike_range is not None:
         metrics_query += f" AND strike_price BETWEEN {strike_range[0]} AND {strike_range[1]}"
@@ -243,7 +248,7 @@ def zero_dte_flow(
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5335, 5605]
+        strike_range = [5420, 5700]
     if expiration is None:
         expiration = session_date
     if position_types is None:
@@ -299,7 +304,7 @@ def one_dte_flow(
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5335, 5605]
+        strike_range = [5420, 5700]
 
     if position_types is None:
         position_types = ['Net','C','P']
@@ -371,7 +376,7 @@ def GEX_flow(
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5335, 5605]
+        strike_range = [5420, 5700]
     if position_types is None:
         position_types = ['Net','C','P']
         #position_types = ['Net']
@@ -441,12 +446,11 @@ def plot_depthview(
         start_time = '07:00:00'  # You might want to adjust this for the after 7:00 PM case
 
     print(f"Start time set to: {start_time}")
-    strike_range = [5335, 5605]
+    strike_range = [5420, 5700]
     metric_type = "GEX"
     position_types = "all"
 
-    _, candlesticks, last_price = fetch_data(session_date, strike_range, None, start_time)
-    metrics = fetch_data_depthview(session_date, strike_range, None,)
+    metrics,candlesticks, last_price = fetch_data(session_date, "2024-09-09 14:00:00" ,strike_range, None,None)
 
     # Title formatting
     if metric_type == "GEX":
@@ -683,8 +687,8 @@ def generate_heatmap_gif(
 
 
 if __name__ == "__main__":
-    zero_dte_flow()
+    #zero_dte_flow()
     #one_dte_flow()
     #GEX_flow()
-    #plot_depthview(webhook_url=WebhookUrl.DEFAULT)
+    plot_depthview(webhook_url=WebhookUrl.DEFAULT)
     #generate_heatmap_gif()
