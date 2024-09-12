@@ -55,7 +55,7 @@ def parse_strike_range(strike_range: str) -> List[int]:
     return [min(values), max(values)]
 
 @task(cache_key_fn=None, cache_expiration=timedelta(hours=0, minutes=1))
-def fetch_data(session_date: str,effective_datetime:str, strike_range: List[int], expiration: str, start_time:str) -> [pd.DataFrame]:
+def fetch_data(session_date: str,effective_datetime:str, strike_range: List[int], expiration: str, start_time:str = '07:00:00') -> [pd.DataFrame]:
 
     start_of_video = f'{session_date} {start_time}'
 
