@@ -270,7 +270,7 @@ def zero_dte_flow(
     print(f"Start time set to: {start_time}")
 
     # Fetch data
-    metrics, candlesticks, last_price = fetch_data(session_date, strike_range, expiration, start_time)
+    metrics, candlesticks, last_price = fetch_data(session_date, None,strike_range, expiration, start_time)
     as_of_time_stamp = str(metrics["effective_datetime"].max())
     last_price = last_price.values[0][0]
     # Process data and generate GIFs
@@ -328,7 +328,7 @@ def one_dte_flow(
     print(f"Start time set to: {start_time}")
 
     # Fetch data
-    data, candlesticks, last_price = fetch_data(session_date, strike_range, expiration, start_time)
+    data, candlesticks, last_price = fetch_data(session_date, None,strike_range, expiration, start_time)
 
     as_of_time_stamp = str(data["effective_datetime"].max())
     last_price = last_price.values[0][0]
@@ -395,7 +395,7 @@ def GEX_flow(
 
     print(f"Start time set to: {start_time}")
     # Fetch data
-    metrics, candlesticks,last_price = fetch_data(session_date, strike_range, expiration, start_time)
+    metrics, candlesticks,last_price = fetch_data(session_date,None, strike_range, expiration, start_time)
     as_of_time_stamp = str(metrics["effective_datetime"].max())
 
     last_price = last_price.values[0][0]
