@@ -437,7 +437,7 @@ def all_GEX_flow(
         #position_types = ['Net']
 
     if expiration is None:
-        expiration = session_date
+        expiration = None
 
     current_time = datetime.now().time()
 
