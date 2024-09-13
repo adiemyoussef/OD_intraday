@@ -25,7 +25,7 @@ DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1
 
 default_date = date.today() - timedelta(days=0)
 LIST_PART = ['total_customers', 'broker', 'firm', 'retail', 'institution']
-
+STRIKE_RANGE = [5440, 5735]
 
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()
@@ -248,7 +248,7 @@ def zero_dte_flow(
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5420, 5700]
+        strike_range = STRIKE_RANGE
     if expiration is None:
         expiration = session_date
     if position_types is None:
@@ -298,13 +298,14 @@ def one_dte_flow(
     webhook_url: str = 'https://discord.com/api/webhooks/1275269470151245938/qNZXtA_ySwcJJJf6bS_myYqU-uDd71zHV--XJBR7xb6uVhs7ccjKE59_c8y9AMZ86OC_'
                        #DEV_CHANNEL
 ):
+    expiration = '2024-09-16'
 
     # Set default values if not provided
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5420, 5700]
+        strike_range = STRIKE_RANGE
 
     if position_types is None:
         position_types = ['Net','C','P']
@@ -376,7 +377,7 @@ def GEX_flow(
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = [5420, 5700]
+        strike_range = STRIKE_RANGE
     if position_types is None:
         position_types = ['Net','C','P']
         #position_types = ['Net']
@@ -413,6 +414,59 @@ def GEX_flow(
         print(f"Failed to process or send intraday data for {session_date}")
     pass
 
+@flow(name="All expirations GEX gifs")
+def all_GEX_flow(
+        session_date: Optional[date] = None,
+        strike_range: Optional[List[int]] = None,
+        expiration: Optional[str] = None,
+        participant: str = 'mm',
+        position_types: Optional[List[str]] = None,
+        webhook_url: str = 'https://discord.com/api/webhooks/1281238194699898900/NKdEGh7PHeucQd7xItqxHWGgg9HwHHe8IQ0VRK5qAtPkc9fTrsPz0p_VVZcneZEl6wmH'
+        #DEV_CHANNEL
+):
+
+
+    if session_date is None:
+        #TODO: the latest effective_date of the book
+        session_date = datetime.now().strftime('%Y-%m-%d')
+    if strike_range is None:
+        #TODO: +/- 200 pts from SPOT Open
+        strike_range = STRIKE_RANGE
+    if position_types is None:
+        position_types = ['Net','C','P']
+        #position_types = ['Net']
+
+    if expiration is None:
+        expiration = session_date
+
+    current_time = datetime.now().time()
+
+    if current_time < time(12, 0):  # Before 12:00 PM
+        start_time = '07:00:00'
+    elif time(12, 0) <= current_time < time(23, 0):  # Between 12:00 PM and 7:00 PM
+        start_time = '09:00:00'
+    else:  # 7:00 PM or later
+        start_time = '07:00:00'  # You might want to adjust this for the after 7:00 PM case
+
+    print(f"Start time set to: {start_time}")
+    # Fetch data
+    metrics, candlesticks,last_price = fetch_data(session_date,None, strike_range, None, start_time)
+    as_of_time_stamp = str(metrics["effective_datetime"].max())
+
+    last_price = last_price.values[0][0]
+
+    videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+                                       position_types, last_price,"GEX")
+    print(f"Video generated at: {videos_paths}")
+
+    # Send Discord message with Videos
+    video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types,'GEX', webhook_url)
+
+    if video_success:
+        print(f"Successfully processed and sent intraday data (GIF and video) for {session_date}")
+    else:
+        print(f"Failed to process or send intraday data for {session_date}")
+    pass
 #------------------ DEPTHVIEW ------------------#
 class WebhookUrl(Enum):
     DEFAULT = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
@@ -446,7 +500,7 @@ def plot_depthview(
         start_time = '07:00:00'  # You might want to adjust this for the after 7:00 PM case
 
     print(f"Start time set to: {start_time}")
-    strike_range = [5420, 5700]
+    strike_range = STRIKE_RANGE
     metric_type = "GEX"
     position_types = "all"
 
