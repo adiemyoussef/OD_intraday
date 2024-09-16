@@ -145,20 +145,25 @@ def process_data(metric: pd.DataFrame,candlesticks: pd.DataFrame, session_date: 
 
 @task
 def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
-                        strike_range: List[int], expiration: str, position_type: list, last_price:float, metric:str = 'positioning') -> str:
+                        strike_range: List[int], expiration: str, position_type: list, last_price:float, metric:str = 'positioning'):
 
     videos_paths =[]
-
+    last_frame_paths = []
+    paths = []
     for pos_type in position_type:
 
-        video_path = generate_video(
+        video_path, last_frame_path = generate_video(
             data, candlesticks, session_date, participant, pos_type,
             strike_range, expiration, metric, last_price,
             output_video=f'{pos_type}_{expiration}_animated_chart.mp4'
         )
         videos_paths.append(video_path)
+        last_frame_paths.append(last_frame_path)
 
-    return videos_paths
+    # Combined paths with last_frame_paths first, followed by videos_paths
+    paths = last_frame_paths + videos_paths
+
+    return paths
 
 @task
 def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_date: str, participant: str,
@@ -240,7 +245,7 @@ def zero_dte_flow(
         strike_range = parse_strike_range(strike_range)
 
 
-    position_types = ['Net','C','P']
+    position_types = ['Net', 'C','P']
     expiration = str(session_date)
 
 
@@ -275,12 +280,12 @@ def zero_dte_flow(
     as_of_time_stamp = str(metrics["effective_datetime"].max())
     last_price = last_price.values[0][0]
     # Process data and generate GIFs
-    videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+    paths_to_send = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
                                        position_types, last_price ,'positioning')
-    print(f"Video generated at: {videos_paths}")
+    print(f"Video and frames generated at: {paths_to_send}")
 
     # Send Discord message with Videos
-    video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types,'positioning', webhook_url)
+    video_success = send_discord_message(paths_to_send, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types,'positioning', webhook_url)
 
     if video_success:
         print(f"Successfully processed and sent intraday data (GIF and video) for {session_date}")
@@ -1308,13 +1313,13 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
 
 
 if __name__ == "__main__":
-    #zero_dte_flow()
+    zero_dte_flow()
     #one_dte_flow()
     #GEX_flow()
     #plot_depthview(webhook_url=WebhookUrl.DEFAULT)
     #generate_heatmap_gif()
     #all_GEX_flow()
-    i=0
-    while i < 20:
-        i+=1
-        generate_and_send_options_charts()
+    # i=0
+    # while i < 20:
+    #     i+=1
+    #     generate_and_send_options_charts()

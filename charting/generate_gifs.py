@@ -21,7 +21,14 @@ from datetime import datetime
 import cv2
 import imageio_ffmpeg
 import ffmpeg
-
+import cv2
+import numpy as np
+from PIL import Image
+import os
+import uuid
+from pathlib import Path
+import imageio
+import numpy as np
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -275,6 +282,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
             update_period = ['current', 'start_of_day', 'prior_update']
             symbols = ['line-ns', 'circle', 'x-thin']
 
+
             for position, symbol in zip(update_period, symbols):
                 def safe_extract(x, key):
                     if isinstance(x, dict) and key in x:
@@ -340,7 +348,6 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
                             color='black',
                             line=dict(width=2, color='black'),  # Add a border to make it more visible
                         ),
-                        #marker=dict(symbol=symbol, size=8, color=colors[pos_type]['positive']),
                         legendgroup=pos_type,
                         hovertemplate=f"<b>{position.capitalize().replace('_', ' ')}</b><br>" +
                                       "Strike: %{y}<br>" +
@@ -522,29 +529,30 @@ def generate_gif(data,candlesticks, session_date, participant_input, position_ty
         fig.write_image(frame_path)
         frames.append(imageio.imread(frame_path))
 
+    last_frame_path = os.path.join(temp_dir, f'last_frame_{position_type_input}_{timestamps[-1]}.png')
+    fig.write_image(last_frame_path)
+
     # Add the last frame one more time to pause at the end
     frames.append(imageio.imread(frame_path))
 
     # Create the GIF
     imageio.mimsave(output_gif, frames, fps=1.5)
 
+    # # Clean up temporary files
+    # for file in os.listdir(temp_dir):
+    #     os.remove(os.path.join(temp_dir, file))
+    # os.rmdir(temp_dir)
+    #
+    # print(f"Animation saved as {output_gif}")
+    # return output_gif
     # Clean up temporary files
     for file in os.listdir(temp_dir):
-        os.remove(os.path.join(temp_dir, file))
-    os.rmdir(temp_dir)
+        if file != 'last_frame.png':
+            os.remove(os.path.join(temp_dir, file))
 
     print(f"Animation saved as {output_gif}")
-    return output_gif
-
-import cv2
-import numpy as np
-from PIL import Image
-
-import os
-import uuid
-from pathlib import Path
-import imageio
-import numpy as np
+    print(f"Last frame saved as {last_frame_path}")
+    return output_gif, last_frame_path
 
 def generate_discord_compatible_video(input_video_path, output_video_path):
     """
@@ -606,7 +614,8 @@ def generate_video(data, candlesticks, session_date, participant_input, position
 
         # Save the frame as an image
         frame_path = os.path.join(temp_dir, f'frame_{i:03d}.png')
-        fig.write_image(frame_path)
+
+        fig.write_image(frame_path,scale= 3)
         frame_paths.append(frame_path)
 
     # Use the frame_paths directly, no need for additional processing
@@ -627,15 +636,22 @@ def generate_video(data, candlesticks, session_date, participant_input, position
     # Convert to Discord-compatible format
     final_output = generate_discord_compatible_video(temp_output, output_video)
 
-    # Clean up temporary files
-    for file in frame_paths:
-        os.remove(file)
-    os.rmdir(temp_dir)
-    os.remove(temp_output)
+    # # Clean up temporary files
+    # for file in frame_paths:
+    #     os.remove(file)
+    # os.rmdir(temp_dir)
+    # os.remove(temp_output)
+
+    # Save the last frame separately
+    last_frame_path = os.path.join(temp_dir, f'last_frame_{position_type_input}_{timestamps[-1]}.png')
+    fig.write_image(last_frame_path)
+
+
+
 
     if final_output:
         print(f"Video saved as {final_output}")
-        return final_output
+        return final_output, last_frame_path
     else:
         print("Failed to generate Discord-compatible video")
         return None
