@@ -311,21 +311,22 @@ def heatmap_generation_flow(
 
         # Generate and send heatma
 
-        gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
-                                 effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5350, y_max=5650)
+        # gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
+        #                          effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5350, y_max=5650)
 
-        # gamma_chart = plot_gamma_intraday(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
-        #                          effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5500, y_max=5730)
+        fig = plot_gamma_test(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks, y_min=5350, y_max=5650, save_fig=False, fig_show=True,
+                         fig_path=None, show_projection_line=True)
 
+        #breakpoint()
         # Save the figure as an image
         frame_path = os.path.join(temp_dir, f'frame_{len(frame_paths):03d}.png')
 
-        gamma_chart.update_layout(
-            width=1920,  # Full HD width
-            height=1080,  # Full HD height
-            font=dict(size=16)  # Increase font size for better readability
-        )
-        gamma_chart.write_image(frame_path, scale=3)
+        # gamma_chart.update_layout(
+        #     width=1920,  # Full HD width
+        #     height=1080,  # Full HD height
+        #     font=dict(size=16)  # Increase font size for better readability
+        # )
+        # gamma_chart.write_image(frame_path, scale=3)
 
         frame_paths.append(frame_path)
 
@@ -350,4 +351,4 @@ if __name__ == "__main__":
     db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
     db.connect()
     print(f'{db.get_status()}')
-    heatmap_generation_flow(db, effective_date='2024-09-12')
+    heatmap_generation_flow(db, effective_date='2024-09-13')
