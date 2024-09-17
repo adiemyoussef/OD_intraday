@@ -67,6 +67,10 @@ def process_single_strike_original(group, participant):
     date = group['effective_date'].iloc[0]
     strike = group['strike_price'].iloc[0]
 
+    if strike == 5575:
+        print(f"Processing strike 5575")
+        print(f"Group data: {group}")
+
     results = {}
     for flag in ['C', 'P']:
         flag_group = group[group['call_put_flag'] == flag].sort_values('effective_datetime')
@@ -94,6 +98,9 @@ def process_single_strike_original(group, participant):
             for key in results['C']
         }
 
+    if strike == 5575:
+        print(f"Final results for strike 5575: {results}")
+
     return {'date': date, 'strike_price': strike, **results}
 
 def process_single_strike(group, participant, metric, last_price=1):
@@ -101,6 +108,10 @@ def process_single_strike(group, participant, metric, last_price=1):
     date = group['effective_date'].iloc[0]
     strike = group['strike_price'].iloc[0]
     results = {}
+
+    # if strike == 5575:
+    #     print(f"Processing strike 5575")
+    #     print(f"Group data: {group}")
 
     for flag in ['C', 'P']:
         flag_group = group[group['call_put_flag'] == flag].sort_values('effective_datetime')
@@ -128,14 +139,45 @@ def process_single_strike(group, participant, metric, last_price=1):
                 }
             }
 
+    # if strike == 5575:
+    #     print("CouCouuuuuu")
+    #     print("jarrete")
+
     # Calculate net metric
-    if 'C' in results and 'P' in results:
-        results['Net'] = {
-            key: {
-                'value': results['C'][key]['value'] + results['P'][key]['value'],
-                'time': max(results['C'][key]['time'], results['P'][key]['time'])
-            } for key in results['C']
+    # if 'C' in results and 'P' in results:
+    #     results['Net'] = {
+    #         key: {
+    #             'value': results['C'][key]['value'] + results['P'][key]['value'],
+    #             'time': max(results['C'][key]['time'], results['P'][key]['time'])
+    #         } for key in results['C']
+    #     }
+
+    import math
+
+    # Calculate net metric
+    results['Net'] = {}
+    for key in set(results.get('C', {}).keys()) | set(results.get('P', {}).keys()):
+        c_value = results.get('C', {}).get(key, {}).get('value', 0)
+        p_value = results.get('P', {}).get(key, {}).get('value', 0)
+
+        # Handle NaN values
+        c_value = 0 if math.isnan(c_value) else c_value
+        p_value = 0 if math.isnan(p_value) else p_value
+
+        net_value = c_value + p_value
+
+        c_time = results.get('C', {}).get(key, {}).get('time')
+        p_time = results.get('P', {}).get(key, {}).get('time')
+
+        # Use the available time, or None if both are missing
+        net_time = max(filter(None, [c_time, p_time])) if c_time or p_time else None
+
+        results['Net'][key] = {
+            'value': net_value,
+            'time': net_time
         }
+    # if strike == 5575:
+    #     print(f"Final results for strike 5575: {results['Net']}")
 
     return {'date': date, 'strike_price': strike, **results}
 
@@ -250,6 +292,10 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
     # Convert results to DataFrame and sort by strike price
     results_df = pd.DataFrame(results).sort_values('strike_price', ascending=True)
 
+
+    print(results_df[results_df['strike_price']==5575]['Net'].values[0]['current'])
+    # print(f"Final results for strike 5575: {results['Net']}")
+
     # Create figure
     fig = make_subplots(rows=1, cols=1)
 
@@ -303,7 +349,6 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
                         name=f'{pos_type} {position.capitalize().replace("_", " ")} (Positive)',
                         orientation='h',
                         marker_color=colors[pos_type]['positive'],
-
                         opacity=1,
                         legendgroup=pos_type,
                         legendgrouptitle_text=pos_type,
@@ -493,7 +538,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
         xanchor="right"
     )
 
-
+    # fig.show()
     return fig
 
 
@@ -803,7 +848,7 @@ def generate_and_send_gif(data, session_date, participant, position_type , strik
         'mm': 'Market Makers',
         'broker': 'Brokers and Dealers',
         'firm': 'Firms',
-        'nonprocus': 'Non-Professional Customers',
+        'nonprocust': 'Non-Professional Customers',
         'procust': 'Professional Customers',
         'total_customers': 'Total Customers'
     }

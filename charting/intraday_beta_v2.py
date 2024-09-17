@@ -236,16 +236,16 @@ def zero_dte_flow(
     session_date: Optional[date] = default_date,
     strike_range: Optional[List[int]] = None,
     expiration: Optional[str] = None,
-    participant: str = 'total_customers',
+    participant: str = 'firm', #'total_customers',
     position_types: Optional[List[str]] = None,
     webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
-                        #DEV_CHANNEL
+                       # DEV_CHANNEL
     ):
     if strike_range:
         strike_range = parse_strike_range(strike_range)
 
 
-    position_types = ['Net', 'C','P']
+    position_types = ['Net','C','P']
     expiration = str(session_date)
 
 
@@ -318,7 +318,6 @@ def one_dte_flow(
     elif 'All' in position_types:
         position_types = ['C', 'P', 'Net']
 
-    # expiration = '2024-09-09'
 
     current_time = datetime.now().time()
 
@@ -1314,7 +1313,7 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
 
 if __name__ == "__main__":
     zero_dte_flow()
-    #one_dte_flow()
+    one_dte_flow()
     #GEX_flow()
     #plot_depthview(webhook_url=WebhookUrl.DEFAULT)
     #generate_heatmap_gif()
