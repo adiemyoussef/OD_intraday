@@ -129,14 +129,37 @@ def process_single_strike(group, participant, metric, last_price=1):
             }
 
     # Calculate net metric
-    if 'C' in results and 'P' in results:
-        results['Net'] = {
-            key: {
-                'value': results['C'][key]['value'] + results['P'][key]['value'],
-                'time': max(results['C'][key]['time'], results['P'][key]['time'])
-            } for key in results['C']
-        }
+    # if 'C' in results and 'P' in results:
+    #     results['Net'] = {
+    #         key: {
+    #             'value': results['C'][key]['value'] + results['P'][key]['value'],
+    #             'time': max(results['C'][key]['time'], results['P'][key]['time'])
+    #         } for key in results['C']
+    #     }
+    import math
 
+    # Calculate net metric
+    results['Net'] = {}
+    for key in set(results.get('C', {}).keys()) | set(results.get('P', {}).keys()):
+        c_value = results.get('C', {}).get(key, {}).get('value', 0)
+        p_value = results.get('P', {}).get(key, {}).get('value', 0)
+
+        # Handle NaN values
+        c_value = 0 if math.isnan(c_value) else c_value
+        p_value = 0 if math.isnan(p_value) else p_value
+
+        net_value = c_value + p_value
+
+        c_time = results.get('C', {}).get(key, {}).get('time')
+        p_time = results.get('P', {}).get(key, {}).get('time')
+
+        # Use the available time, or None if both are missing
+        net_time = max(filter(None, [c_time, p_time])) if c_time or p_time else None
+
+        results['Net'][key] = {
+            'value': net_value,
+            'time': net_time
+        }
     return {'date': date, 'strike_price': strike, **results}
 
 def generate_color_shades(base_color, num_shades=5):
