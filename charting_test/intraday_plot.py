@@ -928,6 +928,7 @@ def plot_heatmap(df_heatmap: pd.DataFrame,effective_datetime, spx:pd.DataFrame=N
 def plot_gamma_test(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df: pd.DataFrame, effective_datetime,
                     spx: pd.DataFrame = None, y_min=None, y_max=None, save_fig=False, fig_show=False, fig_path=None,
                     show_projection_line=False):
+
     if not isinstance(effective_datetime, pd.Timestamp):
         effective_datetime = pd.to_datetime(effective_datetime)
 
@@ -954,19 +955,37 @@ def plot_gamma_test(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df
 
     # Past data
     if not df_past.empty:
-        heatmap_past = go.Contour(
-            name="Past Gamma",
-            z=df_past.values.T,
-            x=df_past.index,
-            y=df_past.columns,
-            contours_coloring='heatmap',
-            colorscale="RdBu",
-            zmin=-1600,
-            zmax=1600,
-            showscale=False,
-            line_width=0,
-            showlegend=True
-        )
+        if len(df_past) > 1:
+            heatmap_past = go.Contour(
+                name="Past Gamma",
+                z=df_past.values.T,
+                x=df_past.index,
+                y=df_past.columns,
+                contours_coloring='heatmap',
+                colorscale="RdBu",
+                zmin=-1600,
+                zmax=1600,
+                showscale=False,
+                line_width=0,
+                showlegend=True
+            )
+        else:
+            # If there's only one value, use a scatter plot instead
+            heatmap_past = go.Scatter(
+                name="Past Gamma",
+                x=df_past.index,
+                y=df_past.columns,
+                mode='markers',
+                marker=dict(
+                    size=10,
+                    color=df_past.values.flatten(),
+                    colorscale="RdBu",
+                    cmin=-1600,
+                    cmax=1600,
+                    showscale=False
+                ),
+                showlegend=True
+            )
         fig.add_trace(heatmap_past)
 
     # Future data
