@@ -23,7 +23,9 @@ from typing import List
 from datetime import datetime
 import plotly.graph_objects as go
 import json
-
+import boto3
+from botocore.client import Config
+from io import BytesIO
 
 # Import your utility classes
 from utilities.sftp_utils import *
@@ -47,13 +49,7 @@ LOG_LEVEL = logging.DEBUG
 logger = get_logger(debug_mode=False)
 
 #-------- Initializing the Classes -------#
-polygon_client = RESTClient("sOqWsfC0sRZpjEpi7ppjWsCamGkvjpHw")
-DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
-HEATMAP_CHANNEL = 'https://discord.com/api/webhooks/1278125396671332393/Y02pRK5XTUKURHoSF6tIlSDzHBPUzUqDHzA8ybsat4Z-zCN8EeyXmyjir7SwMB_OQm42'
-CHARM_HEATMAP_CHANNEL = 'https://discord.com/api/webhooks/1281065101805359134/pJzUD5GQufw3W9wUa4E9_GbwcZPgAsx61A6JssGiNbebUZ94SyOkWk83FurbEpxvFeb4'
 db_utils = DatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, logger=logger)
-logger.info(f"Initializing db status: {db_utils.get_status()}")
-
 pg_data = PostGreData(
     host=POSGRE_DB_HOST,
     port=POSGRE_DB_PORT,  # Default PostgreSQL port
@@ -61,14 +57,12 @@ pg_data = PostGreData(
     password=POSGRE_DB_PASSWORD,
     database=POSGRE_DB_NAME
 )
-logger.info(f'Postgre Status -- > {pg_data.get_status()}')
-
-
-
 rabbitmq_utils = RabbitMQUtilities(RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS, logger=logger)
-logger.info(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
-
 sftp_utils = SFTPUtility(SFTP_HOST,SFTP_PORT,SFTP_USERNAME,SFTP_PASSWORD, logger = logger)
+
+logger.info(f"Initializing db status: {db_utils.get_status()}")
+logger.info(f'Postgre Status -- > {pg_data.get_status()}')
+logger.info(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
 #-------------------------------------------#
 def process_greek(greek_name, poly_data, book):
     latest_greek = poly_data.sort_values('time_stamp', ascending=False).groupby('contract_id').first().reset_index()
@@ -181,6 +175,50 @@ def ensure_all_connections_are_open():
 
 #------------------ UPDATED HEATMAP ------------------#
 @task
+def save_heatmap_to_storage(heatmap_fig, timestamp):
+    filename = f"heatmap_{timestamp.strftime('%Y%m%d_%H%M%S')}.png"
+
+    # Convert Plotly figure to PNG
+    img_bytes = heatmap_fig.to_image(format="png")
+
+    # Configure the client
+    session = boto3.session.Session()
+    client = session.client('s3',
+                            region_name='nyc3',  # Replace with your region
+                            endpoint_url='https://heatmaps-gifs.nyc3.digitaloceanspaces.com',  # Replace with your endpoint
+                            #TODO
+                            aws_access_key_id='DO00PQZRAYM3PA449PL2',
+                            #TODO
+                            aws_secret_access_key='b3e3lewfKXkAkaE3ewfqgVOxwv83lmqdM98x93IhXok')
+
+    # Upload to DO Spaces
+    client.put_object(Bucket='heatmaps',
+                      Key=filename,
+                      Body=img_bytes,
+                      ACL='private',
+                      ContentType='image/png')
+
+    return filename
+
+
+@task
+def retrieve_heatmap_from_storage(filename):
+    # Configure the client (same as above)
+    session = boto3.session.Session()
+    client = session.client('s3',
+                            region_name='nyc3',
+                            endpoint_url='https://heatmaps-gifs.nyc3.digitaloceanspaces.com',
+                            aws_access_key_id='DO00PQZRAYM3PA449PL2',
+                            aws_secret_access_key='b3e3lewfKXkAkaE3ewfqgVOxwv83lmqdM98x93IhXok')
+
+    # Download from DO Spaces
+    response = client.get_object(Bucket='heatmaps', Key=filename)
+    img_bytes = response['Body'].read()
+
+    return BytesIO(img_bytes)
+
+
+@task
 def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_date: str,
                          y_min: int, y_max: int, webhook_url: str) -> bool:
 
@@ -278,9 +316,13 @@ def intraday_gamma_heatmap(db,effective_datetime:str, effective_date:str):
 
 
     # Generate and send heatmap
-    gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
-                             effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5440, y_max=5735)
+    # gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
+    #                          effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5440, y_max=5735)
 
+    gamma_chart = plot_gamma_test(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks,
+                                  y_min=5550, y_max=5850,
+                                  save_fig=False, fig_show=False,
+                                  fig_path=None, show_projection_line=False)
 
     gamma_chart.update_layout(
         width=1920,  # Full HD width
@@ -295,7 +337,7 @@ def intraday_gamma_heatmap(db,effective_datetime:str, effective_date:str):
         as_of_time_stamp=effective_datetime,
         session_date=effective_date,
         y_min=5550,
-        y_max=5700,
+        y_max=5850,
         webhook_url=HEATMAP_CHANNEL  # Make sure to define this
     )
 

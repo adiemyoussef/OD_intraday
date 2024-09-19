@@ -88,6 +88,10 @@ PROCESS_MESSAGE_QUEUE_RETRY_DELAY = other_config.get('process_message_queue_retr
 
 # Discord Configuration
 WEBHOOK_URL = discord_webhook
+DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
+HEATMAP_CHANNEL = 'https://discord.com/api/webhooks/1278125396671332393/Y02pRK5XTUKURHoSF6tIlSDzHBPUzUqDHzA8ybsat4Z-zCN8EeyXmyjir7SwMB_OQm42'
+CHARM_HEATMAP_CHANNEL = 'https://discord.com/api/webhooks/1281065101805359134/pJzUD5GQufw3W9wUa4E9_GbwcZPgAsx61A6JssGiNbebUZ94SyOkWk83FurbEpxvFeb4'
+
 
 # Data Processing
 OPTION_SYMBOLS_TO_PROCESS = other_config.get('option_symbols_to_process', ['SPX', 'SPXW'])

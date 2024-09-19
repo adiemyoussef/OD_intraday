@@ -65,6 +65,7 @@ def create_video_from_frames(frame_paths, output_path, fps=5):
     :param output_path: Path where the output video will be saved
     :param fps: Frames per second for the output video
     """
+    breakpoint()
     if not frame_paths:
         print("No frames to create video.")
         return
@@ -309,24 +310,34 @@ def heatmap_generation_flow(
         minima_df = minima_df.reindex_like(df_gamma).fillna(np.nan)
         maxima_df = maxima_df.reindex_like(df_gamma).fillna(np.nan)
 
-        # Generate and send heatma
+        # Generate and send heatmap
 
         # gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
         #                          effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5350, y_max=5650)
 
-        fig = plot_gamma_test(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks, y_min=5350, y_max=5650, save_fig=False, fig_show=True,
-                         fig_path=None, show_projection_line=True)
+        gamma_chart = plot_gamma_test(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks,
+                                      y_min=5450, y_max=5730,
+                                      save_fig=False, fig_show=False,
+                                      fig_path=None, show_projection_line=False)
 
-        #breakpoint()
         # Save the figure as an image
         frame_path = os.path.join(temp_dir, f'frame_{len(frame_paths):03d}.png')
 
-        # gamma_chart.update_layout(
-        #     width=1920,  # Full HD width
-        #     height=1080,  # Full HD height
-        #     font=dict(size=16)  # Increase font size for better readability
-        # )
-        # gamma_chart.write_image(frame_path, scale=3)
+        gamma_chart.update_layout(
+            width=1920,  # Full HD width
+            height=1080,  # Full HD height
+            font=dict(size=16)  # Increase font size for better readability
+        )
+
+        try:
+            gamma_chart.write_image(frame_path, scale=3)
+        except Exception as e:
+            print(f"Error occurred: {str(e)}")
+            print("Traceback:")
+            import traceback
+            traceback.print_exc()
+            #breakpoint()
+            pass
 
         frame_paths.append(frame_path)
 
@@ -334,7 +345,8 @@ def heatmap_generation_flow(
 
 
     # Generate video from saved frames
-    output_video = f'heatmap_video_{effective_date}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.mp4'
+    output_video = f'TEST_heatmap_video_{effective_date}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.mp4'
+    breakpoint()
     create_video_from_frames(frame_paths, output_video, fps=3)
 
     #send to discord both the video and the last frame
@@ -351,4 +363,4 @@ if __name__ == "__main__":
     db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
     db.connect()
     print(f'{db.get_status()}')
-    heatmap_generation_flow(db, effective_date='2024-09-13')
+    heatmap_generation_flow(db, effective_date='2024-09-18')
