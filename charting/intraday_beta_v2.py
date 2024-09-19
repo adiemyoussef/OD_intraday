@@ -26,7 +26,7 @@ DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1
 
 default_date = date.today() - timedelta(days=0)
 LIST_PART = ['total_customers', 'broker', 'firm', 'retail', 'institution']
-STRIKE_RANGE = [5485, 5800]
+STRIKE_RANGE = [5485, 5900]
 
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()

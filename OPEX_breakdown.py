@@ -2,7 +2,6 @@ import sys
 import warnings
 import logging
 import pandas as pd
-from OptionsDepth import Options_data
 import plotly.io as pio
 import plotly.graph_objects as go
 from datetime import datetime, timedelta, time
@@ -10,8 +9,12 @@ import pandas_market_calendars as mcal
 import numpy as np
 from PIL import Image
 import yfinance as yf
-
-od = Options_data()
+from utilities.db_utils import *
+from config.config import *
+from config.mysql_queries import *
+db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
+db.connect()
+print(f'{db.get_status()}')
 
 # TODO: relative paths - MAC & Windows
 img = Image.open(r"/Users/youssefadiem/PycharmProjects/OptionsDepth/config/images/logo_light.png")
