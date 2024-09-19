@@ -1148,10 +1148,6 @@ def Intraday_Flow():
 
     db_utils.connect()
 
-    intraday_gamma_heatmap(db, "2024-09-19 06:50:00", "2024-09-19")
-
-    breakpoint()
-
     try:
 
         #TODO: initial_price, last_price = get_prices()
