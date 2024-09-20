@@ -26,7 +26,7 @@ DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1
 
 default_date = date.today() - timedelta(days=0)
 LIST_PART = ['total_customers', 'broker', 'firm', 'retail', 'institution']
-STRIKE_RANGE = [5485, 5900]
+STRIKE_RANGE = [5500, 5900]
 
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()
@@ -63,6 +63,7 @@ def fetch_data(session_date: str,effective_datetime:str, strike_range: List[int]
     metrics_query = f"""
     SELECT * FROM intraday.intraday_books
     WHERE effective_date = '{session_date}'
+    -- and expiration_date != '2024-09-20 09:15:00'
     """
 
     if effective_datetime is not None:
@@ -318,7 +319,7 @@ def one_dte_flow(
     elif 'All' in position_types:
         position_types = ['C', 'P', 'Net']
 
-    # expiration = '2024-09-09'
+    expiration = '2024-09-23'
 
     current_time = datetime.now().time()
 
@@ -1314,7 +1315,7 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
 
 if __name__ == "__main__":
     zero_dte_flow()
-    #one_dte_flow()
+    one_dte_flow()
     #GEX_flow()
     #plot_depthview(webhook_url=WebhookUrl.DEFAULT)
     #generate_heatmap_gif()
