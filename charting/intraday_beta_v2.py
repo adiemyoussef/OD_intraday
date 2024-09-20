@@ -145,7 +145,7 @@ def process_data(metric: pd.DataFrame,candlesticks: pd.DataFrame, session_date: 
     return gif_paths
 
 @task
-def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
+def generate_video_task_(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
                         strike_range: List[int], expiration: str, position_type: list, last_price:float, metric:str = 'positioning'):
 
     videos_paths =[]
