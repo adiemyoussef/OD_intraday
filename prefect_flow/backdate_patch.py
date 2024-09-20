@@ -1208,7 +1208,9 @@ def Intraday_Flow():
 
     try:
 
-        for expected_file_override in overrides:
+        for override in overrides:
+            expected_file_override = '/subscriptions/order_000059435/item_000068201/'+f'{override}'
+            print(f'{expected_file_override}')
             #TODO: initial_price, last_price = get_prices()
 
             initial_book = get_initial_book(get_unrevised_book)
@@ -1499,13 +1501,13 @@ def Intraday_Flow():
 
                     else:
                         logger.warning(f"DataFrame is empty or None for file: {file_info['file_name']}")
-                        rabbitmq_utils.safe_nack(message_frame.delivery_tag, requeue=True)
+                        # rabbitmq_utils.safe_nack(message_frame.delivery_tag, requeue=True)
                 else:
                     logger.warning("File info is None")
-                    rabbitmq_utils.safe_nack(message_frame.delivery_tag, requeue=True)
+                    # rabbitmq_utils.safe_nack(message_frame.delivery_tag, requeue=True)
             except Exception as e:
                 logger.error(f"Error processing message: {e}")
-                rabbitmq_utils.safe_nack(message_frame.delivery_tag, requeue=True)
+                # rabbitmq_utils.safe_nack(message_frame.delivery_tag, requeue=True)
 
     except Exception as e:
         logger.error(f"Error in process_intraday_data flow: {e}")
