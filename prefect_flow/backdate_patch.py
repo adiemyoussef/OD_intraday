@@ -495,7 +495,8 @@ def fetch_historical_poly_data(previous_date, current_date, previous_datetime, c
     FROM landing.poly_options_data
     WHERE
         date_only BETWEEN'{previous_date}' AND '{current_date}'
-        AND time_stamp BETWEEN '{previous_datetime}' AND '{current_datetime}'
+        -- AND time_stamp BETWEEN '{previous_datetime}' AND '{current_datetime}'
+        AND time_stamp BETWEEN '{previous_datetime}' AND '2024-09-19 15:00:00'
     """
 
     poly_data  = db_utils.execute_query(query)
@@ -1196,7 +1197,7 @@ def Intraday_Flow():
     flow_start_time = time_module.time()
     current_time = datetime.now(ZoneInfo("America/New_York")).time()
 
-    overrides = ['Cboe_OpenClose_2024-09-19_15_10_1.csv.zip', 'Cboe_OpenClose_2024-09-19_15_20_1.csv.zip', 'Cboe_OpenClose_2024-09-19_15_30_1.csv.zip', 'Cboe_OpenClose_2024-09-19_15_40_1.csv.zip',
+    overrides = ['Cboe_OpenClose_2024-09-19_15_00_1.csv.zip','Cboe_OpenClose_2024-09-19_15_10_1.csv.zip', 'Cboe_OpenClose_2024-09-19_15_20_1.csv.zip', 'Cboe_OpenClose_2024-09-19_15_30_1.csv.zip', 'Cboe_OpenClose_2024-09-19_15_40_1.csv.zip',
                  'Cboe_OpenClose_2024-09-19_15_50_1.csv.zip']
                  # 'Cboe_OpenClose_2024-09-19_16_00_1.csv.zip', 'Cboe_OpenClose_2024-09-19_16_10_1.csv.zip', 'Cboe_OpenClose_2024-09-19_16_20_1.csv.zip',
                  # 'Cboe_OpenClose_2024-09-19_16_30_1.csv.zip', 'Cboe_OpenClose_2024-09-19_16_40_1.csv.zip', 'Cboe_OpenClose_2024-09-19_16_50_1.csv.zip', 'Cboe_OpenClose_2024-09-19_17_00_1.csv.zip',
