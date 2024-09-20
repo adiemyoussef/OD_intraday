@@ -20,6 +20,9 @@ import plotly.graph_objects as go
 from PIL import Image
 from config.config import *
 from enum import Enum
+import concurrent.futures
+import time as time_module
+from functools import partial
 
 DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 #https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ
@@ -145,7 +148,7 @@ def process_data(metric: pd.DataFrame,candlesticks: pd.DataFrame, session_date: 
     return gif_paths
 
 @task
-def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
+def generate_video_task_(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
                         strike_range: List[int], expiration: str, position_type: list, last_price:float, metric:str = 'positioning'):
 
     videos_paths =[]
@@ -160,6 +163,59 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
         )
         videos_paths.append(video_path)
         last_frame_paths.append(last_frame_path)
+
+    # Combined paths with last_frame_paths first, followed by videos_paths
+    paths = last_frame_paths + videos_paths
+
+    return paths
+
+def generate_video_wrapper(pos_type, data, candlesticks, session_date, participant,
+                           strike_range, expiration, metric, last_price):
+    start_time = time_module.time()
+    video_path, last_frame_path = generate_video(
+        data, candlesticks, session_date, participant, pos_type,
+        strike_range, expiration, metric, last_price,
+        output_video=f'{pos_type}_{expiration}_animated_chart.mp4'
+    )
+    end_time = time_module.time()
+    duration = end_time - start_time
+    print(f"Video generation for {pos_type} completed in {duration:.2f} seconds")
+    return video_path, last_frame_path
+
+@task
+def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
+                        strike_range: List[int], expiration: str, position_type: list, last_price:float, metric:str = 'positioning'):
+    videos_paths = []
+    last_frame_paths = []
+
+    # Create a partial function with all arguments except pos_type
+    generate_video_partial = partial(
+        generate_video_wrapper,
+        data=data,
+        candlesticks=candlesticks,
+        session_date=session_date,
+        participant=participant,
+        strike_range=strike_range,
+        expiration=expiration,
+        metric=metric,
+        last_price=last_price
+    )
+
+    # Use ThreadPoolExecutor to parallelize the video generation
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Submit tasks for each position type
+        future_to_pos_type = {executor.submit(generate_video_partial, pos_type): pos_type for pos_type in position_type}
+
+        # Collect results as they complete
+        for future in concurrent.futures.as_completed(future_to_pos_type):
+            pos_type = future_to_pos_type[future]
+            try:
+                video_path, last_frame_path = future.result()
+                videos_paths.append(video_path)
+                last_frame_paths.append(last_frame_path)
+            except Exception as exc:
+                print(f"Video generation for {pos_type} generated an exception: {exc}")
+                breakpoint()
 
     # Combined paths with last_frame_paths first, followed by videos_paths
     paths = last_frame_paths + videos_paths
@@ -239,8 +295,8 @@ def zero_dte_flow(
     expiration: Optional[str] = None,
     participant: str = 'total_customers',
     position_types: Optional[List[str]] = None,
-    webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
-                        #DEV_CHANNEL
+    webhook_url: str = #'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
+                        DEV_CHANNEL
     ):
     if strike_range:
         strike_range = parse_strike_range(strike_range)
@@ -281,7 +337,7 @@ def zero_dte_flow(
     as_of_time_stamp = str(metrics["effective_datetime"].max())
     last_price = last_price.values[0][0]
     # Process data and generate GIFs
-    paths_to_send = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+    paths_to_send = generate_video_task_(metrics, candlesticks, session_date, participant, strike_range, expiration,
                                        position_types, last_price ,'positioning')
     print(f"Video and frames generated at: {paths_to_send}")
 
@@ -1092,7 +1148,7 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
 
 if __name__ == "__main__":
     zero_dte_flow()
-    one_dte_flow()
+    #one_dte_flow()
     #GEX_flow()
     #plot_depthview(webhook_url=WebhookUrl.DEFAULT)
     #generate_heatmap_gif()
