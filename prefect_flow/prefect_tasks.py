@@ -48,7 +48,7 @@ LOG_LEVEL = logging.DEBUG
 # Get the appropriate logger
 logger = get_logger(debug_mode=False)
 
-#-------- Initializing the Classes -------#
+# -------- Initializing the Classes -------#
 db_utils = DatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, logger=logger)
 pg_data = PostGreData(
     host=POSGRE_DB_HOST,
@@ -58,12 +58,14 @@ pg_data = PostGreData(
     database=POSGRE_DB_NAME
 )
 rabbitmq_utils = RabbitMQUtilities(RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS, logger=logger)
-sftp_utils = SFTPUtility(SFTP_HOST,SFTP_PORT,SFTP_USERNAME,SFTP_PASSWORD, logger = logger)
+sftp_utils = SFTPUtility(SFTP_HOST, SFTP_PORT, SFTP_USERNAME, SFTP_PASSWORD, logger=logger)
 
 logger.info(f"Initializing db status: {db_utils.get_status()}")
 logger.info(f'Postgre Status -- > {pg_data.get_status()}')
 logger.info(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
-#-------------------------------------------#
+
+
+# -------------------------------------------#
 def process_greek(greek_name, poly_data, book):
     latest_greek = poly_data.sort_values('time_stamp', ascending=False).groupby('contract_id').first().reset_index()
     latest_greek = latest_greek[['contract_id', greek_name, 'time_stamp']]
@@ -88,6 +90,7 @@ def process_greek(greek_name, poly_data, book):
         print(f"\nWarning: {update_col} not found in merged DataFrame. No updates performed.")
 
     return book
+
 
 def prepare_to_fetch_historical_poly(current_time=None, shift_previous_minutes=0, shift_current_minutes=0):
     """
@@ -139,6 +142,7 @@ def prepare_to_fetch_historical_poly(current_time=None, shift_previous_minutes=0
 
     return previous_date_str, current_date_str, previous_datetime_str, current_datetime_str
 
+
 def filter_and_log_nan_values(final_book: pd.DataFrame) -> pd.DataFrame:
     """
 
@@ -153,8 +157,8 @@ def filter_and_log_nan_values(final_book: pd.DataFrame) -> pd.DataFrame:
 
     return final_book.dropna()
 
-def ensure_all_connections_are_open():
 
+def ensure_all_connections_are_open():
     max_attempts = 5
     attempt = 0
     while attempt < max_attempts:
@@ -173,7 +177,8 @@ def ensure_all_connections_are_open():
     logger.error("Failed to establish connections after maximum attempts.")
     return False
 
-#------------------ UPDATED HEATMAP ------------------#
+
+# ------------------ UPDATED HEATMAP ------------------#
 @task
 def save_heatmap_to_storage(heatmap_fig, timestamp):
     filename = f"heatmap_{timestamp.strftime('%Y%m%d_%H%M%S')}.png"
@@ -185,10 +190,11 @@ def save_heatmap_to_storage(heatmap_fig, timestamp):
     session = boto3.session.Session()
     client = session.client('s3',
                             region_name='nyc3',  # Replace with your region
-                            endpoint_url='https://heatmaps-gifs.nyc3.digitaloceanspaces.com',  # Replace with your endpoint
-                            #TODO
+                            endpoint_url='https://heatmaps-gifs.nyc3.digitaloceanspaces.com',
+                            # Replace with your endpoint
+                            # TODO
                             aws_access_key_id='DO00PQZRAYM3PA449PL2',
-                            #TODO
+                            # TODO
                             aws_secret_access_key='b3e3lewfKXkAkaE3ewfqgVOxwv83lmqdM98x93IhXok')
 
     # Upload to DO Spaces
@@ -221,7 +227,6 @@ def retrieve_heatmap_from_storage(filename):
 @task
 def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_date: str,
                          y_min: int, y_max: int, webhook_url: str) -> bool:
-
     title = f"📊 {session_date} Intraday Gamma Heatmap"
     current_time = datetime.utcnow()
     # Define the Eastern Time zone
@@ -270,12 +275,12 @@ def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_
         print(f"Response content: {response.content}")
         return False
 
-@task(name= "Send latest gamma heatmap to discord", task_run_name= "Latest gamma heatmap to discord")
-def intraday_gamma_heatmap(db,effective_datetime:str, effective_date:str):
 
+@task(name="Send latest gamma heatmap to discord", task_run_name="Latest gamma heatmap to discord")
+def intraday_gamma_heatmap(db, effective_datetime: str, effective_date: str):
     prefect_logger = get_run_logger()
 
-    raw_gamma_data = fetch_gamma_data(db,effective_date, effective_datetime)
+    raw_gamma_data = fetch_gamma_data(db, effective_date, effective_datetime)
     prefect_logger.info("Fetched raw_gamma_data")
     processed_gamma_data = process_gamma_data(raw_gamma_data)
     cd_formatted_datetime = et_to_utc(effective_datetime)
@@ -314,7 +319,6 @@ def intraday_gamma_heatmap(db,effective_datetime:str, effective_date:str):
     minima_df = minima_df.reindex_like(df_gamma).fillna(np.nan)
     maxima_df = maxima_df.reindex_like(df_gamma).fillna(np.nan)
 
-
     # Generate and send heatmap
     # gamma_chart = plot_gamma(df_heatmap=df_gamma, minima_df=minima_df, maxima_df=maxima_df,
     #                          effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5440, y_max=5735)
@@ -346,15 +350,13 @@ def intraday_gamma_heatmap(db,effective_datetime:str, effective_date:str):
     else:
         print(f"Failed to send heatmap for {effective_datetime} to Discord.")
 
-
-
     print(f"Heatmap for {effective_datetime} has been processed and saved.")
 
 
 @task
 def send_charm_heatmap_discord(charm_chart: go.Figure, as_of_time_stamp: str, session_date: str,
-                         y_min: int, y_max: int, webhook_url: str) -> bool:
-    title = f"📊 {session_date} Intraday Charm Heatmap" # as of {as_of_time_stamp}"
+                               y_min: int, y_max: int, webhook_url: str) -> bool:
+    title = f"📊 {session_date} Intraday Charm Heatmap"  # as of {as_of_time_stamp}"
     # description = (
     #     f"Detailed analysis of SPX Gamma for the {session_date} session.\n"
     #     f"This heatmap provides insights into market makers gamma exposure within the specified price range.\n"
@@ -408,13 +410,13 @@ def send_charm_heatmap_discord(charm_chart: go.Figure, as_of_time_stamp: str, se
         print(f"Failed to send heatmap. Status code: {response.status_code}")
         print(f"Response content: {response.content}")
         return False
-@task(name= "Send latest gamma heatmap to discord", task_run_name= "Latest gamma heatmap to discord")
-def intraday_charm_heatmap(db,effective_datetime:str, effective_date:str):
 
 
+@task(name="Send latest gamma heatmap to discord", task_run_name="Latest gamma heatmap to discord")
+def intraday_charm_heatmap(db, effective_datetime: str, effective_date: str):
     prefect_logger = get_run_logger()
 
-    raw_charm_data = fetch_charm_data(db,effective_date, effective_datetime)
+    raw_charm_data = fetch_charm_data(db, effective_date, effective_datetime)
     prefect_logger.info("Fetched raw_gamma_data")
     processed_charm_data = process_charm_data(raw_charm_data)
     cd_formatted_datetime = et_to_utc(effective_datetime)
@@ -450,7 +452,6 @@ def intraday_charm_heatmap(db,effective_datetime:str, effective_date:str):
                              effective_datetime=effective_datetime,
                              spx=spx_candlesticks)
 
-
     charm_chart.update_layout(
         width=1920,  # Full HD width
         height=1080,  # Full HD height
@@ -476,17 +477,19 @@ def intraday_charm_heatmap(db,effective_datetime:str, effective_date:str):
     print(f"Heatmap for {effective_datetime} has been processed and saved.")
 
 
-#-----------------DEPTHVIEW-----------------#
-@task(name= "Send latest depthview to discord", task_run_name= "Latest depthview to discord")
+# -----------------DEPTHVIEW-----------------#
+@task(name="Send latest depthview to discord", task_run_name="Latest depthview to discord")
 def intraday_depthview():
     pass
 
-@task(name= "Send latest depthflow to discord", task_run_name= "Latest depthview to discord")
+
+@task(name="Send latest depthflow to discord", task_run_name="Latest depthview to discord")
 def intraday_depthflow():
     pass
 
-#----------------- TASKS -------------------#
-@task(name= "fetch_historical_poly_data", task_run_name= "Fetching historical greeks")
+
+# ----------------- TASKS -------------------#
+@task(name="fetch_historical_poly_data", task_run_name="Fetching historical greeks")
 def fetch_historical_poly_data(previous_date, current_date, previous_datetime, current_datetime):
     start_time = time_module.time()
     query = f"""
@@ -498,13 +501,15 @@ def fetch_historical_poly_data(previous_date, current_date, previous_datetime, c
         AND time_stamp BETWEEN '{previous_datetime}' AND '{current_datetime}'
     """
 
-    poly_data  = db_utils.execute_query(query)
+    poly_data = db_utils.execute_query(query)
     logger.info(f'Fetched {len(poly_data)} rows in {time_module.time() - start_time} sec.')
 
     return poly_data
-@task(retries=3, retry_delay_seconds=60, name= "process_last_message_in_queue", task_run_name= "Processing last message in queue...")
-async def process_last_message_in_queue(rabbitmq_utils:RabbitMQUtilities, expected_file_override = None):
 
+
+@task(retries=3, retry_delay_seconds=60, name="process_last_message_in_queue",
+      task_run_name="Processing last message in queue...")
+async def process_last_message_in_queue(rabbitmq_utils: RabbitMQUtilities, expected_file_override=None):
     logger.info("Processing last message in queue...")
 
     try:
@@ -539,7 +544,8 @@ async def process_last_message_in_queue(rabbitmq_utils:RabbitMQUtilities, expect
                             return (method_frame, properties, body), msg_body
                         else:
                             rabbitmq_utils.channel.basic_nack(delivery_tag=method_frame.delivery_tag, requeue=True)
-                            logger.debug(f"[NOT FOUND]: Expected file {expected_file_name} not found. Retrying in {PROCESS_MESSAGE_QUEUE_RETRY_DELAY} seconds...")
+                            logger.debug(
+                                f"[NOT FOUND]: Expected file {expected_file_name} not found. Retrying in {PROCESS_MESSAGE_QUEUE_RETRY_DELAY} seconds...")
                 else:
                     logger.debug(f"Queue is empty. Retrying in {PROCESS_MESSAGE_QUEUE_RETRY_DELAY} seconds...")
 
@@ -560,8 +566,9 @@ async def process_last_message_in_queue(rabbitmq_utils:RabbitMQUtilities, expect
         # Don't close the connection here
         pass
 
+
 @task(name="Get initial book",
-      task_run_name= "Getting initial book...",
+      task_run_name="Getting initial book...",
       description="Updates the book of financial options contracts with the latest Greek values.",
       retries=2,
       retry_delay_seconds=60,
@@ -578,7 +585,7 @@ def get_initial_book(get_unrevised_book: Callable):
         limit2am = current_time.replace(hour=0, minute=15, second=0, microsecond=0).time()
         limit7pm = current_time.replace(hour=23, minute=0, second=0, microsecond=0).time()
 
-        #TODO: Verify that the current_date is a business date
+        # TODO: Verify that the current_date is a business date
 
         if limit2am <= current_time.time() < limit7pm:  # Between 2 AM and 7 PM
             prefect_logger.info(f"Operating during Revised book hours")
@@ -601,7 +608,7 @@ def get_initial_book(get_unrevised_book: Callable):
                     send_notification(f"No session_book found for {current_date}. Using unrevised session_book.")
                     return get_unrevised_book()
                 else:
-                    #send_notification(f"Unrevised session_book found for {current_date}. Proceeding with caution.")
+                    # send_notification(f"Unrevised session_book found for {current_date}. Proceeding with caution.")
                     return session_book
             else:
                 logger.debug(f"Revised session_book loaded for date: {current_date}")
@@ -610,7 +617,7 @@ def get_initial_book(get_unrevised_book: Callable):
 
         else:  # Between 8 PM and 2 AM
 
-            #TODO:
+            # TODO:
             # if it's sunday, get revised book since it runs Friday-Saturday
             # else;
             logger.debug("Using unrevised session_book due to time of day.")
@@ -619,17 +626,17 @@ def get_initial_book(get_unrevised_book: Callable):
     except Exception as e:
         logger.error(f"Error getting initial session_book: {e}")
         raise
+
+
 # This function will be implemented later
 
 @task
 def get_unrevised_book():
-
-
     logger.info(f"Operating during Unrevised book hours")
     logger.info(f"Operating during Unrevised book hours")
 
     unrevised_book = pd.read_pickle("unrevised_book_20240730.pkl")
-    unrevised_book.drop(columns =['effective_datetime'], inplace = True)
+    unrevised_book.drop(columns=['effective_datetime'], inplace=True)
 
     return unrevised_book
 
@@ -661,8 +668,9 @@ def get_unrevised_book():
     #     logger.error(f"Error getting initial session_book: {e}")
     #     raise
 
+
 @task(retries=2)
-def get_file_from_sftp(msg_body, override_path = None):
+def get_file_from_sftp(msg_body, override_path=None):
     prefect_logger = get_run_logger()
     logger.debug("get_file_from_sftp")
     file_path = msg_body["path"]
@@ -675,7 +683,7 @@ def get_file_from_sftp(msg_body, override_path = None):
         logger.info(f'[NO OVERRIDE]: Getting {file_path}')
     try:
 
-        #sftp_utils.ensure_connection()  # Ensure connection before SFTP operation
+        # sftp_utils.ensure_connection()  # Ensure connection before SFTP operation
 
         start = time_module.time()
         sftp_utils.connect()
@@ -687,7 +695,6 @@ def get_file_from_sftp(msg_body, override_path = None):
         prefect_logger.info(f'It took {time_module.time() - read_time} sec. to read to file')
         logger.debug(f'[verify_and_process_message]: {file_info} {file_data}')
 
-
         return file_info, file_data, file_info['mtime']
 
     except Exception as e:
@@ -696,9 +703,9 @@ def get_file_from_sftp(msg_body, override_path = None):
     finally:
         sftp_utils.disconnect()
 
+
 @task(retries=2)
 async def read_and_verify_sftp_file(file_info, file_data):
-
     try:
         with zipfile.ZipFile(file_data, 'r') as z:
             csv_file = z.namelist()[0]
@@ -721,7 +728,7 @@ async def read_and_verify_sftp_file(file_info, file_data):
         if OPTION_SYMBOLS_TO_PROCESS:
             df = df[df['option_symbol'].isin(OPTION_SYMBOLS_TO_PROCESS)]
 
-        #TODO: Test with this
+        # TODO: Test with this
         df = verify_data(df)
 
         # Convert
@@ -731,166 +738,162 @@ async def read_and_verify_sftp_file(file_info, file_data):
         logger.error(f"Failed to read or verify file: {e}")
         raise
 
+
 @task(retries=2)
 async def build_latest_book(initial_book, intraday_data):
-        logger.debug('Entered update_book_intraday')
-        if 'id' in initial_book.columns:
-            initial_book = initial_book.drop(columns=['id'])
+    logger.debug('Entered update_book_intraday')
+    if 'id' in initial_book.columns:
+        initial_book = initial_book.drop(columns=['id'])
 
+    # Ensure consistent data types --- It's an additional layer of protection
+    initial_book['strike_price'] = initial_book['strike_price'].astype(float)
+    intraday_data['strike_price'] = intraday_data['strike_price'].astype(float)
+    initial_book['expiration_date_original'] = pd.to_datetime(initial_book['expiration_date_original'])
+    intraday_data['expiration_date'] = pd.to_datetime(intraday_data['expiration_date'])
 
-        # Ensure consistent data types --- It's an additional layer of protection
-        initial_book['strike_price'] = initial_book['strike_price'].astype(float)
-        intraday_data['strike_price'] = intraday_data['strike_price'].astype(float)
-        initial_book['expiration_date_original'] = pd.to_datetime(initial_book['expiration_date_original'])
-        intraday_data['expiration_date'] = pd.to_datetime(intraday_data['expiration_date'])
+    processed_intraday = intraday_data.groupby(
+        ['ticker', 'option_symbol', 'call_put_flag', 'expiration_date', 'strike_price']).agg({
+        'mm_buy_vol': 'sum',
+        'mm_sell_vol': 'sum',
+        'firm_open_buy_vol': 'sum',
+        'firm_close_buy_vol': 'sum',
+        'firm_open_sell_vol': 'sum',
+        'firm_close_sell_vol': 'sum',
+        'bd_open_buy_vol': 'sum',
+        'bd_close_buy_vol': 'sum',
+        'bd_open_sell_vol': 'sum',
+        'bd_close_sell_vol': 'sum',
+        'cust_lt_100_open_buy_vol': 'sum',
+        'cust_lt_100_close_buy_vol': 'sum',
+        'cust_lt_100_open_sell_vol': 'sum',
+        'cust_lt_100_close_sell_vol': 'sum',
+        'cust_100_199_open_buy_vol': 'sum',
+        'cust_100_199_close_buy_vol': 'sum',
+        'cust_100_199_open_sell_vol': 'sum',
+        'cust_100_199_close_sell_vol': 'sum',
+        'cust_gt_199_open_buy_vol': 'sum',
+        'cust_gt_199_close_buy_vol': 'sum',
+        'cust_gt_199_open_sell_vol': 'sum',
+        'cust_gt_199_close_sell_vol': 'sum',
+        'procust_lt_100_open_buy_vol': 'sum',
+        'procust_lt_100_close_buy_vol': 'sum',
+        'procust_lt_100_open_sell_vol': 'sum',
+        'procust_lt_100_close_sell_vol': 'sum',
+        'procust_100_199_open_buy_vol': 'sum',
+        'procust_100_199_close_buy_vol': 'sum',
+        'procust_100_199_open_sell_vol': 'sum',
+        'procust_100_199_close_sell_vol': 'sum',
+        'procust_gt_199_open_buy_vol': 'sum',
+        'procust_gt_199_close_buy_vol': 'sum',
+        'procust_gt_199_open_sell_vol': 'sum',
+        'procust_gt_199_close_sell_vol': 'sum',
+        'trade_datetime': 'max'
+    }).reset_index()
 
+    processed_intraday['mm_posn'] = processed_intraday['mm_buy_vol'] - processed_intraday['mm_sell_vol']
+    processed_intraday['firm_posn'] = (
+            processed_intraday['firm_open_buy_vol'] + processed_intraday['firm_close_buy_vol'] -
+            processed_intraday['firm_open_sell_vol'] - processed_intraday['firm_close_sell_vol'])
+    processed_intraday['broker_posn'] = (
+            processed_intraday['bd_open_buy_vol'] + processed_intraday['bd_close_buy_vol'] -
+            processed_intraday['bd_open_sell_vol'] - processed_intraday['bd_close_sell_vol'])
+    processed_intraday['nonprocust_posn'] = (
+            (processed_intraday['cust_lt_100_open_buy_vol'] + processed_intraday['cust_lt_100_close_buy_vol'] +
+             processed_intraday['cust_100_199_open_buy_vol'] + processed_intraday['cust_100_199_close_buy_vol'] +
+             processed_intraday['cust_gt_199_open_buy_vol'] + processed_intraday['cust_gt_199_close_buy_vol']) -
+            (processed_intraday['cust_lt_100_open_sell_vol'] + processed_intraday['cust_lt_100_close_sell_vol'] +
+             processed_intraday['cust_100_199_open_sell_vol'] + processed_intraday['cust_100_199_close_sell_vol'] +
+             processed_intraday['cust_gt_199_open_sell_vol'] + processed_intraday['cust_gt_199_close_sell_vol']))
+    processed_intraday['procust_posn'] = ((processed_intraday['procust_lt_100_open_buy_vol'] + processed_intraday[
+        'procust_lt_100_close_buy_vol'] +
+                                           processed_intraday['procust_100_199_open_buy_vol'] + processed_intraday[
+                                               'procust_100_199_close_buy_vol'] +
+                                           processed_intraday['procust_gt_199_open_buy_vol'] + processed_intraday[
+                                               'procust_gt_199_close_buy_vol']) -
+                                          (processed_intraday['procust_lt_100_open_sell_vol'] + processed_intraday[
+                                              'procust_lt_100_close_sell_vol'] +
+                                           processed_intraday['procust_100_199_open_sell_vol'] + processed_intraday[
+                                               'procust_100_199_close_sell_vol'] +
+                                           processed_intraday['procust_gt_199_open_sell_vol'] + processed_intraday[
+                                               'procust_gt_199_close_sell_vol']))
 
-        processed_intraday = intraday_data.groupby(
-            ['ticker', 'option_symbol', 'call_put_flag', 'expiration_date', 'strike_price']).agg({
-            'mm_buy_vol': 'sum',
-            'mm_sell_vol': 'sum',
-            'firm_open_buy_vol': 'sum',
-            'firm_close_buy_vol': 'sum',
-            'firm_open_sell_vol': 'sum',
-            'firm_close_sell_vol': 'sum',
-            'bd_open_buy_vol': 'sum',
-            'bd_close_buy_vol': 'sum',
-            'bd_open_sell_vol': 'sum',
-            'bd_close_sell_vol': 'sum',
-            'cust_lt_100_open_buy_vol': 'sum',
-            'cust_lt_100_close_buy_vol': 'sum',
-            'cust_lt_100_open_sell_vol': 'sum',
-            'cust_lt_100_close_sell_vol': 'sum',
-            'cust_100_199_open_buy_vol': 'sum',
-            'cust_100_199_close_buy_vol': 'sum',
-            'cust_100_199_open_sell_vol': 'sum',
-            'cust_100_199_close_sell_vol': 'sum',
-            'cust_gt_199_open_buy_vol': 'sum',
-            'cust_gt_199_close_buy_vol': 'sum',
-            'cust_gt_199_open_sell_vol': 'sum',
-            'cust_gt_199_close_sell_vol': 'sum',
-            'procust_lt_100_open_buy_vol': 'sum',
-            'procust_lt_100_close_buy_vol': 'sum',
-            'procust_lt_100_open_sell_vol': 'sum',
-            'procust_lt_100_close_sell_vol': 'sum',
-            'procust_100_199_open_buy_vol': 'sum',
-            'procust_100_199_close_buy_vol': 'sum',
-            'procust_100_199_open_sell_vol': 'sum',
-            'procust_100_199_close_sell_vol': 'sum',
-            'procust_gt_199_open_buy_vol': 'sum',
-            'procust_gt_199_close_buy_vol': 'sum',
-            'procust_gt_199_open_sell_vol': 'sum',
-            'procust_gt_199_close_sell_vol': 'sum',
-            'trade_datetime': 'max'
-        }).reset_index()
+    processed_intraday['total_customers_posn'] = (
+            processed_intraday['firm_posn'] + processed_intraday['broker_posn'] +
+            processed_intraday['nonprocust_posn'] + processed_intraday['procust_posn'])
 
-        processed_intraday['mm_posn'] = processed_intraday['mm_buy_vol'] - processed_intraday['mm_sell_vol']
-        processed_intraday['firm_posn'] = (
-                processed_intraday['firm_open_buy_vol'] + processed_intraday['firm_close_buy_vol'] -
-                processed_intraday['firm_open_sell_vol'] - processed_intraday['firm_close_sell_vol'])
-        processed_intraday['broker_posn'] = (
-                processed_intraday['bd_open_buy_vol'] + processed_intraday['bd_close_buy_vol'] -
-                processed_intraday['bd_open_sell_vol'] - processed_intraday['bd_close_sell_vol'])
-        processed_intraday['nonprocust_posn'] = (
-                (processed_intraday['cust_lt_100_open_buy_vol'] + processed_intraday['cust_lt_100_close_buy_vol'] +
-                 processed_intraday['cust_100_199_open_buy_vol'] + processed_intraday['cust_100_199_close_buy_vol'] +
-                 processed_intraday['cust_gt_199_open_buy_vol'] + processed_intraday['cust_gt_199_close_buy_vol']) -
-                (processed_intraday['cust_lt_100_open_sell_vol'] + processed_intraday['cust_lt_100_close_sell_vol'] +
-                 processed_intraday['cust_100_199_open_sell_vol'] + processed_intraday['cust_100_199_close_sell_vol'] +
-                 processed_intraday['cust_gt_199_open_sell_vol'] + processed_intraday['cust_gt_199_close_sell_vol']))
-        processed_intraday['procust_posn'] = ((processed_intraday['procust_lt_100_open_buy_vol'] + processed_intraday[
-            'procust_lt_100_close_buy_vol'] +
-                                               processed_intraday['procust_100_199_open_buy_vol'] + processed_intraday[
-                                                   'procust_100_199_close_buy_vol'] +
-                                               processed_intraday['procust_gt_199_open_buy_vol'] + processed_intraday[
-                                                   'procust_gt_199_close_buy_vol']) -
-                                              (processed_intraday['procust_lt_100_open_sell_vol'] + processed_intraday[
-                                                  'procust_lt_100_close_sell_vol'] +
-                                               processed_intraday['procust_100_199_open_sell_vol'] + processed_intraday[
-                                                   'procust_100_199_close_sell_vol'] +
-                                               processed_intraday['procust_gt_199_open_sell_vol'] + processed_intraday[
-                                                   'procust_gt_199_close_sell_vol']))
+    # -------------------- DATA CONVERSION AND VALIDATION ----------------#
+    # Data Manipulation muste be done:
 
-        processed_intraday['total_customers_posn'] = (
-                    processed_intraday['firm_posn'] + processed_intraday['broker_posn'] +
-                    processed_intraday['nonprocust_posn'] + processed_intraday['procust_posn'])
+    # Convert strike_price in initial_book from Decimal to float
+    initial_book['strike_price'] = initial_book['strike_price'].astype(float)
 
-        # -------------------- DATA CONVERSION AND VALIDATION ----------------#
-        # Data Manipulation muste be done:
+    # Convert strike_price in processed_intraday from np.float64 to float (this might not be necessary, but it ensures consistency)
+    processed_intraday['strike_price'] = processed_intraday['strike_price'].astype(float)
 
-        # Convert strike_price in initial_book from Decimal to float
-        initial_book['strike_price'] = initial_book['strike_price'].astype(float)
+    # Convert expiration_date_original in initial_book from datetime.date to datetime64[ns]
+    initial_book['expiration_date_original'] = pd.to_datetime(initial_book['expiration_date_original'])
 
-        # Convert strike_price in processed_intraday from np.float64 to float (this might not be necessary, but it ensures consistency)
-        processed_intraday['strike_price'] = processed_intraday['strike_price'].astype(float)
+    # Convert expiration_date in processed_intraday from string to datetime64[ns]
+    processed_intraday['expiration_date'] = pd.to_datetime(processed_intraday['expiration_date'])
 
-        # Convert expiration_date_original in initial_book from datetime.date to datetime64[ns]
-        initial_book['expiration_date_original'] = pd.to_datetime(initial_book['expiration_date_original'])
+    # ------------------------------------------------------------#
 
-        # Convert expiration_date in processed_intraday from string to datetime64[ns]
-        processed_intraday['expiration_date'] = pd.to_datetime(processed_intraday['expiration_date'])
+    initial_duplicates = analyze_duplicates(initial_book, "initial_book", INITAL_BOOK_KEY, logger)
+    intraday_duplicates = analyze_duplicates(processed_intraday, "processed_intraday", INTRADAY_KEY, logger)
 
-        # ------------------------------------------------------------#
+    merged = pd.merge(initial_book, processed_intraday,
+                      left_on=['ticker', 'option_symbol', 'call_put_flag', 'strike_price',
+                               'expiration_date_original'],
+                      right_on=['ticker', 'option_symbol', 'call_put_flag', 'strike_price', 'expiration_date'],
+                      how='outer', suffixes=('', '_intraday'))
 
-        initial_duplicates = analyze_duplicates(initial_book, "initial_book", INITAL_BOOK_KEY, logger)
-        intraday_duplicates = analyze_duplicates(processed_intraday, "processed_intraday", INTRADAY_KEY, logger)
+    position_columns = ['mm_posn', 'firm_posn', 'broker_posn', 'nonprocust_posn', 'procust_posn',
+                        'total_customers_posn']
 
-        merged = pd.merge(initial_book, processed_intraday,
-                          left_on=['ticker', 'option_symbol', 'call_put_flag', 'strike_price',
-                                   'expiration_date_original'],
-                          right_on=['ticker', 'option_symbol', 'call_put_flag', 'strike_price', 'expiration_date'],
-                          how='outer', suffixes=('', '_intraday'))
+    for col in position_columns:
+        merged[col] = merged[col].fillna(0) + merged[f'{col}_intraday'].fillna(0)
+        merged.loc[merged[col].isna(), col] = merged[f'{col}_intraday']
+    merged['expiration_date_original'] = merged['expiration_date_original'].fillna(
+        merged['expiration_date_intraday'])
 
+    merged['revised'] = 'Y'
+    merged['time_stamp'] = None
 
-        position_columns = ['mm_posn', 'firm_posn', 'broker_posn', 'nonprocust_posn', 'procust_posn',
-                            'total_customers_posn']
+    merged['trade_datetime'] = pd.to_datetime(merged['trade_datetime'], errors='coerce')
+    max_trade_datetime = merged['trade_datetime'].max()
+    if pd.notnull(max_trade_datetime):
+        effective_date = max_trade_datetime.date()
+        effective_datetime = max_trade_datetime
+    else:
+        current_datetime = datetime.now()
+        effective_date = current_datetime.date()
+        effective_datetime = current_datetime
 
-        for col in position_columns:
-            merged[col] = merged[col].fillna(0) + merged[f'{col}_intraday'].fillna(0)
-            merged.loc[merged[col].isna(), col] = merged[f'{col}_intraday']
-        merged['expiration_date_original'] = merged['expiration_date_original'].fillna(
-            merged['expiration_date_intraday'])
+    merged['effective_date'] = effective_date
+    merged['effective_datetime'] = effective_datetime
 
+    # TODO: Not TRUE for Unrevised
+    as_of_date = initial_book['as_of_date'].max()
+    merged['as_of_date'] = as_of_date
 
-        merged['revised'] = 'Y'
-        merged['time_stamp'] = None
+    start_of_day_columns = [col for col in initial_book.columns if col != 'id']
+    effective_date_index = start_of_day_columns.index('effective_date')
+    start_of_day_columns.insert(effective_date_index + 1, 'effective_datetime')
+    merged = merged[start_of_day_columns]
 
-        merged['trade_datetime'] = pd.to_datetime(merged['trade_datetime'], errors='coerce')
-        max_trade_datetime = merged['trade_datetime'].max()
-        if pd.notnull(max_trade_datetime):
-            effective_date = max_trade_datetime.date()
-            effective_datetime = max_trade_datetime
-        else:
-            current_datetime = datetime.now()
-            effective_date = current_datetime.date()
-            effective_datetime = current_datetime
+    merged['expiration_date'] = merged.apply(get_expiration_datetime, axis=1)
+    merged['expiration_date'] = pd.to_datetime(merged['expiration_date'])
+    position_columns = ['mm_posn', 'firm_posn', 'broker_posn', 'nonprocust_posn', 'procust_posn',
+                        'total_customers_posn']
+    merged = merged.loc[(merged[position_columns] != 0).any(axis=1)]
+    merged = merged.sort_values(['expiration_date_original', 'mm_posn'], ascending=[True, False])
 
-        merged['effective_date'] = effective_date
-        merged['effective_datetime'] = effective_datetime
+    merged_duplicates = analyze_duplicates(merged, "merged", MERGED_BOOK_KEY, logger)
 
-        #TODO: Not TRUE for Unrevised
-        as_of_date = initial_book['as_of_date'].max()
-        merged['as_of_date'] = as_of_date
+    logger.info('Finished update_book_intraday')
 
-        start_of_day_columns = [col for col in initial_book.columns if col != 'id']
-        effective_date_index = start_of_day_columns.index('effective_date')
-        start_of_day_columns.insert(effective_date_index + 1, 'effective_datetime')
-        merged = merged[start_of_day_columns]
+    return merged
 
-        merged['expiration_date'] = merged.apply(get_expiration_datetime, axis=1)
-        merged['expiration_date'] = pd.to_datetime(merged['expiration_date'])
-        position_columns = ['mm_posn', 'firm_posn', 'broker_posn', 'nonprocust_posn', 'procust_posn',
-                            'total_customers_posn']
-        merged = merged.loc[(merged[position_columns] != 0).any(axis=1)]
-        merged = merged.sort_values(['expiration_date_original', 'mm_posn'], ascending=[True, False])
-
-        merged_duplicates = analyze_duplicates(merged, "merged", MERGED_BOOK_KEY, logger)
-
-
-
-        logger.info('Finished update_book_intraday')
-
-        return merged
 
 @task(
     name="update_book_with_latest_greeks",
@@ -898,7 +901,7 @@ async def build_latest_book(initial_book, intraday_data):
     tags=["finance", "options", "greeks"],
     retries=3,
     retry_delay_seconds=5,
-    timeout_seconds= 600,
+    timeout_seconds=600,
     log_prints=True
 )
 def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.DataFrame) -> pd.DataFrame:
@@ -933,9 +936,9 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
 
     latest_poly.rename(columns={'implied_volatility': 'iv'}, inplace=True)
     latest_poly['contract_id'] = latest_poly['option_symbol'] + '_' + \
-                                          latest_poly['contract_type'] + '_' + \
-                                          latest_poly['strike_price'].astype(str) + '_' + \
-                                          latest_poly['expiration_date']
+                                 latest_poly['contract_type'] + '_' + \
+                                 latest_poly['strike_price'].astype(str) + '_' + \
+                                 latest_poly['expiration_date']
 
     # Merge latest book with the latest poly data
     merged_book = pd.merge(book, latest_poly, on='contract_id', how='left', suffixes=('', '_update'))
@@ -945,8 +948,7 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
     merged_contracts = merged_book['iv_update'].notna().sum()
     unmerged_contracts = total_contracts - merged_contracts
 
-
-    #TODO: Jusqu'ici, pas de probleme... But after the historical merge, we lose some contracts that are in merged_book
+    # TODO: Jusqu'ici, pas de probleme... But after the historical merge, we lose some contracts that are in merged_book
 
     historical_updates = 0
     if unmerged_contracts > 0:
@@ -956,7 +958,7 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
             custom_logger.warning(error_message)
             prefect_logger.warning(error_message)
             print("EMPTYYYYYYYYY")
-            #send_discord_message(error_message)  # Assuming you have this function defined
+            # send_discord_message(error_message)  # Assuming you have this function defined
 
         else:
             # Isolating the contracts that haven't been updated with the latest poly fetch
@@ -977,9 +979,8 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
             # Merge unmerged contracts with latest historical data
             updated_unmerged = pd.merge(unmerged_contracts_df,
                                         latest_historical,
-                                        #latest_historical[['contract_id', 'iv', 'delta', 'gamma', 'vega']],
+                                        # latest_historical[['contract_id', 'iv', 'delta', 'gamma', 'vega']],
                                         on='contract_id', how='left', suffixes=('', '_historical'))
-
 
             # Update the merged_book with historical data
             # merged_book.update(updated_unmerged)
@@ -989,15 +990,12 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
                 merged_book.loc[mask, greek] = updated_unmerged[historical_column].combine_first(
                     merged_book.loc[mask, greek])
 
-
-
             historical_updates = updated_unmerged['iv_historical'].notna().sum()
 
-    #------- INVESTIGATION----------#
+    # ------- INVESTIGATION----------#
 
     # After all updates, identify contracts that weren't updated
     not_updated_mask = merged_book[['iv_update', 'delta_update', 'gamma_update', 'vega_update']].isna().all(axis=1)
-
 
     not_updated_contracts = merged_book[not_updated_mask]
 
@@ -1033,14 +1031,13 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
 
     # Calculate final statistics
     contracts_with_greeks = merged_book[['iv', 'delta', 'gamma', 'vega']].notna().all(axis=1).sum()
-    #contracts_with_greeks = merged_book['iv'].notna().sum()
+    # contracts_with_greeks = merged_book['iv'].notna().sum()
     contracts_without_greeks = total_contracts - contracts_with_greeks
     contracts_not_updated = total_contracts - merged_contracts - historical_updates
 
     # Get mm_posn for contracts without greeks
     contracts_without_greeks_df = merged_book[merged_book['iv'].isna()]
     mm_posn_sum = contracts_without_greeks_df['mm_posn'].sum()
-
 
     # Prepare log message
     log_data = f"""
@@ -1064,24 +1061,27 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
 
     columns_to_keep = book.columns[:-1]
     merged_book = merged_book[columns_to_keep]
-    merged_book.loc[:,'time_stamp'] = get_eastern_time()
+    merged_book.loc[:, 'time_stamp'] = get_eastern_time()
 
     return merged_book
 
-def compare_dataframes(posn_only, final_book_clean_insert):
 
+def compare_dataframes(posn_only, final_book_clean_insert):
     prefect_logger = get_run_logger()
-    prefect_logger.info(f"Row counts: posn_only: {len(posn_only)}, final_book_clean_insert: {len(final_book_clean_insert)}")
+    prefect_logger.info(
+        f"Row counts: posn_only: {len(posn_only)}, final_book_clean_insert: {len(final_book_clean_insert)}")
 
     posn_columns = [col for col in posn_only.columns if '_posn' in col]
 
     prefect_logger.info("\nData types comparison:")
     for col in posn_columns:
-        prefect_logger.info(f"{col}: posn_only: {posn_only[col].dtype}, final_book_clean_insert: {final_book_clean_insert[col].dtype}")
+        prefect_logger.info(
+            f"{col}: posn_only: {posn_only[col].dtype}, final_book_clean_insert: {final_book_clean_insert[col].dtype}")
 
     prefect_logger.info("\nNaN value counts:")
     for col in posn_columns:
-        prefect_logger.info(f"{col}: posn_only: {posn_only[col].isna().sum()}, final_book_clean_insert: {final_book_clean_insert[col].isna().sum()}")
+        prefect_logger.info(
+            f"{col}: posn_only: {posn_only[col].isna().sum()}, final_book_clean_insert: {final_book_clean_insert[col].isna().sum()}")
 
     prefect_logger.info("\nValue differences:")
     for col in posn_columns:
@@ -1100,12 +1100,13 @@ def compare_dataframes(posn_only, final_book_clean_insert):
             prefect_logger.info(diff_df.head())
 
 
-#----------------- FLOWS ------------------#
+# ----------------- FLOWS ------------------#
 @flow(name="Post-Processing Flow 1")
 def post_processing_flow_1():
     logger = get_run_logger()
     logger.info("Post-Processing Flow 1 is running")
     # Add any post-processing logic here
+
 
 @flow(name="Post-Processing Flow 2")
 def post_processing_flow_2():
@@ -1135,22 +1136,21 @@ def post_processing_flow_2():
     retries=3,
     retry_delay_seconds=300,  # 5 minutes
     timeout_seconds=3600,  # 1 hour
-    #validate_parameters=True
+    # validate_parameters=True
 )
 def Intraday_Flow():
-
     prefect_logger = get_run_logger()
 
     flow_start_time = time_module.time()
     current_time = datetime.now(ZoneInfo("America/New_York")).time()
 
-    expected_file_override = None #'/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-15_15_00_1.csv.zip'
+    expected_file_override = None  # '/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-15_15_00_1.csv.zip'
 
     db_utils.connect()
 
     try:
 
-        #TODO: initial_price, last_price = get_prices()
+        # TODO: initial_price, last_price = get_prices()
 
         # parallel_subflows = [zero_dte_flow(), one_dte_flow()]
         # await asyncio.gather(*parallel_subflows)
@@ -1162,11 +1162,12 @@ def Intraday_Flow():
         previous_date, current_date, previous_datetime, current_datetime = prepare_to_fetch_historical_poly(
             shift_previous_minutes=60 * 8, shift_current_minutes=0)
 
-        #TODO: Will be faster on postgre
+        # TODO: Will be faster on postgre
         # Fetch poly data: Slow
-        poly_historical_data = fetch_historical_poly_data(previous_date, current_date, previous_datetime, current_datetime)
+        poly_historical_data = fetch_historical_poly_data(previous_date, current_date, previous_datetime,
+                                                          current_datetime)
 
-        #--------- Connections --------#
+        # --------- Connections --------#
         rabbitmq_utils.connect()
         connections_ready = ensure_all_connections_are_open()
         if not connections_ready:
@@ -1179,7 +1180,6 @@ def Intraday_Flow():
         message, msg_body = process_last_message_in_queue(rabbitmq_utils)
         message_frame, message_properties, _ = message
 
-
         if message is None and msg_body is None:
             logger.debug("No messages to process in the queue. Ending the flow.")
             return
@@ -1191,7 +1191,7 @@ def Intraday_Flow():
         logger.debug(f"Process_last_message returned: {msg_body}")
 
         try:
-            #sftp_utils.ensure_connection()  # Ensure connection before SFTP operation
+            # sftp_utils.ensure_connection()  # Ensure connection before SFTP operation
             file_info, file_data, file_last_modified = get_file_from_sftp(msg_body, expected_file_override)
             if file_info:
                 logger.debug(f"FILE INFO ---> {file_info}")
@@ -1201,19 +1201,18 @@ def Intraday_Flow():
                     logger.debug(f"DataFrame shape: {df.shape}")
                     latest_book = build_latest_book(initial_book, df)
 
-                    #------- Posn Only --------#
-                    posn_only= latest_book.iloc[:,:-4]
-                    posn_only.loc[:,'time_stamp'] = get_eastern_time()
+                    # ------- Posn Only --------#
+                    posn_only = latest_book.iloc[:, :-4]
+                    posn_only.loc[:, 'time_stamp'] = get_eastern_time()
                     # Log the number of rows
-                    #TODO: UNCOMMENT
-                    db_utils.insert_progress('intraday', 'intraday_books_test_posn',posn_only)
-
+                    # TODO: UNCOMMENT
+                    db_utils.insert_progress('intraday', 'intraday_books_test_posn', posn_only)
 
                     latest_book["strike_price"].astype(int)
 
                     final_book = update_book_with_latest_greeks(latest_book, poly_historical_data)
 
-                    #-------------- INVESRTIGATION ---------------#
+                    # -------------- INVESRTIGATION ---------------#
                     # Assuming final_book and latest_book are your dataframes
                     # Merge the dataframes
 
@@ -1231,8 +1230,8 @@ def Intraday_Flow():
                     # Display the differences
                     prefect_logger.info("Rows with differences in total_customers_posn:")
                     prefect_logger.info(diff_rows[['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag',
-                                     'total_customers_posn_latest', 'total_customers_posn_final',
-                                     'total_customers_posn_diff']])
+                                                   'total_customers_posn_latest', 'total_customers_posn_final',
+                                                   'total_customers_posn_diff']])
 
                     # Calculate some statistics
                     prefect_logger.info("\nStatistics of differences:")
@@ -1241,9 +1240,10 @@ def Intraday_Flow():
                     # Check for missing rows
                     latest_book_rows = set(
                         latest_book[['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag']].apply(tuple,
-                                                                                                          axis=1))
+                                                                                                                 axis=1))
                     final_book_rows = set(
-                        final_book[['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag']].apply(tuple, axis=1))
+                        final_book[['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag']].apply(tuple,
+                                                                                                                axis=1))
 
                     missing_in_final = latest_book_rows - final_book_rows
                     missing_in_latest = final_book_rows - latest_book_rows
@@ -1251,7 +1251,7 @@ def Intraday_Flow():
                     prefect_logger.info(f"\nRows in latest_book but missing in final_book: {len(missing_in_final)}")
                     prefect_logger.info(f"Rows in final_book but missing in latest_book: {len(missing_in_latest)}")
 
-                    #The contracts that have a position but that don't have greeks
+                    # The contracts that have a position but that don't have greeks
                     if missing_in_final:
                         missing_in_final_df = pd.DataFrame(list(missing_in_final),
                                                            columns=['option_symbol', 'strike_price', 'expiration_date',
@@ -1279,7 +1279,8 @@ def Intraday_Flow():
 
                         # Save to CSV
                         missing_in_final_df.to_csv('missing_in_final_book.csv', index=False)
-                        prefect_logger.info("Full list of missing rows in final_book saved to 'missing_in_final_book.csv'")
+                        prefect_logger.info(
+                            "Full list of missing rows in final_book saved to 'missing_in_final_book.csv'")
 
                         # Count contracts for each distinct expiration_date
                         expiration_counts = missing_in_final_df['expiration_date'].value_counts().sort_index()
@@ -1288,7 +1289,8 @@ def Intraday_Flow():
 
                         # List strikes and total_customers_posn for each distinct expiration date
                         prefect_logger.info("-----------------------------------------------")
-                        prefect_logger.info("\nList of strikes and total_customers_posn for each distinct expiration date:")
+                        prefect_logger.info(
+                            "\nList of strikes and total_customers_posn for each distinct expiration date:")
                         for date in missing_in_final_df['expiration_date'].unique():
                             date_df = missing_in_final_df[missing_in_final_df['expiration_date'] == date]
                             strikes = date_df['strike_price'].unique()
@@ -1298,7 +1300,7 @@ def Intraday_Flow():
                             prefect_logger.info(f"Number of strikes: {len(strikes)}")
                             prefect_logger.info("Top 5 contracts by total_customers_posn:")
                             prefect_logger.info(date_df.nlargest(5, 'total_customers_posn')[
-                                      ['strike_price', 'call_put_flag', 'total_customers_posn']])
+                                                    ['strike_price', 'call_put_flag', 'total_customers_posn']])
                             prefect_logger.info("-------------------------")
 
                         # Calculate and print total_customers_posn statistics
@@ -1308,8 +1310,8 @@ def Intraday_Flow():
                         prefect_logger.info(f"Maximum total_customers_posn among missing contracts: {max_posn}")
                         prefect_logger.info("\nTop 10 missing contracts by total_customers_posn:")
                         prefect_logger.info(missing_in_final_df.nlargest(10, 'total_customers_posn')[
-                                  ['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag',
-                                   'total_customers_posn']])
+                                                ['option_symbol', 'strike_price', 'expiration_date', 'call_put_flag',
+                                                 'total_customers_posn']])
 
                     else:
                         prefect_logger.info("No missing rows in final_book")
@@ -1317,8 +1319,9 @@ def Intraday_Flow():
                     if missing_in_latest:
                         prefect_logger.info("\nSample of rows missing in latest_book:")
                         prefect_logger.info(final_book[
-                                  final_book[['symbol', 'strike_price', 'expiration_date', 'call_put_flag']].apply(
-                                      tuple, axis=1).isin(list(missing_in_latest)[:5])])
+                                                final_book[['symbol', 'strike_price', 'expiration_date',
+                                                            'call_put_flag']].apply(
+                                                    tuple, axis=1).isin(list(missing_in_latest)[:5])])
 
                     # Check for NaN values
                     prefect_logger.info("\nNaN values in latest_book:")
@@ -1333,7 +1336,7 @@ def Intraday_Flow():
 
                     prefect_logger.info("\nInfinity values in final_book:")
                     prefect_logger.info(np.isinf(final_book['total_customers_posn']).sum())
-                    #-------------------------------------------------#
+                    # -------------------------------------------------#
 
                     # Filter out NaN values and log
                     filtered_final_book = filter_and_log_nan_values(final_book)
@@ -1345,8 +1348,8 @@ def Intraday_Flow():
                     # Convert these columns to integer type
                     final_book_clean_insert = filtered_final_book.copy()
                     # Convert these columns to integer type
-                    final_book_clean_insert[posn_columns] = final_book_clean_insert[posn_columns].apply(lambda x: x.astype(int))
-
+                    final_book_clean_insert[posn_columns] = final_book_clean_insert[posn_columns].apply(
+                        lambda x: x.astype(int))
 
                     # Check if all values are indeed integers
                     all_integers = all(final_book_clean_insert[col].dtype == 'int64' for col in posn_columns)
@@ -1358,7 +1361,7 @@ def Intraday_Flow():
 
                     # compare_dataframes(posn_only, final_book_clean_insert)
 
-                    db_utils.insert_progress('intraday', 'intraday_books',final_book_clean_insert)
+                    db_utils.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
                     pg_data.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
 
                     # Get the current price (you'll need to implement this function)
@@ -1369,31 +1372,30 @@ def Intraday_Flow():
                     rabbitmq_utils.ensure_connection()
                     logger.info(f'RabbitMQ Status: {rabbitmq_utils.get_status()}')
 
-
                     for attempt in range(RABBITMQ_MAX_ACK_RETRIES):
                         try:
-                            rabbitmq_utils.safe_ack(message_frame.delivery_tag,msg_body)
+                            rabbitmq_utils.safe_ack(message_frame.delivery_tag, msg_body)
                             logger.debug(f"Message acknowledged for file: {file_info['file_name']}")
                             break
                         except Exception as e:
-                            logger.error(f"Error acknowledging message {file_info['file_name']} (attempt {attempt + 1}/{RABBITMQ_MAX_ACK_RETRIES}): {e}")
+                            logger.error(
+                                f"Error acknowledging message {file_info['file_name']} (attempt {attempt + 1}/{RABBITMQ_MAX_ACK_RETRIES}): {e}")
                             if attempt == RABBITMQ_MAX_ACK_RETRIES - 1:
-                                logger.error(f"Failed to acknowledge message {file_info['file_name']} after all retries.")
+                                logger.error(
+                                    f"Failed to acknowledge message {file_info['file_name']} after all retries.")
                             time.sleep(10)  # Wait a bit before retrying
 
                     logger.info(f"Data flow finished in {time_module.time() - flow_start_time} sec.")
 
-                    #------- Send Charts -------- #
+                    # ------- Send Charts -------- #
                     effective_datetime = str(final_book_clean_insert["effective_datetime"].unique()[0])
-                    
 
                     if current_time < datetime_time(16, 0):
                         prefect_logger.info("It's before 4 PM ET. Proceeding with heatmap generation.")
-                        heatmap_generation_flow(final_book_clean_insert,effective_datetime=effective_datetime)
+                        heatmap_generation_flow(final_book_clean_insert, effective_datetime=effective_datetime)
 
-                        #TODO: modify the other params to remove this and start at the same time as the book generation
+                        # TODO: modify the other params to remove this and start at the same time as the book generation
                         if current_time > datetime_time(7, 0):
-
                             intraday_gamma_heatmap(db, effective_datetime, current_date)
                             intraday_charm_heatmap(db, effective_datetime, current_date)
 
@@ -1402,11 +1404,11 @@ def Intraday_Flow():
 
                     else:
                         prefect_logger.info("It's past 4 PM ET. Skipping heatmap generation.")
-                        #Generate 1DTE heatmap
-                        #heatmap_generation_flow(final_book_clean_insert,)
-                        #generate_charts(final_book_clean_insert,effective_datetime=effective_datetime)
+                        # Generate 1DTE heatmap
+                        # heatmap_generation_flow(final_book_clean_insert,)
+                        # generate_charts(final_book_clean_insert,effective_datetime=effective_datetime)
 
-                    logger.info(f"Finished flow in {time_module.time()-flow_start_time} sec.")
+                    logger.info(f"Finished flow in {time_module.time() - flow_start_time} sec.")
 
 
                 else:
@@ -1431,4 +1433,3 @@ if __name__ == "__main__":
     """
     # main_flow_state = asyncio.run(Intraday_Flow())
     Intraday_Flow()
-
