@@ -576,7 +576,7 @@ def get_initial_book(get_unrevised_book: Callable):
     try:
         current_time = datetime.now(ZoneInfo("America/New_York"))
         current_date = current_time.date()
-        limit2am = current_time.replace(hour=0, minute=15, second=0, microsecond=0).time()
+        limit2am = current_time.replace(hour=0, minute=00, second=0, microsecond=0).time()
         limit7pm = current_time.replace(hour=23, minute=59, second=0, microsecond=0).time()
 
         #TODO: Verify that the current_date is a business date
@@ -585,7 +585,8 @@ def get_initial_book(get_unrevised_book: Callable):
             prefect_logger.info(f"Operating during Revised book hours")
             query = f"""
             SELECT * FROM intraday.new_daily_book_format 
-            WHERE effective_date = '{current_date}' AND revised = 'Y'
+            WHERE effective_date = '2024-09-19' AND revised = 'Y'
+            -- WHERE effective_date = '{current_date}' AND revised = 'Y'
             """
             session_book = db_utils.execute_query(query)
 
