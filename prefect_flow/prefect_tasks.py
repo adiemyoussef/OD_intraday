@@ -94,6 +94,7 @@ async def trigger_deployments(deployment_names):
                 prefect_logger.error(f"Failed to trigger deployment '{deployment_name}': {str(e)}")
 
 
+
 def process_greek(greek_name, poly_data, book):
     latest_greek = poly_data.sort_values('time_stamp', ascending=False).groupby('contract_id').first().reset_index()
     latest_greek = latest_greek[['contract_id', greek_name, 'time_stamp']]
@@ -1438,15 +1439,9 @@ def Intraday_Flow():
 
                     prefect_logger.info(f"Finished flow in {time_module.time() - flow_start_time} sec.")
 
-                    # Asynchronous operations at the end
-                    prefect_logger.info("Starting to trigger gif flows...")
-                    deployment_names = [
-                        "0 DTE Flow",
-                        "1 DTE Flow",
-                        "MM GEX Flow"
-                    ]
-                    # await trigger_deployments(deployment_names)
-                    prefect_logger.info("All gif flows have been triggered.")
+                    prefect_logger.info("Triggering gif flows...")
+                    run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
+                    prefect_logger.info("Gif flows triggered.")
 
 
 
@@ -1465,6 +1460,21 @@ def Intraday_Flow():
     finally:
         sftp_utils.disconnect()  # Disconnect at the end of the flow
 
+
+@flow(name="Trigger Gif Flows")
+async def trigger_gif_flows():
+    prefect_logger = get_run_logger()
+    try:
+        prefect_logger.info("Starting to trigger gif flows...")
+        deployment_names = [
+            "0 DTE Flow",
+            "1 DTE Flow",
+            "MM GEX Flow"
+        ]
+        await trigger_deployments(deployment_names)
+        prefect_logger.info("All gif flows have been triggered.")
+    except Exception as e:
+        prefect_logger.error(f"Error in trigger_gif_flows: {e}")
 
 @flow
 async def Test_Flow():
