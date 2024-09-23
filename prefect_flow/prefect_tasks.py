@@ -1413,21 +1413,21 @@ def Intraday_Flow():
 
                     try:
                         prefect_logger.info(f"Attempting to trigger zero_dte_flow")
-                        run_zero_dte = run_deployment(name="0 DTE Flow", wait_for_completion=False)
+                        run_zero_dte = run_deployment(name="0 DTE Flow")
                         prefect_logger.info(f"Triggered zero_dte_flow with run ID: {run_zero_dte.id}")
                     except Exception as e:
                         logger.error(f"Failed to trigger zero_dte_flow: {str(e)}")
 
                     try:
                         prefect_logger.info(f"Attempting to trigger one_dte_flow")
-                        run_one_dte = run_deployment(name="1 DTE Flow", wait_for_completion=False)
+                        run_one_dte = run_deployment(name="1 DTE Flow")
                         prefect_logger.info(f"Triggered one_dte_flow with run ID: {run_one_dte.id}")
                     except Exception as e:
                         prefect_logger.error(f"Failed to trigger one_dte_flow: {str(e)}")
 
                     try:
                         prefect_logger.info(f"Attempting to trigger GEX_flow")
-                        run_gex = run_deployment(name="MM GEX Flow", wait_for_completion=False)
+                        run_gex = run_deployment(name="MM GEX Flow")
                         prefect_logger.info(f"Triggered GEX_flow with run ID: {run_gex.id}")
                     except Exception as e:
                         prefect_logger.error(f"Failed to trigger GEX_flow: {str(e)}")
