@@ -7,6 +7,7 @@ import zipfile
 import time as time_module
 from prefect import task, flow, get_run_logger
 from prefect.tasks import task_input_hash
+from prefect.deployments import run_deployment
 from prefect_dask import DaskTaskRunner
 from datetime import datetime, timedelta, time  # This imports the time class from datetime
 from datetime import time as datetime_time
@@ -1409,7 +1410,14 @@ def Intraday_Flow():
                         # generate_charts(final_book_clean_insert,effective_datetime=effective_datetime)
 
                     logger.info(f"Finished flow in {time_module.time() - flow_start_time} sec.")
+                    # At the end of the Intraday_Flow, trigger the other flows
+                    run_zero_dte = run_deployment(name="0 DTE Flow", wait_for_completion=False)
+                    run_one_dte = run_deployment(name="1 DTE Flow", wait_for_completion=False)
+                    run_gex = run_deployment(name="MM GEX Flow", wait_for_completion=False)
 
+                    prefect_logger.info(f"Triggered zero_dte_flow with run ID: {run_zero_dte.id}")
+                    prefect_logger.info(f"Triggered one_dte_flow with run ID: {run_one_dte.id}")
+                    prefect_logger.info(f"Triggered GEX_flow with run ID: {run_gex.id}")
 
                 else:
                     logger.warning(f"DataFrame is empty or None for file: {file_info['file_name']}")
