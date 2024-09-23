@@ -1166,7 +1166,7 @@ def post_processing_flow_2():
     timeout_seconds=3600,  # 1 hour
     # validate_parameters=True
 )
-async def Intraday_Flow():
+def Intraday_Flow():
     prefect_logger = get_run_logger()
 
     flow_start_time = time_module.time()
@@ -1445,8 +1445,10 @@ async def Intraday_Flow():
                         "1 DTE Flow",
                         "MM GEX Flow"
                     ]
-                    await trigger_deployments(deployment_names)
+                    # await trigger_deployments(deployment_names)
                     prefect_logger.info("All gif flows have been triggered.")
+
+
 
                 else:
                     logger.warning(f"DataFrame is empty or None for file: {file_info['file_name']}")
@@ -1483,6 +1485,16 @@ async def Test_Flow():
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(Intraday_Flow())
+    # asyncio.run(Intraday_Flow())
+    Intraday_Flow()
 
-
+# if __name__ == "__main__":
+#     import asyncio
+#     asyncio.run(Test_Flow())
+# if __name__ == "__main__":
+#     """
+#     Synchronous Flow
+#     """
+#     # main_flow_state = asyncio.run(Intraday_Flow())
+#     #Intraday_Flow()
+#     Test_Flow()
