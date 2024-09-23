@@ -1,11 +1,13 @@
 import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor,as_completed
+
+import anyio
 import pandas as pd
 from aio_pika import Message, exceptions as aio_pika_exceptions
 import zipfile
 import time as time_module
-from prefect import task, flow, get_run_logger
+from prefect import task, flow, get_run_logger,get_client
 from prefect.tasks import task_input_hash
 from prefect.deployments import run_deployment
 from prefect_dask import DaskTaskRunner
@@ -68,16 +70,29 @@ logger.info(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
 
 
 # -------------------------------------------#
-def trigger_flow_concurrently(deployment_name):
-    """Helper function to trigger a flow deployment"""
-    logger = get_run_logger()
-    try:
-        result = run_deployment(name=deployment_name)
-        logger.info(f"Triggered {deployment_name} with run ID: {result.id}")
-        return result
-    except Exception as e:
-        logger.error(f"Failed to trigger {deployment_name}: {str(e)}")
-        return None
+
+async def get_deployment_id(deployment_name):
+    async with get_client() as client:
+        deployments = await client.read_deployments()
+        for deployment in deployments:
+            if deployment.name == deployment_name:
+                return deployment.id
+    return None
+
+async def trigger_deployments(deployment_names):
+    prefect_logger = get_run_logger()
+    async with get_client() as client:
+        for deployment_name in deployment_names:
+            try:
+                deployment_id = await get_deployment_id(deployment_name)
+                if deployment_id:
+                    flow_run = await client.create_flow_run_from_deployment(deployment_id=deployment_id)
+                    prefect_logger.info(f"Deployment '{deployment_name}' triggered successfully with flow run ID {flow_run.id}")
+                else:
+                    prefect_logger.error(f"Deployment '{deployment_name}' not found")
+            except Exception as e:
+                prefect_logger.error(f"Failed to trigger deployment '{deployment_name}': {str(e)}")
+
 
 def process_greek(greek_name, poly_data, book):
     latest_greek = poly_data.sort_values('time_stamp', ascending=False).groupby('contract_id').first().reset_index()
@@ -1151,7 +1166,7 @@ def post_processing_flow_2():
     timeout_seconds=3600,  # 1 hour
     # validate_parameters=True
 )
-def Intraday_Flow():
+async def Intraday_Flow():
     prefect_logger = get_run_logger()
 
     flow_start_time = time_module.time()
@@ -1423,53 +1438,15 @@ def Intraday_Flow():
 
                     prefect_logger.info(f"Finished flow in {time_module.time() - flow_start_time} sec.")
 
-                    prefect_logger.info(f"Starting run deployments...")
-                    # Triggering the deployments concurrently
-                    deployments = [
-                        "0DTE gifs/0 DTE Flow",
-                        "1DTE gifs/1 DTE Flow",
-                        "GEX gifs/MM GEX Flow"
+                    # Asynchronous operations at the end
+                    prefect_logger.info("Starting to trigger gif flows...")
+                    deployment_names = [
+                        "0 DTE Flow",
+                        "1 DTE Flow",
+                        "MM GEX Flow"
                     ]
-
-                    logger.info("Attempting to trigger concurrent deployments")
-
-                    with ThreadPoolExecutor(max_workers=3) as executor:
-                        future_to_deployment = {executor.submit(trigger_flow_concurrently, deployment): deployment for
-                                                deployment in deployments}
-
-                        for future in as_completed(future_to_deployment):
-                            deployment = future_to_deployment[future]
-                            try:
-                                result = future.result()
-                                if result:
-                                    logger.info(f"{deployment} triggered successfully with ID {result.id}")
-                            except Exception as e:
-                                logger.error(f"{deployment} generated an exception: {str(e)}")
-                    # try:
-                    #     run_zero_dte = run_deployment(name="0DTE gifs/0 DTE Flow")
-                    #     prefect_logger.info(f"Triggered zero_dte_flow with run ID: {run_zero_dte.id}")
-                    # except Exception as e:
-                    #     prefect_logger.error(f"Failed to trigger zero_dte_flow: {str(e)}")
-                    #
-                    # try:
-                    #     run_one_dte = run_deployment(name="1DTE gifs/1 DTE Flow")
-                    #     if run_one_dte:
-                    #         prefect_logger.info(f"Triggered one_dte_flow with run ID: {run_one_dte.id}")
-                    #     else:
-                    #         prefect_logger.error("run_one_dte is None. Flow did not start.")
-                    # except Exception as e:
-                    #     prefect_logger.error(f"Failed to trigger one_dte_flow: {str(e)}")
-                    #
-                    # try:
-                    #     run_gex = run_deployment(name="GEX gifs/MM GEX Flow")
-                    #     if run_gex:
-                    #         prefect_logger.info(f"Triggered GEX_flow with run ID: {run_gex.id}")
-                    #     else:
-                    #         prefect_logger.error("run_gex is None. Flow did not start.")
-                    # except Exception as e:
-                    #     prefect_logger.error(f"Failed to trigger GEX_flow: {str(e)}")
-
-
+                    await trigger_deployments(deployment_names)
+                    prefect_logger.info("All gif flows have been triggered.")
 
                 else:
                     logger.warning(f"DataFrame is empty or None for file: {file_info['file_name']}")
@@ -1487,9 +1464,25 @@ def Intraday_Flow():
         sftp_utils.disconnect()  # Disconnect at the end of the flow
 
 
+@flow
+async def Test_Flow():
+    prefect_logger = get_run_logger()
+
+    try:
+        prefect_logger.info("Starting to trigger gif flows...")
+        deployment_names = [
+            "0 DTE Flow",
+            "1 DTE Flow",
+            "MM GEX Flow"
+        ]
+        await trigger_deployments(deployment_names)
+        prefect_logger.info("All gif flows have been triggered.")
+
+    except Exception as e:
+        prefect_logger.error(f"Error in Test_Flow: {e}")
+
 if __name__ == "__main__":
-    """
-    Synchronous Flow
-    """
-    # main_flow_state = asyncio.run(Intraday_Flow())
-    Intraday_Flow()
+    import asyncio
+    asyncio.run(Intraday_Flow())
+
+
