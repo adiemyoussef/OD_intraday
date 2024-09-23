@@ -954,7 +954,15 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
 
     logger.debug('Entered update_book_with_latest_greeks')
 
-    latest_poly = get_latest_poly(client)
+    try:
+        latest_poly = get_latest_poly(client)
+    except Exception as e:
+        error_message = f"Failed to fetch latest poly data: {str(e)}. Proceeding with historical data only."
+        custom_logger.error(error_message)
+        prefect_logger.error(error_message)
+        latest_poly = pd.DataFrame()  # Create an empty DataFrame to use in the merge step
+
+
 
     # Create a key for faster merge
     book['strike_price'] = book['strike_price'].astype(int)
@@ -963,14 +971,32 @@ def update_book_with_latest_greeks(book: pd.DataFrame, poly_historical_data: pd.
                           book['strike_price'].astype(str) + '_' + \
                           pd.to_datetime(book['expiration_date_original']).dt.strftime('%Y-%m-%d')
 
-    latest_poly.rename(columns={'implied_volatility': 'iv'}, inplace=True)
-    latest_poly['contract_id'] = latest_poly['option_symbol'] + '_' + \
-                                 latest_poly['contract_type'] + '_' + \
-                                 latest_poly['strike_price'].astype(str) + '_' + \
-                                 latest_poly['expiration_date']
+    # latest_poly.rename(columns={'implied_volatility': 'iv'}, inplace=True)
+    # latest_poly['contract_id'] = latest_poly['option_symbol'] + '_' + \
+    #                              latest_poly['contract_type'] + '_' + \
+    #                              latest_poly['strike_price'].astype(str) + '_' + \
+    #                              latest_poly['expiration_date']
 
-    # Merge latest book with the latest poly data
-    merged_book = pd.merge(book, latest_poly, on='contract_id', how='left', suffixes=('', '_update'))
+    # # Merge latest book with the latest poly data
+    # merged_book = pd.merge(book, latest_poly, on='contract_id', how='left', suffixes=('', '_update'))
+
+    if not latest_poly.empty:
+        prefect_logger.info('Latest Poly Data is not empty ')
+        latest_poly.rename(columns={'implied_volatility': 'iv'}, inplace=True)
+        latest_poly['contract_id'] = latest_poly['option_symbol'] + '_' + \
+                                     latest_poly['contract_type'] + '_' + \
+                                     latest_poly['strike_price'].astype(str) + '_' + \
+                                     latest_poly['expiration_date']
+
+        # Merge latest book with the latest poly data
+        merged_book = pd.merge(book, latest_poly, on='contract_id', how='left', suffixes=('', '_update'))
+
+    else:
+        # If latest_poly is empty, just use the book as is
+        prefect_logger.info('!!!!! Latest Poly Data is empty !!!!!!')
+        merged_book = book.copy()
+        for col in ['iv_update', 'delta_update', 'gamma_update', 'vega_update']:
+            merged_book[col] = np.nan
 
     # Log merge results
     total_contracts = len(book)
@@ -1476,35 +1502,7 @@ async def trigger_gif_flows():
     except Exception as e:
         prefect_logger.error(f"Error in trigger_gif_flows: {e}")
 
-@flow
-async def Test_Flow():
-    prefect_logger = get_run_logger()
-
-    try:
-        prefect_logger.info("Starting to trigger gif flows...")
-        deployment_names = [
-            "0 DTE Flow",
-            "1 DTE Flow",
-            "MM GEX Flow"
-        ]
-        await trigger_deployments(deployment_names)
-        prefect_logger.info("All gif flows have been triggered.")
-
-    except Exception as e:
-        prefect_logger.error(f"Error in Test_Flow: {e}")
 
 if __name__ == "__main__":
-    import asyncio
-    # asyncio.run(Intraday_Flow())
-    Intraday_Flow()
 
-# if __name__ == "__main__":
-#     import asyncio
-#     asyncio.run(Test_Flow())
-# if __name__ == "__main__":
-#     """
-#     Synchronous Flow
-#     """
-#     # main_flow_state = asyncio.run(Intraday_Flow())
-#     #Intraday_Flow()
-#     Test_Flow()
+    Intraday_Flow()
