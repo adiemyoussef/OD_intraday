@@ -247,6 +247,7 @@ def parallel_frame_generation(data, candlesticks, timestamps, participant, strik
 
     args_list = [(timestamp, i, generate_frame_partial, position_type,temp_dir) for i, timestamp in enumerate(timestamps)]
 
+    print(f'About to enter concurent futures for positioning...')
     frame_paths = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_args = {executor.submit(generate_frame_wrapper, args): args for args in args_list}
@@ -1039,6 +1040,7 @@ def generate_video(data, candlesticks, session_date, participant_input, position
         # Generate frames in parallel
         workers = os.cpu_count() - 2
         print(f"Entering Frame generation with {workers}")
+        breakpoint()
         frame_paths = parallel_frame_generation(
             data, candlesticks, timestamps, participant_input, strike_input, expiration_input, position_type_input,
             metric, last_price, full_img_path, temp_dir, max_workers=workers
