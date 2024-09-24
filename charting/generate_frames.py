@@ -705,6 +705,7 @@ def generate_video_(data, candlesticks, session_date, participant_input, positio
         metric, last_price, full_img_path, temp_dir, max_workers=os.cpu_count()
     )
 
+    print(f'!!!!!!!!! FRAME PATHS : {frame_paths} !!!!!!!!!!!!!!!!!!!')
     # for i, timestamp in enumerate(timestamps):
     #     print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
     #
@@ -729,6 +730,7 @@ def generate_video_(data, candlesticks, session_date, participant_input, positio
 
     # Read and write images
     for file_path in file_paths:
+        print(f'File path: {file_path}')
         image = imageio.imread(file_path)
         writer.append_data(image)
 
