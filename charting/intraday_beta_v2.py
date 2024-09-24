@@ -5,10 +5,8 @@ import uuid
 import pandas as pd
 import pytz
 import requests
-from prefect import flow, task#-Line 2
+from prefect import flow, task
 from prefect.tasks import task_input_hash, Task
-from prefect.deployments import run_deployment
-from prefect import task, get_run_logger
 from datetime import timedelta, datetime, date
 from typing import List, Optional
 #from charting.generate_gifs import generate_gif, send_to_discord
@@ -61,7 +59,7 @@ def fetch_data(session_date: str,effective_datetime:str, strike_range: List[int]
     metrics_query = f"""
     SELECT * FROM intraday.intraday_books
     WHERE effective_date = '{session_date}'
-    -- and expiration_date != '2024-09-20 09:15:00'
+    and expiration_date != '2024-09-20 09:15:00'
     """
 
     if effective_datetime is not None:
@@ -145,9 +143,6 @@ def process_data(metric: pd.DataFrame,candlesticks: pd.DataFrame, session_date: 
 @task
 def generate_video_task_(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
                         strike_range: List[int], expiration: str, position_type: list, last_price:float, metric:str = 'positioning'):
-    prefect_logger = get_run_logger()
-    prefect_logger.info(f"Starting generate_video_task for {session_date}")
-    prefect_logger.info(f"Parameters: participant={participant}, strike_range={strike_range}, expiration={expiration}, position_type={position_type}, metric={metric}")
 
     videos_paths =[]
     last_frame_paths = []
@@ -157,8 +152,7 @@ def generate_video_task_(data: pd.DataFrame, candlesticks: pd.DataFrame, session
         video_path, last_frame_path = generate_video(
             data, candlesticks, session_date, participant, pos_type,
             strike_range, expiration, metric, last_price,
-            #output_video=f'{pos_type}_{expiration}_animated_chart.mp4'
-            output_video = f'{pos_type}_{expiration}_{uuid.uuid4().hex}_animated_chart.mp4'
+            output_video=f'{pos_type}_{expiration}_animated_chart.mp4'
         )
         videos_paths.append(video_path)
         last_frame_paths.append(last_frame_path)
@@ -172,11 +166,17 @@ def generate_video_wrapper(pos_type, data, candlesticks, session_date, participa
                            strike_range, expiration, metric, last_price):
     start_time = time_module.time()
 
+    # def generate_video(data, candlesticks, session_date, participant_input, position_type_input, strike_input,
+    #                    expiration_input,
+    #                    metric, last_price,
+    #                    img_path='config/images/logo_dark.png',
+    #                    output_video='None.mp4')
+
 
     video_path, last_frame_path = generate_video(
         data, candlesticks, session_date, participant, pos_type,
         strike_range, expiration, metric, last_price,
-        output_video=f'{pos_type}_{expiration}_{uuid.uuid4().hex}_animated_chart.mp4'
+        output_video=f'{pos_type}_{expiration}_animated_chart.mp4'
     )
     end_time = time_module.time()
     duration = end_time - start_time
@@ -186,12 +186,6 @@ def generate_video_wrapper(pos_type, data, candlesticks, session_date, participa
 @task
 def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
                         strike_range: List[int], expiration: str, position_type: list, last_price:float, metric:str = 'positioning'):
-
-    prefect_logger = get_run_logger()
-    prefect_logger.info(f"Starting generate_video_task for {session_date}")
-    prefect_logger.info(f"Parameters: participant={participant}, strike_range={strike_range}, expiration={expiration}, position_type={position_type}, metric={metric}")
-
-
     videos_paths = []
     last_frame_paths = []
 
@@ -207,7 +201,7 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
         metric=metric,
         last_price=last_price
     )
-    prefect_logger.info(f"Starting Parallel execution")
+
     # Use ThreadPoolExecutor to parallelize the video generation
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Submit tasks for each position type
@@ -220,17 +214,12 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
                 video_path, last_frame_path = future.result()
                 videos_paths.append(video_path)
                 last_frame_paths.append(last_frame_path)
-                prefect_logger.info(f"Successfully generated video for {pos_type}")
             except Exception as exc:
-                prefect_logger.error(f"Video generation for {pos_type} generated an exception: {exc}")
+                print(f"Video generation for {pos_type} generated an exception: {exc}")
                 breakpoint()
 
     # Combined paths with last_frame_paths first, followed by videos_paths
     paths = last_frame_paths + videos_paths
-
-    prefect_logger.info(f"Video generation complete. Total videos: {len(videos_paths)}, Total frames: {len(last_frame_paths)}")
-    prefect_logger.debug(f"Video paths: {videos_paths}")
-    prefect_logger.debug(f"Last frame paths: {last_frame_paths}")
 
     return paths
 
@@ -268,16 +257,16 @@ def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_da
         {"name": "", "value": "", "inline": True},
         {"name": "", "value": "", "inline": True},
         {"name": "", "value": "", "inline": True},
-        # {"name": "💡 Interpretation", "value": (
-        #     "• Green bars indicate Calls positioning\n"
-        #     "• Red bars indicate Puts positioning\n"
-        #     "• Blue bars indicate Net positioning\n"
-        #     "\n"
-        #     "• ■ represents current position magnitude\n"
-        #     "• ● represents the start of day position magnitude\n"
-        #     "• ✖ represents the prior update position magnitude\n"
-        #     "\n"
-        # ), "inline": False},
+        {"name": "💡 Interpretation", "value": (
+            "• Green bars indicate Calls positioning\n"
+            "• Red bars indicate Puts positioning\n"
+            "• Blue bars indicate Net positioning\n"
+            "\n"
+            "• ■ represents current position magnitude\n"
+            "• ● represents the start of day position magnitude\n"
+            "• ✖ represents the prior update position magnitude\n"
+            "\n"
+        ), "inline": False},
     ]
     footer_text = f"Generated on {current_time} | By OptionsDepth Inc."
 
@@ -310,19 +299,16 @@ def zero_dte_flow(
     webhook_url: str = 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_'
                         #DEV_CHANNEL
     ):
-    prefect_logger = get_run_logger()
+
 
     position_types = ['Net', 'C','P']
     expiration = str(session_date)
-
 
     # Set default values if not provided
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-
         strike_range = get_strike_range(db,session_date)
-
     if expiration is None:
         expiration = session_date
     if position_types is None:
@@ -335,11 +321,11 @@ def zero_dte_flow(
     current_time = datetime.now().time()
 
     if current_time < time(12, 0):  # Before 12:00 PM
-        start_time = '05:00:00'
+        start_time = '07:00:00'
     elif time(12, 0) <= current_time < time(23, 0):  # Between 12:00 PM and 7:00 PM
         start_time = '09:00:00'
     else:  # 7:00 PM or later
-        start_time = '05:00:00'  # You might want to adjust this for the after 7:00 PM case
+        start_time = '07:00:00'  # You might want to adjust this for the after 7:00 PM case
 
     print(f"Start time set to: {start_time}")
 
@@ -347,13 +333,9 @@ def zero_dte_flow(
     metrics, candlesticks, last_price = fetch_data(session_date, None,strike_range, expiration, start_time)
     as_of_time_stamp = str(metrics["effective_datetime"].max())
     last_price = last_price.values[0][0]
-
-
     # Process data and generate GIFs
     paths_to_send = generate_video_task_(metrics, candlesticks, session_date, participant, strike_range, expiration,
                                        position_types, last_price ,'positioning')
-    # paths_to_send = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
-    #                                    position_types, last_price ,'positioning')
     print(f"Video and frames generated at: {paths_to_send}")
 
     # Send Discord message with Videos
@@ -375,8 +357,6 @@ def one_dte_flow(
                        #DEV_CHANNEL
 ):
 
-    #session_date = '2024-09-23'
-
     # Set default values if not provided
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
@@ -397,11 +377,11 @@ def one_dte_flow(
     current_time = datetime.now().time()
 
     if current_time < time(12, 0):  # Before 12:00 PM
-        start_time = '05:00:00'
+        start_time = '07:00:00'
     elif time(12, 0) <= current_time < time(23, 0):  # Between 12:00 PM and 7:00 PM
         start_time = '09:00:00'
     else:  # 7:00 PM or later
-        start_time = '05:00:00'  # You might want to adjust this for the after 7:00 PM case
+        start_time = '07:00:00'  # You might want to adjust this for the after 7:00 PM case
 
     print(f"Start time set to: {start_time}")
 
@@ -414,10 +394,8 @@ def one_dte_flow(
     # Process data and generate GIFs
     #gif_paths = process_data(data, candlesticks, session_date, participant, strike_range, expiration, position_types)
 
-    videos_paths = generate_video_task_(data, candlesticks, session_date, participant, strike_range, expiration,
+    videos_paths = generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration,
                                        position_types,last_price ,'positioning')
-    # videos_paths = generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration,
-    #                                    position_types,last_price ,'positioning')
     print(f"Video generated at: {videos_paths}")
 
     # Send Discord message with Videos
@@ -429,6 +407,16 @@ def one_dte_flow(
         print(f"Failed to process or send intraday data for {session_date}")
 
 
+# @flow(name="DEX gifs")
+# def DEX_flow(
+#     session_date: Optional[date] = default_date,
+#     strike_range: Optional[List[int]] = None,
+#     expiration: Optional[str] = None,
+#     participant: str = 'total_customers',
+#     position_types: Optional[List[str]] = None,
+#     webhook_url: str = DEV_CHANNEL
+# ):
+#     pass
 
 @flow(name="GEX gifs")
 def GEX_flow(
@@ -447,10 +435,9 @@ def GEX_flow(
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         #TODO: +/- 200 pts from SPOT Open
-        strike_range = STRIKE_RANGE
+        strike_range = get_strike_range(db,session_date, range_value = 0.025, range_type = 'percent')
     if position_types is None:
         position_types = ['Net','C','P']
-        #position_types = ['Net']
 
     if expiration is None:
         expiration = session_date
@@ -458,11 +445,11 @@ def GEX_flow(
     current_time = datetime.now().time()
 
     if current_time < time(12, 0):  # Before 12:00 PM
-        start_time = '05:00:00'
+        start_time = '07:00:00'
     elif time(12, 0) <= current_time < time(23, 0):  # Between 12:00 PM and 7:00 PM
         start_time = '09:00:00'
     else:  # 7:00 PM or later
-        start_time = '05:00:00'  # You might want to adjust this for the after 7:00 PM case
+        start_time = '07:00:00'  # You might want to adjust this for the after 7:00 PM case
 
     print(f"Start time set to: {start_time}")
     # Fetch data
@@ -471,10 +458,8 @@ def GEX_flow(
 
     last_price = last_price.values[0][0]
 
-    videos_paths = generate_video_task_(metrics, candlesticks, session_date, participant, strike_range, expiration,
+    videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
                                        position_types, last_price,"GEX")
-    # videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
-    #                                    position_types, last_price,"GEX")
     print(f"Video generated at: {videos_paths}")
 
     # Send Discord message with Videos
@@ -1064,7 +1049,7 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
         strike_range = STRIKE_RANGE
     if expiration is None:
         #TODO: Next business day not day
-        expiration = None
+        expiration = str(get_next_expiration_date(session_date))
 
 
     current_time = datetime.now().time()
@@ -1157,17 +1142,6 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
     return response.status_code == 200
 
 
-@flow(name= "Main test flow")
-def main_flow():
-    # Main flow logic here
-
-    # When the main flow completes, trigger other flows concurrently
-    run_zero_dte = run_deployment(name="zero_dte_flow", wait_for_completion=False)
-    run_one_dte = run_deployment(name="one_dte_flow", wait_for_completion=False)
-    run_gex = run_deployment(name="GEX_flow", wait_for_completion=False)
-
-    # Optionally, wait for all flows to complete, if needed
-    return run_zero_dte, run_one_dte, run_gex
 
 if __name__ == "__main__":
     zero_dte_flow()
