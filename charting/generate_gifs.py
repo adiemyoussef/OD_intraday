@@ -29,6 +29,11 @@ import uuid
 from pathlib import Path
 import imageio
 import numpy as np
+import concurrent.futures
+from functools import partial
+import os
+import shutil
+from utilities.misc_utils import *
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -52,13 +57,6 @@ participant_mapping = {
     'procust': 'Professional Customers',
     'total_customers': 'Total Customers'
 }
-
-def generate_frame_wrapper(args):
-    timestamp, index, generate_frame_partial = args
-    fig = generate_frame_partial(timestamp)
-    frame_path = f'temp_frames/frame_{index:03d}.png'
-    fig.write_image(frame_path)
-    return index, frame_path
 
 def process_single_strike_original(group, participant):
     #TODO: Investigate Net
@@ -193,11 +191,82 @@ def generate_color_scale(base_color, is_positive):
     rgb = colorsys.hsv_to_rgb(hsv[0], hsv[1], v)
     return f'rgb({int(rgb[0] * 255)},{int(rgb[1] * 255)},{int(rgb[2] * 255)})'
 
+def generate_frame_wrapper(args):
+    timestamp, index, generate_frame_partial,position_type, temp_dir = args
+    fig = generate_frame_partial(timestamp=timestamp)
+    #frame_path = temp_dir #f'temp_frames_{position_type}/frame_{index:03d}.png'
+    # Use os.path.join to combine temp_dir with the filename
+    frame_path = os.path.join(temp_dir, f'frame_{index:03d}.png')
+    fig.write_image(frame_path, scale=3)
+    return index, frame_path
 
-def generate_frame(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type,metric_to_compute,last_price,
-                   full_img_path):
 
 
+def parallel_frame_generation_(data, candlesticks, timestamps, participant, strike_input, expiration_input,
+                              position_type, metric, last_price, full_img_path, temp_dir, max_workers=None):
+    generate_frame_partial = partial(
+        generate_frame,
+        data=data,
+        candlesticks=candlesticks,
+        participant=participant,
+        strike_input=strike_input,
+        expiration_input=expiration_input,
+        position_type=position_type,
+        metric_to_compute=metric,
+        last_price=last_price,
+        full_img_path=full_img_path
+    )
+
+    args_list = [(timestamp, i, generate_frame_partial,position_type) for i, timestamp in enumerate(timestamps)]
+
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        results = list(executor.map(generate_frame_wrapper, args_list))
+
+    # Sort results to maintain order
+    results.sort(key=lambda x: x[0])
+    frame_paths = [path for _, path in results]
+
+    return frame_paths
+
+def parallel_frame_generation(data, candlesticks, timestamps, participant, strike_input, expiration_input,
+                              position_type, metric, last_price, full_img_path, temp_dir, max_workers=None):
+    generate_frame_partial = partial(
+        generate_frame,
+        data=data,
+        candlesticks=candlesticks,
+        participant=participant,
+        strike_input=strike_input,
+        expiration_input=expiration_input,
+        position_type=position_type,
+        metric_to_compute=metric,
+        last_price=last_price,
+        full_img_path=full_img_path
+    )
+
+    args_list = [(timestamp, i, generate_frame_partial, position_type,temp_dir) for i, timestamp in enumerate(timestamps)]
+
+    frame_paths = []
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        future_to_args = {executor.submit(generate_frame_wrapper, args): args for args in args_list}
+        for future in concurrent.futures.as_completed(future_to_args):
+            args = future_to_args[future]
+            try:
+                index, path = future.result()
+                frame_paths.append((index, path))
+                #print(f"Generated frame {index} for {position_type}")
+            except Exception as e:
+                print(f"Error generating frame for {args[0]}: {str(e)}")
+
+    # Sort results to maintain order
+    frame_paths.sort(key=lambda x: x[0])
+    return [path for _, path in frame_paths]
+
+# def generate_frame(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type,metric_to_compute,last_price,
+#                    full_img_path):
+def generate_frame(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type,
+                   metric_to_compute, last_price, full_img_path):
+
+    # ... rest of the function ...
     if metric_to_compute == 'GEX':
         x_axis_title = "Notional Gamma (M$)"
     elif metric_to_compute == 'DEX':
@@ -413,9 +482,9 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
         # Add some padding to the right of the chart
         x_padding = (x_max - x_min) * 0.33  # 10% of the x-axis range
         new_x_max = x_max + x_padding
-
+        new_x_min = x_min - x_padding
         # Update the x-axis range
-        fig.update_xaxes(range=[x_min, new_x_max])
+        fig.update_xaxes(range=[new_x_min, new_x_max])
 
         fig.add_shape(
             type="line",
@@ -543,7 +612,7 @@ def generate_gif(data,candlesticks, session_date, participant_input, position_ty
     frames = []
 
     for i, timestamp in enumerate(timestamps):
-        print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
+        #print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
         fig = generate_frame(data,candlesticks, timestamp, participant_input, strike_input, expiration_input, position_type_input,
                              full_img_path, metric, last_price)
 
@@ -606,7 +675,7 @@ def generate_discord_compatible_video(input_video_path, output_video_path):
         return None
 
 
-def generate_video(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
+def generate_video_(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
                    metric,last_price,
                    img_path='config/images/logo_dark.png',
                    output_video='None.mp4'):
@@ -628,18 +697,25 @@ def generate_video(data, candlesticks, session_date, participant_input, position
     # Generate frames
     frame_paths = []
 
-    for i, timestamp in enumerate(timestamps):
-        print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
+    frame_paths = parallel_frame_generation(
+        data, candlesticks, timestamps, participant_input, strike_input, expiration_input, position_type_input,
+        metric, last_price, full_img_path, temp_dir, max_workers=os.cpu_count()
+    )
 
-        fig = generate_frame(data, candlesticks, timestamp, participant_input, strike_input, expiration_input, position_type_input,
-                             metric,last_price,
-                             full_img_path)
-
-        # Save the frame as an image
-        frame_path = os.path.join(temp_dir, f'frame_{i:03d}.png')
-
-        fig.write_image(frame_path,scale= 3)
-        frame_paths.append(frame_path)
+    # for i, timestamp in enumerate(timestamps):
+    #     print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
+    #
+    #     fig = generate_frame(data, candlesticks, timestamp, participant_input, strike_input, expiration_input, position_type_input,
+    #                          metric,last_price,
+    #                          full_img_path)
+    #
+    #
+    #
+    #     # Save the frame as an image
+    #     frame_path = os.path.join(temp_dir, f'frame_{i:03d}.png')
+    #
+    #     fig.write_image(frame_path,scale= 3)
+    #     frame_paths.append(frame_path)
 
     # Use the frame_paths directly, no need for additional processing
     file_paths = frame_paths
@@ -665,20 +741,73 @@ def generate_video(data, candlesticks, session_date, participant_input, position
     # os.rmdir(temp_dir)
     # os.remove(temp_output)
 
+    breakpoint()
+    # Save the last frame separately
+    # last_frame_path = os.path.join(temp_dir, f'last_frame_{position_type_input}_{timestamps[-1]}.png')
+    # fig.write_image(last_frame_path)
+    #
+    #
+    #
+    #
+    # if final_output:
+    #     print(f"Video saved as {final_output}")
+    #     return final_output, last_frame_path
+    # else:
+    #     print("Failed to generate Discord-compatible video")
+    #     return None
+
+
+def generate_video__(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
+                   metric, last_price,
+                   img_path='config/images/logo_dark.png',
+                   output_video='None.mp4'):
+
+    # Get the project root directory
+    project_root = Path(__file__).parent.parent
+
+    # Construct the full path to the image
+    full_img_path = project_root / img_path
+
+    # Get unique timestamps
+    timestamps = data['effective_datetime'].unique()
+
+
+
+    # Create a unique temporary directory to store frames
+    temp_dir = f'temp_frames_{position_type_input}_{uuid.uuid4().hex}'
+    os.makedirs(temp_dir, exist_ok=True)
+
+    # Generate frames in parallel
+    frame_paths = parallel_frame_generation(
+        data, candlesticks, timestamps, participant_input, strike_input, expiration_input, position_type_input,
+        metric, last_price, full_img_path, temp_dir, max_workers=os.cpu_count()
+    )
+
+    # Create the writer with the correct output path
+    temp_output = f'temp_{output_video}'
+    writer = imageio.get_writer(temp_output, fps=3)
+
+    # Read and write images
+    for file_path in frame_paths:
+        image = imageio.imread(file_path)
+        writer.append_data(image)
+
+    print('Finished writing temporary video')
+    writer.close()
+
+    # Convert to Discord-compatible format
+    final_output = generate_discord_compatible_video(temp_output, output_video)
+    breakpoint()
     # Save the last frame separately
     last_frame_path = os.path.join(temp_dir, f'last_frame_{position_type_input}_{timestamps[-1]}.png')
-    fig.write_image(last_frame_path)
-
-
-
+    frame_paths[-1].write_image(last_frame_path)
 
     if final_output:
         print(f"Video saved as {final_output}")
         return final_output, last_frame_path
     else:
         print("Failed to generate Discord-compatible video")
-        return None
-
+        return None, None
 def generate_snapshot(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
                    metric,last_price,
                    img_path='config/images/logo_dark.png',
@@ -787,11 +916,20 @@ def send_to_discord(webhook_url, file_paths, content=None, title=None, descripti
         breakpoint()
 
     # Second Request: Send the GIFs separately
+    sorted_file_paths = sort_file_paths(file_paths)
+
+    # Now use the sorted paths to create the files dictionary
     files = {}
-    for i, file_path in enumerate(file_paths):
+    for i, file_path in enumerate(sorted_file_paths):
         with open(file_path, 'rb') as f:
             file_content = f.read()
         files[f"file{i}"] = (os.path.basename(file_path), file_content, "image/gif")
+
+    # files = {}
+    # for i, file_path in enumerate(file_paths):
+    #     with open(file_path, 'rb') as f:
+    #         file_content = f.read()
+    #     files[f"file{i}"] = (os.path.basename(file_path), file_content, "image/gif")
 
     # Send the second request (GIFs only)
     response = requests.post(webhook_url, files=files)
@@ -876,7 +1014,88 @@ def generate_and_send_gif(data, session_date, participant, position_type , strik
     os.remove(gif_path)  # Clean up the gif file
     return success
 
+def generate_video(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
+                   metric, last_price,
+                   img_path='config/images/logo_dark.png',
+                   output_video='None.mp4'):
 
+    # Get the project root directory
+    project_root = Path(__file__).parent.parent
+
+    # Construct the full path to the image
+    full_img_path = project_root / img_path
+
+    # Get unique timestamps
+    timestamps = data['effective_datetime'].unique()
+
+    # Create a unique temporary directory to store frames
+    temp_dir = f'temp_frames_{position_type_input}_{uuid.uuid4().hex}'
+    os.makedirs(temp_dir, exist_ok=True)
+    print(f"Created temporary directory: {temp_dir}")
+
+    try:
+        # Generate frames in parallel
+        frame_paths = parallel_frame_generation(
+            data, candlesticks, timestamps, participant_input, strike_input, expiration_input, position_type_input,
+            metric, last_price, full_img_path, temp_dir, max_workers=os.cpu_count()
+        )
+        print(f"Generated {len(frame_paths)} frames")
+
+        # Check if any frames were generated
+        if not frame_paths:
+            raise ValueError(f"No frames were generated for {position_type_input}")
+
+        # Create the writer with the correct output path
+        temp_output = f'temp_{output_video}'
+        writer = imageio.get_writer(temp_output, fps=3)
+
+        # Read and write images
+        for file_path in frame_paths:
+            if not os.path.exists(file_path):
+                print(f"Warning: Frame file not found: {file_path}")
+                continue
+            image = imageio.imread(file_path)
+            writer.append_data(image)
+
+        print('Finished writing temporary video')
+        writer.close()
+
+        # Convert to Discord-compatible format
+        final_output = generate_discord_compatible_video(temp_output, output_video)
+
+        # Save the last frame separately
+        last_frame_path = os.path.join(temp_dir, f'last_frame_{position_type_input}_{timestamps[-1]}.png')
+        if os.path.exists(frame_paths[-1]):
+            shutil.copy(frame_paths[-1], last_frame_path)
+        else:
+            print(f"Warning: Last frame not found: {frame_paths[-1]}")
+
+        if final_output:
+            print(f"Video saved as {final_output}")
+            return final_output, last_frame_path
+        else:
+            print("Failed to generate Discord-compatible video")
+            return None, None
+
+    except Exception as e:
+        print(f"Error in generate_video: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None, None
+
+    finally:
+        # Clean up temporary files
+        for file in os.listdir(temp_dir):
+            try:
+                #os.remove(os.path.join(temp_dir, file))
+                print(f"Should have removed file {file}")
+            except Exception as e:
+                print(f"Error removing file {file}: {str(e)}")
+        try:
+            #os.rmdir(temp_dir)
+            print(f"Should have removed directory {temp_dir}")
+        except Exception as e:
+            print(f"Error removing directory {temp_dir}: {str(e)}")
 def generate_and_send_video(data, session_date, participant, position_type , strike_input, expiration,metric,last_price,webhook_url):
     video_path = generate_video(
         data,

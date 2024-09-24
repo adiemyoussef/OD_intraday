@@ -248,34 +248,6 @@ deployments:
   description:
   parameters: {}
 
-- name: Revised Book
-  entrypoint: prefect_flow/daily_generate_mm_book_intraday.py:generate_revised_book
-  work_pool:
-    name: intraday-paperspace-agent
-    work_queue_name:
-    job_variables: {}
-  schedules:
-  - cron: 30 2 * * 2-6
-    timezone: America/New_York
-    day_or: true
-    active: true
-  storage:
-    type: github
-    repository: https://github.com/adiemyoussef/OD_intraday.git
-    reference: dev_test
-    access_token:
-      token:
-  pull:
-  - prefect.deployments.steps.git_clone:
-      repository: https://github.com/adiemyoussef/OD_intraday.git
-      branch: dev_test
-      access_token: '{{ prefect.blocks.github-credentials.my-github-credentials }}'
-  version:
-  tags: []
-  description: "\n    Generate the official start of day book\n    "
-  parameters: {}
-
-
 - name: Generate Heatmap
   entrypoint: heatmaps_simulation/heatmap_task.py:heatmap_generation_flow
   work_pool:
@@ -330,3 +302,89 @@ deployments:
     anchor_date: '2024-09-23T15:29:12.842778+00:00'
     timezone: UTC
     active: false
+
+#--------------- MySQL ----------------- #
+- name: Revised Book - MySQL
+  entrypoint: prefect_flow/daily_generate_mm_book_intraday.py:generate_revised_book
+  work_pool:
+    name: intraday-paperspace-agent
+    work_queue_name:
+    job_variables: {}
+  schedules:
+  - cron: 30 2 * * 2-6
+    timezone: America/New_York
+    day_or: true
+    active: true
+  storage:
+    type: github
+    repository: https://github.com/adiemyoussef/OD_intraday.git
+    reference: dev_test
+    access_token:
+      token:
+  pull:
+  - prefect.deployments.steps.git_clone:
+      repository: https://github.com/adiemyoussef/OD_intraday.git
+      branch: dev_test
+      access_token: '{{ prefect.blocks.github-credentials.my-github-credentials }}'
+  version:
+  tags: []
+  description: "\n    Generate the official start of day book\n    "
+  parameters: {}
+
+
+
+#-------------- Stage ----------------- #
+- name: Revised Book - Stage
+  entrypoint: prefect_flow/flow_dailybook_stage.py:generate_revised_book
+  work_pool:
+    name: intraday-paperspace-agent
+    work_queue_name:
+    job_variables: {}
+  schedules:
+  - cron: 30 2 * * 2-6
+    timezone: America/New_York
+    day_or: true
+    active: true
+  storage:
+    type: github
+    repository: https://github.com/adiemyoussef/OD_intraday.git
+    reference: dev_test
+    access_token:
+      token:
+  pull:
+  - prefect.deployments.steps.git_clone:
+      repository: https://github.com/adiemyoussef/OD_intraday.git
+      branch: dev_test
+      access_token: '{{ prefect.blocks.github-credentials.my-github-credentials }}'
+  version:
+  tags: []
+  description: "\n    Generate the official start of day book\n    "
+  parameters: {}
+
+#-------------- PROD---------------#
+- name: Revised Book - Prod
+  entrypoint: prefect_flow/flow_dailybook_prod.py:generate_revised_book
+  work_pool:
+    name: intraday-paperspace-agent
+    work_queue_name:
+    job_variables: {}
+  schedules:
+  - cron: 30 2 * * 2-6
+    timezone: America/New_York
+    day_or: true
+    active: true
+  storage:
+    type: github
+    repository: https://github.com/adiemyoussef/OD_intraday.git
+    reference: dev_test
+    access_token:
+      token:
+  pull:
+  - prefect.deployments.steps.git_clone:
+      repository: https://github.com/adiemyoussef/OD_intraday.git
+      branch: dev_test
+      access_token: '{{ prefect.blocks.github-credentials.my-github-credentials }}'
+  version:
+  tags: []
+  description: "\n    Generate the official start of day book for prod environment\n    "
+  parameters: {}
