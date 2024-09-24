@@ -1256,5 +1256,5 @@ if __name__ == "__main__":
     #
     #     #breakpoint()
     #     plot_gamma_intraday(df_book,effective_datetime)
-    create_gif(folder_path=r"/Users/youssefadiem/PycharmProjects/OptionsDepth_intraday/heatmaps_simulation/temp_frames_83e0064c70504be5934041c78ef44024", output_filename= '20240918_gamma_recap.mp4')
+    create_gif(folder_path=r"/Users/youssefadiem/PycharmProjects/OptionsDepth_intraday/heatmaps_simulation/temp_frames_42d6f4ea211145498a868a62cb245339", output_filename= '20240920_gamma_recap.mp4')
 
