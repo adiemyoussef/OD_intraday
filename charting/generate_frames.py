@@ -744,7 +744,6 @@ def generate_video_(data, candlesticks, session_date, participant_input, positio
     # os.rmdir(temp_dir)
     # os.remove(temp_output)
 
-    breakpoint()
     # Save the last frame separately
     # last_frame_path = os.path.join(temp_dir, f'last_frame_{position_type_input}_{timestamps[-1]}.png')
     # fig.write_image(last_frame_path)
@@ -800,7 +799,7 @@ def generate_video__(data, candlesticks, session_date, participant_input, positi
 
     # Convert to Discord-compatible format
     final_output = generate_discord_compatible_video(temp_output, output_video)
-    breakpoint()
+
     # Save the last frame separately
     last_frame_path = os.path.join(temp_dir, f'last_frame_{position_type_input}_{timestamps[-1]}.png')
     frame_paths[-1].write_image(last_frame_path)

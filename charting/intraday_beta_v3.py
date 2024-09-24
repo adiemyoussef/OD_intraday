@@ -218,6 +218,8 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
             pos_type = future_to_pos_type[future]
             try:
                 video_path, last_frame_path = future.result()
+                print(f'video_path: {video_path}')
+                print(f'last_frame_path: {last_frame_path}')
                 videos_paths.append(video_path)
                 last_frame_paths.append(last_frame_path)
                 prefect_logger.info(f"Successfully generated video for {pos_type}")
