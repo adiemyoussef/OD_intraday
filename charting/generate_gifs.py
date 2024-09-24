@@ -230,6 +230,8 @@ def parallel_frame_generation_(data, candlesticks, timestamps, participant, stri
 
 def parallel_frame_generation(data, candlesticks, timestamps, participant, strike_input, expiration_input,
                               position_type, metric, last_price, full_img_path, temp_dir, max_workers=None):
+
+
     generate_frame_partial = partial(
         generate_frame,
         data=data,
@@ -1035,9 +1037,11 @@ def generate_video(data, candlesticks, session_date, participant_input, position
 
     try:
         # Generate frames in parallel
+        workers = os.cpu_count() - 2
+        print(f"Entering Frame generation with {workers}")
         frame_paths = parallel_frame_generation(
             data, candlesticks, timestamps, participant_input, strike_input, expiration_input, position_type_input,
-            metric, last_price, full_img_path, temp_dir, max_workers=os.cpu_count()
+            metric, last_price, full_img_path, temp_dir, max_workers=workers
         )
         print(f"Generated {len(frame_paths)} frames")
 
