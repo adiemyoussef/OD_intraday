@@ -222,7 +222,7 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
                 last_frame_paths.append(last_frame_path)
                 prefect_logger.info(f"Successfully generated video for {pos_type}")
             except Exception as exc:
-                print(f"Video generation for {pos_type} generated an exception: {exc}")
+                prefect_logger.error(f"Video generation for {pos_type} generated an exception: {exc}")
                 breakpoint()
 
     # Combined paths with last_frame_paths first, followed by videos_paths
@@ -1170,9 +1170,9 @@ def main_flow():
     return run_zero_dte, run_one_dte, run_gex
 
 if __name__ == "__main__":
-    #zero_dte_flow()
+    zero_dte_flow()
     one_dte_flow()
-    #GEX_flow()
+    GEX_flow()
     #plot_depthview(webhook_url=WebhookUrl.DEFAULT)
     #generate_heatmap_gif()
     #all_GEX_flow()
