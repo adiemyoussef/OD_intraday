@@ -56,7 +56,7 @@ logger = get_logger(debug_mode=False)
 db_utils = DatabaseUtilities(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, logger=logger)
 pg_data = PostGreData(
     host=POSGRE_DB_HOST,
-    port=POSGRE_DB_PORT,  # Default PostgreSQL port
+    port=POSGRE_DB_PORT,
     user=POSGRE_DB_USER,
     password=POSGRE_DB_PASSWORD,
     database=POSGRE_DB_NAME

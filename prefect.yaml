@@ -386,5 +386,6 @@ deployments:
       access_token: '{{ prefect.blocks.github-credentials.my-github-credentials }}'
   version:
   tags: []
-  description: "\n    Generate the official start of day book for prod environment\n    "
+  description: "\n    Generate the official start of day book for prod environment\n\
+    \    "
   parameters: {}

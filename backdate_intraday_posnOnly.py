@@ -568,6 +568,7 @@ async def process_session(sftp_utility: SFTPUtility, session_date: str, sftp_fol
         return
 
     session_files = await get_session_files(sftp_utility, sftp_folder, session_date)
+    breakpoint()
     logger.debug(f"session_files: {session_files}")
 
     if session_date == '2024-08-05':
