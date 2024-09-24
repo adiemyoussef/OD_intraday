@@ -70,12 +70,12 @@ POSGRE_STAGE_DB_NAME = postgresql_STAGE_config['database']
 POSGRE_STAGE_DB_DRIVER = postgresql_STAGE_config['driver']
 
 # Posgre PROD Database Configuration
-POSGRE_PROD_DB_HOST = load_postgre_PROD_db_config['host']
-POSGRE_PROD_DB_PORT = load_postgre_PROD_db_config['port']
-POSGRE_PROD_DB_USER = load_postgre_PROD_db_config['user']
-POSGRE_PROD_DB_PASSWORD = load_postgre_PROD_db_config['password']
-POSGRE_PROD_DB_NAME = load_postgre_PROD_db_config['database']
-POSGRE_PROD_DB_DRIVER = load_postgre_PROD_db_config['driver']
+POSGRE_PROD_DB_HOST = postgresql_PROD_config['host']
+POSGRE_PROD_DB_PORT = postgresql_PROD_config['port']
+POSGRE_PROD_DB_USER = postgresql_PROD_config['user']
+POSGRE_PROD_DB_PASSWORD = postgresql_PROD_config['password']
+POSGRE_PROD_DB_NAME = postgresql_PROD_config['database']
+POSGRE_PROD_DB_DRIVER = postgresql_PROD_config['driver']
 
 
 # Digital Ocean Spaces Configuration

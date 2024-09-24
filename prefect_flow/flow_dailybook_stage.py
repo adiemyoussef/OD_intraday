@@ -16,6 +16,17 @@ db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()
 print(f'{db.get_status()}')
 
+pg_data = PostGreData(
+    host=POSGRE_STAGE_DB_HOST,
+    port=POSGRE_STAGE_DB_PORT,
+    user=POSGRE_STAGE_DB_USER,
+    password=POSGRE_STAGE_DB_PASSWORD,
+    database=POSGRE_STAGE_DB_NAME
+)
+pg_data.connect()
+print(f'Postgre Status -- > {pg_data.get_status()}')
+
+
 
 def round_up_to_nearest_5min(dt):
     # Round up to the nearest 5 minutes
@@ -63,8 +74,8 @@ def date_isin_books(quote_date:str, ticker:str):
         'ticker': ticker
     }
 
-    result = db.execute_query(is_date_in_books, params=parameters)
-
+    #result = db.execute_query(is_date_in_books, params=parameters)
+    result = pg_data.execute_query(is_date_in_pg_books, params=parameters)
     # Assuming the result is a DataFrame with the count in the first cell
     count = result.iloc[0, 0]
 
@@ -467,7 +478,7 @@ def generate_book(ticker:str, date:str):
     return updated_mm_book
 
 @flow(
-    name="Revised Book",
+    name="Revised Book - Stage",
     description="""
     Generate the official start of day book
     """,
@@ -497,8 +508,8 @@ def generate_revised_book(override_entries=False, sleep_time=600, retry_cycles=6
 
     prefect_logger.info("Starting....")
     oc_dates = db.execute_query('select distinct(quote_date) FROM landing.OC')
-    as_of_dates = db.execute_query('select distinct(as_of_date) FROM intraday.new_daily_book_format')
-
+    #as_of_dates = db.execute_query('select distinct(as_of_date) FROM intraday.new_daily_book_format')
+    as_of_dates = pg_data.execute_query('select distinct(as_of_date) FROM public.charts_dailybook')
     # Perform a left join
     merged_df = pd.merge(oc_dates, as_of_dates, left_on='quote_date', right_on='as_of_date', how='left')
     merged_df['quote_date'] = pd.to_datetime(merged_df['quote_date'])
@@ -511,22 +522,26 @@ def generate_revised_book(override_entries=False, sleep_time=600, retry_cycles=6
 
         for _ in range(retry_cycles):
             if tables_are_synced():
-                quote_date = db.execute_query(latest_quote_date).values[0][0]
+                #quote_date = db.execute_query(latest_quote_date).values[0][0]
+                #quote_date = pg_data.execute_query(latest_quote_date).values[0][0]
+                #print(f'Quote date:{quote_date}')
+                #if date_isin_books(quote_date, ticker.replace('^', '')) and override_entries:
+                    #prefect_logger.info(f'!!!!!!!!!!!---------Override entry for the following quote date: {date}-------------!!!!!!!!!!!')
+                df_book = generate_book(ticker, date)
+                #breakpoint()
+                pg_data.insert_progress('public', 'charts_dailybook', df_book)
+                    #insert_to_table(df_book, 'intraday', 'new_daily_book_format')
 
-                if date_isin_books(quote_date, ticker.replace('^', '')) and override_entries:
-                    prefect_logger.info(f'Override entry for the following quote date: {date}')
-                    df_book = generate_book(ticker, date)
-                    insert_to_table(df_book, 'intraday', 'new_daily_book_format')
-
-                elif not date_isin_books(quote_date, ticker.replace('^', '')):
-                    prefect_logger.info(f'Quote date {date} not in table')
-                    df_book = generate_book(ticker, date)
-
-                    insert_to_table(df_book, 'intraday', 'new_daily_book_format')
-
-
-                prefect_logger.info(f"{date} already in intraday.new_daily_book_format. No Override")
-                break
+                # elif not date_isin_books(quote_date, ticker.replace('^', '')):
+                #     prefect_logger.info(f'############--------- Quote date {date} not in table---------############')
+                #     df_book = generate_book(ticker, date)
+                #     #breakpoint()
+                #     #insert_to_table(df_book, 'intraday', 'new_daily_book_format')
+                #     pg_data.insert_progress('public','charts_dailybook',df_book)
+                #
+                #
+                # prefect_logger.info(f"{date} already in intraday.new_daily_book_format. No Override")
+                # break
             else:
                 time.sleep(sleep_time)  # Wait for 10 minutes
         else:
