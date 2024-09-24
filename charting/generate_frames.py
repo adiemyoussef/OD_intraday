@@ -197,6 +197,7 @@ def generate_frame_wrapper(args):
     #frame_path = temp_dir #f'temp_frames_{position_type}/frame_{index:03d}.png'
     # Use os.path.join to combine temp_dir with the filename
     frame_path = os.path.join(temp_dir, f'frame_{index:03d}.png')
+    print(f'frame path: {frame_path}')
     fig.write_image(frame_path, scale=3)
     return index, frame_path
 
@@ -255,7 +256,7 @@ def parallel_frame_generation(data, candlesticks, timestamps, participant, strik
             try:
                 index, path = future.result()
                 frame_paths.append((index, path))
-                #print(f"Generated frame {index} for {position_type}")
+                print(f"Generated frame {index} for {position_type}")
             except Exception as e:
                 print(f"Error generating frame for {args[0]}: {str(e)}")
 
@@ -1037,8 +1038,8 @@ def generate_video(data, candlesticks, session_date, participant_input, position
 
     try:
         # Generate frames in parallel
-        workers = os.cpu_count() - 2
-        print(f"Entering Frame generation with {workers}")
+        workers = 4 #os.cpu_count()
+        print(f"Entering Frame generation with {workers} workers")
         frame_paths = parallel_frame_generation(
             data, candlesticks, timestamps, participant_input, strike_input, expiration_input, position_type_input,
             metric, last_price, full_img_path, temp_dir, max_workers=workers
