@@ -1453,9 +1453,9 @@ def Intraday_Flow():
                         if current_time > datetime_time(7, 0):
                             intraday_gamma_heatmap(db, effective_datetime, current_date)
                             intraday_charm_heatmap(db, effective_datetime, current_date)
-                            prefect_logger.info("Triggering gif flows...")
-                            run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
-                            prefect_logger.info("Gif flows triggered.")
+                            # prefect_logger.info("Triggering gif flows...")
+                            # run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
+                            # prefect_logger.info("Gif flows triggered.")
 
 
 
