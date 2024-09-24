@@ -283,6 +283,7 @@ def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_da
     ]
     footer_text = f"Generated on {current_time} | By OptionsDepth Inc."
 
+    breakpoint()
     success = send_to_discord(
         webhook_url,
         file_paths,

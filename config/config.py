@@ -10,6 +10,12 @@ def load_db_config():
 def load_postgre_db_config():
     return JSON.load("postgre-credentials").value
 
+def load_postgre_STAGE_db_config():
+    return JSON.load("postgre-stage").value
+
+def load_postgre_PROD_db_config():
+    return JSON.load("postgre-prod").value
+
 def load_sftp_config():
     return JSON.load("sftp-credentials").value
 
@@ -27,8 +33,11 @@ def load_other_config():
 
 
 
+
 # Load configurations
 postgresql_config = load_postgre_db_config()
+postgresql_STAGE_config = load_postgre_STAGE_db_config()
+postgresql_PROD_config = load_postgre_PROD_db_config()
 db_config = load_db_config()
 sftp_config = load_sftp_config()
 rabbitmq_config = load_rabbitmq_config()
@@ -44,13 +53,30 @@ DB_PASSWORD = db_config['password']
 DB_NAME = db_config['database']
 DB_DRIVER = db_config['driver']
 
-# Posgre Database Configuration
+# Posgre Test Database Configuration
 POSGRE_DB_HOST = postgresql_config['host']
 POSGRE_DB_PORT = postgresql_config['port']
 POSGRE_DB_USER = postgresql_config['user']
 POSGRE_DB_PASSWORD = postgresql_config['password']
 POSGRE_DB_NAME = postgresql_config['database']
 POSGRE_DB_DRIVER = postgresql_config['driver']
+
+# Posgre STAGE Database Configuration
+POSGRE_STAGE_DB_HOST = postgresql_STAGE_config['host']
+POSGRE_STAGE_DB_PORT = postgresql_STAGE_config['port']
+POSGRE_STAGE_DB_USER = postgresql_STAGE_config['user']
+POSGRE_STAGE_DB_PASSWORD = postgresql_STAGE_config['password']
+POSGRE_STAGE_DB_NAME = postgresql_STAGE_config['database']
+POSGRE_STAGE_DB_DRIVER = postgresql_STAGE_config['driver']
+
+# Posgre PROD Database Configuration
+POSGRE_PROD_DB_HOST = load_postgre_PROD_db_config['host']
+POSGRE_PROD_DB_PORT = load_postgre_PROD_db_config['port']
+POSGRE_PROD_DB_USER = load_postgre_PROD_db_config['user']
+POSGRE_PROD_DB_PASSWORD = load_postgre_PROD_db_config['password']
+POSGRE_PROD_DB_NAME = load_postgre_PROD_db_config['database']
+POSGRE_PROD_DB_DRIVER = load_postgre_PROD_db_config['driver']
+
 
 # Digital Ocean Spaces Configuration
 DO_SPACES_URL = do_spaces_config['url']
