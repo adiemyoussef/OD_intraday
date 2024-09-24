@@ -350,10 +350,10 @@ def zero_dte_flow(
 
 
     # Process data and generate GIFs
-    # paths_to_send = generate_video_task_(metrics, candlesticks, session_date, participant, strike_range, expiration,
-    #                                    position_types, last_price ,'positioning')
-    paths_to_send = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+    paths_to_send = generate_video_task_(metrics, candlesticks, session_date, participant, strike_range, expiration,
                                        position_types, last_price ,'positioning')
+    # paths_to_send = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+    #                                    position_types, last_price ,'positioning')
     print(f"Video and frames generated at: {paths_to_send}")
 
     # Send Discord message with Videos
@@ -414,10 +414,10 @@ def one_dte_flow(
     # Process data and generate GIFs
     #gif_paths = process_data(data, candlesticks, session_date, participant, strike_range, expiration, position_types)
 
-    # videos_paths = generate_video_task_(data, candlesticks, session_date, participant, strike_range, expiration,
-    #                                    position_types,last_price ,'positioning')
-    videos_paths = generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration,
+    videos_paths = generate_video_task_(data, candlesticks, session_date, participant, strike_range, expiration,
                                        position_types,last_price ,'positioning')
+    # videos_paths = generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration,
+    #                                    position_types,last_price ,'positioning')
     print(f"Video generated at: {videos_paths}")
 
     # Send Discord message with Videos
@@ -471,10 +471,10 @@ def GEX_flow(
 
     last_price = last_price.values[0][0]
 
-    # videos_paths = generate_video_task_(metrics, candlesticks, session_date, participant, strike_range, expiration,
-    #                                    position_types, last_price,"GEX")
-    videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+    videos_paths = generate_video_task_(metrics, candlesticks, session_date, participant, strike_range, expiration,
                                        position_types, last_price,"GEX")
+    # videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+    #                                    position_types, last_price,"GEX")
     print(f"Video generated at: {videos_paths}")
 
     # Send Discord message with Videos
