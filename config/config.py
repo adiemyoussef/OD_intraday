@@ -143,7 +143,21 @@ BACKGROUND_COLOR = 'white'
 TEXT_COLOR = 'black'
 POSITION_COULORS = ['black', 'red', 'green']
 FLOW_COLORS = ['magenta', 'yellow', 'grey']
+BAR_POSN_COLORS = {
+    'Net': {
+        'negative': 'rgb(0,149,255)',  # light blue
+        'positive': 'rgb(0,149,255)'  # light blue
 
+    },
+    'C': {
+        'negative': 'rgb(0,217,51)',  # dark green
+        'positive': 'rgb(0,217,51)'  # light green
+    },
+    'P': {
+        'negative': 'rgb(204,3,0)',  # dark red
+        'positive': 'rgb(204,3,0)'  # light red
+    }
+}
 # Watermarks
 LOGO_dark = os.path.join('..', 'config', 'images', 'logo_dark.png')
 LOGO_light = os.path.join('..', 'config', 'images', 'logo_light.png')

@@ -143,7 +143,7 @@ def process_data(metric: pd.DataFrame,candlesticks: pd.DataFrame, session_date: 
     return gif_paths
 
 @task
-def generate_video_task_(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
+def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
                         strike_range: List[int], expiration: str, position_type: list, last_price:float, metric:str = 'positioning'):
     prefect_logger = get_run_logger()
     prefect_logger.info(f"Starting generate_video_task for {session_date}")
@@ -157,7 +157,7 @@ def generate_video_task_(data: pd.DataFrame, candlesticks: pd.DataFrame, session
         video_path, last_frame_path = generate_video(
             data, candlesticks, session_date, participant, pos_type,
             strike_range, expiration, metric, last_price,
-            #output_video=f'{pos_type}_{expiration}_animated_chart.mp4'
+
             output_video = f'{pos_type}_{expiration}_{uuid.uuid4().hex}_animated_chart.mp4'
         )
         videos_paths.append(video_path)
@@ -184,7 +184,7 @@ def generate_video_wrapper(pos_type, data, candlesticks, session_date, participa
     return video_path, last_frame_path
 
 @task
-def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
+def generate_video_task_parallel(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
                         strike_range: List[int], expiration: str, position_type: list, last_price:float, metric:str = 'positioning'):
 
     prefect_logger = get_run_logger()

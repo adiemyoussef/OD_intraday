@@ -2,7 +2,6 @@ import uuid
 from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
-#3from imageio.plugins import ffmpeg
 from plotly.subplots import make_subplots
 import imageio.v2 as imageio
 from datetime import date, datetime
@@ -11,29 +10,19 @@ from config.config import *
 import requests
 import json
 import logging
-# Load the image file
 from PIL import Image
 import base64
 from io import BytesIO
-import requests
-import json
-from datetime import datetime
 import cv2
 import imageio_ffmpeg
 import ffmpeg
-import cv2
 import numpy as np
-from PIL import Image
 import os
-import uuid
-from pathlib import Path
-import imageio
-import numpy as np
 import concurrent.futures
 from functools import partial
-import os
 import shutil
 from utilities.misc_utils import *
+import math
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -57,42 +46,6 @@ participant_mapping = {
     'procust': 'Professional Customers',
     'total_customers': 'Total Customers'
 }
-
-def process_single_strike_original(group, participant):
-    #TODO: Investigate Net
-
-
-    date = group['effective_date'].iloc[0]
-    strike = group['strike_price'].iloc[0]
-
-    results = {}
-    for flag in ['C', 'P']:
-        flag_group = group[group['call_put_flag'] == flag].sort_values('effective_datetime')
-        if not flag_group.empty:
-            metric = flag_group[f'{participant}_posn']
-            datetimes = flag_group['effective_datetime']
-
-            highest_idx = metric.idxmax()
-            lowest_idx = metric.idxmin()
-
-            results[flag] = {
-                'start_of_day': {'value': metric.iloc[0], 'time': datetimes.iloc[0]},
-                'current': {'value': metric.iloc[-1], 'time': datetimes.iloc[-1]},
-                'lowest': {'value': metric.min(), 'time': datetimes[lowest_idx]},
-                'highest': {'value': metric.max(), 'time': datetimes[highest_idx]},
-                'prior_update': {'value': metric.iloc[-2] if len(metric) > 1 else metric.iloc[0],
-                                 'time': datetimes.iloc[-2] if len(metric) > 1 else datetimes.iloc[0]}
-            }
-
-    # Calculate net metric
-    if 'C' in results and 'P' in results:
-        results['Net'] = {
-            key: {'value': results['C'][key]['value'] + results['P'][key]['value'],
-                  'time': max(results['C'][key]['time'], results['P'][key]['time'])}
-            for key in results['C']
-        }
-
-    return {'date': date, 'strike_price': strike, **results}
 
 def process_single_strike(group, participant, metric, last_price=1):
 
@@ -125,16 +78,6 @@ def process_single_strike(group, participant, metric, last_price=1):
                     'time': datetimes.iloc[-2] if len(datetimes) > 1 else datetimes.iloc[0]
                 }
             }
-
-    # Calculate net metric
-    # if 'C' in results and 'P' in results:
-    #     results['Net'] = {
-    #         key: {
-    #             'value': results['C'][key]['value'] + results['P'][key]['value'],
-    #             'time': max(results['C'][key]['time'], results['P'][key]['time'])
-    #         } for key in results['C']
-    #     }
-    import math
 
     # Calculate net metric
     results['Net'] = {}
@@ -202,34 +145,7 @@ def generate_frame_wrapper(args):
     return index, frame_path
 
 
-
-def parallel_frame_generation_(data, candlesticks, timestamps, participant, strike_input, expiration_input,
-                              position_type, metric, last_price, full_img_path, temp_dir, max_workers=None):
-    generate_frame_partial = partial(
-        generate_frame,
-        data=data,
-        candlesticks=candlesticks,
-        participant=participant,
-        strike_input=strike_input,
-        expiration_input=expiration_input,
-        position_type=position_type,
-        metric_to_compute=metric,
-        last_price=last_price,
-        full_img_path=full_img_path
-    )
-
-    args_list = [(timestamp, i, generate_frame_partial,position_type) for i, timestamp in enumerate(timestamps)]
-
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        results = list(executor.map(generate_frame_wrapper, args_list))
-
-    # Sort results to maintain order
-    results.sort(key=lambda x: x[0])
-    frame_paths = [path for _, path in results]
-
-    return frame_paths
-
-def parallel_frame_generation(data, candlesticks, timestamps, participant, strike_input, expiration_input,
+def parallel_frame_generation_old(data, candlesticks, timestamps, participant, strike_input, expiration_input,
                               position_type, metric, last_price, full_img_path, temp_dir, max_workers=None):
 
 
@@ -264,10 +180,39 @@ def parallel_frame_generation(data, candlesticks, timestamps, participant, strik
     frame_paths.sort(key=lambda x: x[0])
     return [path for _, path in frame_paths]
 
-# def generate_frame(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type,metric_to_compute,last_price,
-#                    full_img_path):
+def parallel_frame_generation(data, candlesticks, timestamps, participant, strike_input, expiration_input,
+                              position_type, metric, last_price, full_img_path, temp_dir, executor):
+
+    generate_frame_partial = partial(
+        generate_frame,
+        data=data,
+        candlesticks=candlesticks,
+        participant=participant,
+        strike_input=strike_input,
+        expiration_input=expiration_input,
+        position_type=position_type,
+        metric_to_compute=metric,
+        last_price=last_price,
+        full_img_path=full_img_path
+    )
+
+    args_list = [(timestamp, i, generate_frame_partial, position_type, temp_dir) for i, timestamp in enumerate(timestamps)]
+
+    frame_paths = []
+    for future in concurrent.futures.as_completed(executor.map(generate_frame_wrapper, args_list)):
+        try:
+            index, path = future
+            frame_paths.append((index, path))
+            print(f"Generated frame {index} for {position_type}")
+        except Exception as e:
+            print(f"Error generating frame: {str(e)}")
+            # You could add more detailed error handling here if needed
+
+    frame_paths.sort(key=lambda x: x[0])
+    return [path for _, path in frame_paths]
+
 def generate_frame(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type,
-                   metric_to_compute, last_price, full_img_path):
+                   metric_to_compute, last_price, full_img_path, use_single_color=True):
 
     # ... rest of the function ...
     if metric_to_compute == 'GEX':
@@ -350,27 +295,6 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
 
     position_types = ['C', 'P', 'Net'] if position_type == 'All' else [position_type]
 
-    #TODO: config_file
-    colors = {
-        'Net': {
-            #'negative': 'rgb(0,0,130)',    # dark blue
-            'negative': 'rgb(0,149,255)',  # light blue
-            'positive': 'rgb(0,149,255)'  # light blue
-
-        },
-        'C': {
-            # 'negative': 'rgb(50,168,82)',   # dark green
-            # 'positive': 'rgb(48,199,40)',  # light green
-            'negative': 'rgb(0,217,51)',  # dark green
-            'positive': 'rgb(0,217,51)'  # light green
-        },
-        'P': {
-            # 'negative': 'rgb(160,0,0)',   # dark red
-            # 'positive': 'rgb(255,0,0)'   # light red
-            'negative': 'rgb(204,3,0)',  # dark red
-            'positive': 'rgb(204,3,0)'  # light red
-        }
-    }
 
     for pos_type in position_types:
         if pos_type in results_df.columns:
@@ -388,47 +312,65 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
                 valid_mask = x_values.notnull()
 
                 if position == 'current':
-                    positive_mask = x_values > 0
-                    negative_mask = x_values <= 0
+                    if use_single_color:
+                        # Use a single color for all bars
+                        trace = go.Bar(
+                            x=x_values[valid_mask],
+                            y=results_df['strike_price'][valid_mask],
+                            name=f'{pos_type} {position.capitalize().replace("_", " ")}',
+                            orientation='h',
+                            marker_color=BAR_POSN_COLORS[pos_type]['positive'],
+                            opacity=1,
+                            legendgroup=pos_type,
+                            legendgrouptitle_text=pos_type,
+                            hovertemplate=f"<b>{position.capitalize().replace('_', ' ')}</b><br>" +
+                                          "Strike: %{y}<br>" +
+                                          "Position: %{x}<br>" +
+                                          "Time: %{customdata}<extra></extra>",
+                            customdata=results_df[pos_type][valid_mask].apply(
+                                lambda x: x[position]['time'] if isinstance(x, dict) and position in x else None)
+                        )
+                        fig.add_trace(trace)
+                    else:
+                        # Use separate colors for positive and negative values (original behavior)
+                        positive_mask = x_values > 0
+                        negative_mask = x_values <= 0
 
-                    # Positive values
-                    trace_positive = go.Bar(
-                        x=x_values[valid_mask & positive_mask],
-                        y=results_df['strike_price'][valid_mask & positive_mask],
-                        name=f'{pos_type} {position.capitalize().replace("_", " ")} (Positive)',
-                        orientation='h',
-                        marker_color=colors[pos_type]['positive'],
+                        trace_positive = go.Bar(
+                            x=x_values[valid_mask & positive_mask],
+                            y=results_df['strike_price'][valid_mask & positive_mask],
+                            name=f'{pos_type} {position.capitalize().replace("_", " ")} (Positive)',
+                            orientation='h',
+                            marker_color=BAR_POSN_COLORS[pos_type]['positive'],
+                            opacity=1,
+                            legendgroup=pos_type,
+                            legendgrouptitle_text=pos_type,
+                            hovertemplate=f"<b>{position.capitalize().replace('_', ' ')}</b><br>" +
+                                          "Strike: %{y}<br>" +
+                                          "Position: %{x}<br>" +
+                                          "Time: %{customdata}<extra></extra>",
+                            customdata=results_df[pos_type][valid_mask & positive_mask].apply(
+                                lambda x: x[position]['time'] if isinstance(x, dict) and position in x else None)
+                        )
+                        fig.add_trace(trace_positive)
 
-                        opacity=1,
-                        legendgroup=pos_type,
-                        legendgrouptitle_text=pos_type,
-                        hovertemplate=f"<b>{position.capitalize().replace('_', ' ')}</b><br>" +
-                                      "Strike: %{y}<br>" +
-                                      "Position: %{x}<br>" +
-                                      "Time: %{customdata}<extra></extra>",
-                        customdata=results_df[pos_type][valid_mask & positive_mask].apply(
-                            lambda x: x[position]['time'] if isinstance(x, dict) and position in x else None)
-                    )
-                    fig.add_trace(trace_positive)
-
-                    # Negative values
-                    trace_negative = go.Bar(
-                        x=x_values[valid_mask & negative_mask],
-                        y=results_df['strike_price'][valid_mask & negative_mask],
-                        name=f'{pos_type} {position.capitalize().replace("_", " ")} (Negative)',
-                        orientation='h',
-                        marker_color=colors[pos_type]['negative'],
-                        opacity=1,
-                        legendgroup=pos_type,
-                        legendgrouptitle_text=pos_type,
-                        hovertemplate=f"<b>{position.capitalize().replace('_', ' ')}</b><br>" +
-                                      "Strike: %{y}<br>" +
-                                      "Position: %{x}<br>" +
-                                      "Time: %{customdata}<extra></extra>",
-                        customdata=results_df[pos_type][valid_mask & negative_mask].apply(
-                            lambda x: x[position]['time'] if isinstance(x, dict) and position in x else None)
-                    )
-                    fig.add_trace(trace_negative)
+                        trace_negative = go.Bar(
+                            x=x_values[valid_mask & negative_mask],
+                            y=results_df['strike_price'][valid_mask & negative_mask],
+                            name=f'{pos_type} {position.capitalize().replace("_", " ")} (Negative)',
+                            orientation='h',
+                            marker_color=BAR_POSN_COLORS[pos_type]['negative'],
+                            opacity=1,
+                            legendgroup=pos_type,
+                            legendgrouptitle_text=pos_type,
+                            hovertemplate=f"<b>{position.capitalize().replace('_', ' ')}</b><br>" +
+                                          "Strike: %{y}<br>" +
+                                          "Position: %{x}<br>" +
+                                          "Time: %{customdata}<extra></extra>",
+                            customdata=results_df[pos_type][valid_mask & negative_mask].apply(
+                                lambda x: x[position]['time'] if isinstance(x, dict) and position in x else None)
+                        )
+                        fig.add_trace(trace_negative)
                 else:
                     # For non-current update_period, use the same color scheme as before
                     trace = go.Scatter(
@@ -468,7 +410,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
                             y0=strike,
                             y1=strike,
                             line=dict(
-                                color=colors[pos_type]['positive'],
+                                color=BAR_POSN_COLORS[pos_type]['positive'],
                                 width=2.5,
                                 dash="solid",  # Options: "solid", "dot", "dash", "longdash", "dashdot", "longdashdot"
                             ),
@@ -677,141 +619,6 @@ def generate_discord_compatible_video(input_video_path, output_video_path):
         print(f"Error occurred while converting video: {e.stderr.decode()}")
         return None
 
-
-def generate_video_(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
-                   metric,last_price,
-                   img_path='config/images/logo_dark.png',
-                   output_video='None.mp4'):
-
-
-    # Get the project root directory
-    project_root = Path(__file__).parent.parent
-
-    # Construct the full path to the image
-    full_img_path = project_root / img_path
-
-    # Get unique timestamps
-    timestamps = data['effective_datetime'].unique()
-
-    # Create a unique temporary directory to store frames
-    temp_dir = f'temp_frames_{uuid.uuid4().hex}'
-    os.makedirs(temp_dir, exist_ok=True)
-
-    # Generate frames
-    frame_paths = []
-
-    frame_paths = parallel_frame_generation(
-        data, candlesticks, timestamps, participant_input, strike_input, expiration_input, position_type_input,
-        metric, last_price, full_img_path, temp_dir, max_workers=os.cpu_count()
-    )
-
-    print(f'!!!!!!!!! FRAME PATHS : {frame_paths} !!!!!!!!!!!!!!!!!!!')
-    # for i, timestamp in enumerate(timestamps):
-    #     print(f"Generating Graph for {timestamp} - {position_type_input} - {participant_input}")
-    #
-    #     fig = generate_frame(data, candlesticks, timestamp, participant_input, strike_input, expiration_input, position_type_input,
-    #                          metric,last_price,
-    #                          full_img_path)
-    #
-    #
-    #
-    #     # Save the frame as an image
-    #     frame_path = os.path.join(temp_dir, f'frame_{i:03d}.png')
-    #
-    #     fig.write_image(frame_path,scale= 3)
-    #     frame_paths.append(frame_path)
-
-    # Use the frame_paths directly, no need for additional processing
-    file_paths = frame_paths
-
-    # Create the writer with the correct output path
-    temp_output = f'temp_{output_video}'
-    writer = imageio.get_writer(temp_output, fps=3)
-
-    # Read and write images
-    for file_path in file_paths:
-        print(f'File path: {file_path}')
-        image = imageio.imread(file_path)
-        writer.append_data(image)
-
-    print('Finished writing temporary video')
-    writer.close()
-
-    # Convert to Discord-compatible format
-    final_output = generate_discord_compatible_video(temp_output, output_video)
-
-    # # Clean up temporary files
-    # for file in frame_paths:
-    #     os.remove(file)
-    # os.rmdir(temp_dir)
-    # os.remove(temp_output)
-
-    # Save the last frame separately
-    # last_frame_path = os.path.join(temp_dir, f'last_frame_{position_type_input}_{timestamps[-1]}.png')
-    # fig.write_image(last_frame_path)
-    #
-    #
-    #
-    #
-    # if final_output:
-    #     print(f"Video saved as {final_output}")
-    #     return final_output, last_frame_path
-    # else:
-    #     print("Failed to generate Discord-compatible video")
-    #     return None
-
-
-def generate_video__(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
-                   metric, last_price,
-                   img_path='config/images/logo_dark.png',
-                   output_video='None.mp4'):
-
-    # Get the project root directory
-    project_root = Path(__file__).parent.parent
-
-    # Construct the full path to the image
-    full_img_path = project_root / img_path
-
-    # Get unique timestamps
-    timestamps = data['effective_datetime'].unique()
-
-
-
-    # Create a unique temporary directory to store frames
-    temp_dir = f'temp_frames_{position_type_input}_{uuid.uuid4().hex}'
-    os.makedirs(temp_dir, exist_ok=True)
-
-    # Generate frames in parallel
-    frame_paths = parallel_frame_generation(
-        data, candlesticks, timestamps, participant_input, strike_input, expiration_input, position_type_input,
-        metric, last_price, full_img_path, temp_dir, max_workers=os.cpu_count()
-    )
-
-    # Create the writer with the correct output path
-    temp_output = f'temp_{output_video}'
-    writer = imageio.get_writer(temp_output, fps=3)
-
-    # Read and write images
-    for file_path in frame_paths:
-        image = imageio.imread(file_path)
-        writer.append_data(image)
-
-    print('Finished writing temporary video')
-    writer.close()
-
-    # Convert to Discord-compatible format
-    final_output = generate_discord_compatible_video(temp_output, output_video)
-
-    # Save the last frame separately
-    last_frame_path = os.path.join(temp_dir, f'last_frame_{position_type_input}_{timestamps[-1]}.png')
-    frame_paths[-1].write_image(last_frame_path)
-
-    if final_output:
-        print(f"Video saved as {final_output}")
-        return final_output, last_frame_path
-    else:
-        print("Failed to generate Discord-compatible video")
-        return None, None
 def generate_snapshot(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
                    metric,last_price,
                    img_path='config/images/logo_dark.png',
@@ -1038,13 +845,14 @@ def generate_video(data, candlesticks, session_date, participant_input, position
     print(f"Created temporary directory: {temp_dir}")
 
     try:
-        # Generate frames in parallel
-        workers = 4 #os.cpu_count()
+        # Create a ProcessPoolExecutor
+        workers = 4  # or os.cpu_count()
         print(f"Entering Frame generation with {workers} workers")
-        frame_paths = parallel_frame_generation(
-            data, candlesticks, timestamps, participant_input, strike_input, expiration_input, position_type_input,
-            metric, last_price, full_img_path, temp_dir, max_workers=workers
-        )
+        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
+            frame_paths = parallel_frame_generation(
+                data, candlesticks, timestamps, participant_input, strike_input, expiration_input, position_type_input,
+                metric, last_price, full_img_path, temp_dir, executor
+            )
         print(f"Generated {len(frame_paths)} frames")
 
         # Check if any frames were generated
