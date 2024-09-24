@@ -175,6 +175,13 @@ and
 ticker = %(ticker)s
 """
 
+is_date_in_pg_books = """
+SELECT COUNT(*) FROM public.charts_dailybook
+WHERE as_of_date = %(quote_date)s
+and
+ticker = %(ticker)s
+"""
+
 not_in_mm_books = """
 WITH
   cte_mm_book AS (SELECT DISTINCT(as_of_date) FROM optionsdepth_stage.charts_mmbook),

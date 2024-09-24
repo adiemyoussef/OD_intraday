@@ -9,12 +9,7 @@ import pandas_market_calendars as mcal
 import numpy as np
 from PIL import Image
 import yfinance as yf
-from utilities.db_utils import *
-from config.config import *
-from config.mysql_queries import *
-db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
-db.connect()
-print(f'{db.get_status()}')
+
 
 # TODO: relative paths - MAC & Windows
 img = Image.open(r"/Users/youssefadiem/PycharmProjects/OptionsDepth/config/images/logo_light.png")

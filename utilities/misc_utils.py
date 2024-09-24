@@ -21,7 +21,6 @@ import time
 import logging
 import pandas as pd
 import numpy as np
-
 import pandas_market_calendars as mcal
 from datetime import datetime, timedelta
 import logging
@@ -86,6 +85,118 @@ def get_previous_business_day(date, calendar):
         date = date.to_pydatetime()
     prev_days = calendar.valid_days(end_date=date, start_date=date - pd.Timedelta(days=5))
     return prev_days[-2].to_pydatetime()
+
+def get_trading_day(reference_date, n=1, direction='previous', return_format='datetime'):
+    """
+    Find the nth trading day before or after a reference date.
+
+    Parameters:
+    reference_date (str or datetime): The reference date
+    n (int): Number of trading days to move (default 1)
+    direction (str): 'previous' or 'next' (default 'previous')
+    return_format (str): 'string', 'datetime', or 'tz' (default 'datetime')
+
+    Returns:
+    The calculated trading day in the specified format
+    """
+
+    # Ensure reference_date is a timezone-aware pandas Timestamp in UTC
+    reference_date = pd.Timestamp(reference_date).tz_localize('UTC')
+
+    # Get NYSE calendar
+    nyse = mcal.get_calendar('NYSE')
+
+    # Determine the date range based on direction
+    if direction == 'previous':
+        start_date = reference_date - pd.Timedelta(days=n * 5)  # Increased range
+        end_date = reference_date
+    elif direction == 'next':
+        start_date = reference_date
+        end_date = reference_date + pd.Timedelta(days=n * 5)  # Increased range
+    else:
+        raise ValueError("Direction must be 'previous' or 'next'")
+
+    # Get valid trading days
+    trading_days = nyse.valid_days(start_date=start_date, end_date=end_date)
+
+    # Find the desired trading day
+    if direction == 'previous':
+        mask = trading_days < reference_date
+        result = trading_days[mask]
+        if len(result) >= n:
+            result = result[-n]
+        else:
+            raise ValueError(f"Not enough previous trading days within the date range. Found {len(result)}, requested {n}.")
+    else:  # next
+        mask = trading_days > reference_date
+        result = trading_days[mask]
+        if len(result) >= n:
+            result = result[n - 1]
+        else:
+            raise ValueError(f"Not enough next trading days within the date range. Found {len(result)}, requested {n}.")
+
+    # Format the result based on the return_format parameter
+    if return_format == 'string' or return_format == 'str':
+        return result.strftime('%Y-%m-%d')
+    elif return_format == 'datetime':
+        return result.tz_convert(None)  # Return timezone-naive Timestamp
+    elif return_format == 'tz':
+        return result  # Return timezone-aware Timestamp
+    else:
+        raise ValueError("Invalid return_format. Must be 'string', 'datetime', or 'tz'.")
+
+
+
+def get_strike_range(db,session_date, range_value=200, range_type:str='points'):
+    """
+    Find the previous session's close price and return a range around it.
+
+    Parameters:
+    db (connector)    : The connector from which to exectue the query
+    session_date (str): The current session date in 'YYYY-MM-DD' format.
+    range_points (int): The range to add/subtract from the close price. Default is 200.
+
+    Returns:
+    list: [lower_bound, upper_bound] of the strike range.
+    """
+    # Convert session_date to datetime
+    # session_date = pd.to_datetime(session_date)
+    previous_trading_day = previous_trading_day = get_trading_day(session_date, n=1, direction='previous', return_format='str')
+    # Query to find the previous session's close price
+    query = f"""
+    SELECT effective_date, close
+    FROM optionsdepth_stage.charts_candlestick
+    WHERE ticker = 'SPX'
+    AND effective_date = '{previous_trading_day}'
+    ORDER BY effective_datetime DESC
+    LIMIT 1
+    """
+
+    # Execute the query
+    result = db.execute_query(query)
+
+    if result.empty:
+        raise ValueError(f"No previous session data found for date: {session_date}")
+
+    previous_close = float(result['close'].iloc[0])
+
+    # Calculate the range based on range_type
+    if range_type == 'points':
+        lower_bound = previous_close - range_value
+        upper_bound = previous_close + range_value
+    elif range_type == 'percent':
+
+        lower_bound = previous_close * (1 - range_value)
+        upper_bound = previous_close * (1 + range_value)
+    else:
+        raise ValueError("Invalid range_type. Use 'points' or 'percent'.")
+
+
+    # Round to nearest 10
+    lower_bound = int(round(lower_bound, -1))
+    upper_bound = int(round(upper_bound, -1))
+
+    return [lower_bound, upper_bound]
 
 
 def verify_intraday_data(df):
@@ -211,6 +322,7 @@ def determine_expected_file_name(current_time=None):
 
     logger.info(f"Expected file name: {expected_file_name}")
     return expected_file_name
+
 async def get_unrevised_book(session_date, db_utils):
 
     try:
@@ -334,8 +446,6 @@ def parse_message(message):
         'timestamp': timestamp
     }
 
-
-
 def get_latest_poly(client):
     """
     Fetches the latest options data from Polygon and returns it as a DataFrame.
@@ -391,7 +501,6 @@ def get_latest_poly(client):
     df_final.sort_values(['expiration_date', 'open_interest'], ascending=[True, False], inplace=True)
 
     return df_final
-
 
 def analyze_duplicates(df, df_name, key_columns, logger):
     total_rows = len(df)
@@ -606,7 +715,6 @@ def et_to_utc(et_time_str):
     # Format the UTC time as a string
     return utc_time.strftime('%Y-%m-%d %H:%M:%S')
 
-
 def round_to_nearest_tens(number):
     """
     Rounds a number to the nearest lower and upper multiples of 10.
@@ -620,3 +728,26 @@ def round_to_nearest_tens(number):
     lower = number - (number % 10)  # Find the nearest lower multiple of 10
     upper = lower + 10  # Find the nearest upper multiple of 10
     return (lower, upper)
+
+
+def sort_file_paths(file_paths):
+    def get_priority(path):
+        basename = os.path.basename(path)
+        is_image = basename.endswith('.png')
+
+        if is_image and basename.startswith('last_frame_Net'):
+            return (0, 0)  # Highest priority for Net images
+        elif is_image and basename.startswith('last_frame_C'):
+            return (0, 1)  # Second priority for Call images
+        elif is_image and basename.startswith('last_frame_P'):
+            return (0, 2)  # Third priority for Put images
+        elif basename.startswith('Net'):
+            return (1, 0)  # Fourth priority for Net videos
+        elif basename.startswith('C'):
+            return (1, 1)  # Fifth priority for Call videos
+        elif basename.startswith('P'):
+            return (1, 2)  # Sixth priority for Put videos
+        else:
+            return (2, 0)  # Lowest priority for any other files
+
+    return sorted(file_paths, key=get_priority)
