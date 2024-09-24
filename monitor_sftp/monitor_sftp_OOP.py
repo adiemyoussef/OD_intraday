@@ -10,7 +10,9 @@ import pika
 from datetime import datetime, timedelta
 import socket
 import asyncio
-
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 # ------ Local Modules ------#
 from utilities.db_utils import AsyncDatabaseUtilities
 from utilities.s3_utils import S3Utilities
@@ -70,6 +72,31 @@ class SFTPMonitor:
         self.connection = None
         self.channel = None
         self.seen_files = set()
+        self.email_config = {
+            'smtp_server': 'smtp-relay.brevo.com',
+            'smtp_port': 587,
+            'smtp_username': 'options.depth.official@gmail.com',
+            #add smtp_password here
+
+            'recipient_email': 'contact@optionsdepth.com'
+        }
+
+    async def send_email_notification(self, message, is_error=False):
+        subject = "🚨 MONITOR_SFTP ALERT 🚨" if is_error else "ℹ️ MONITOR_SFTP INFO ℹ️"
+        msg = MIMEMultipart()
+        msg['From'] = self.email_config['smtp_username']
+        msg['To'] = self.email_config['recipient_email']
+        msg['Subject'] = subject
+        msg.attach(MIMEText(message, 'plain'))
+
+        try:
+            with smtplib.SMTP(self.email_config['smtp_server'], self.email_config['smtp_port']) as server:
+                server.starttls()
+                server.login(self.email_config['smtp_username'], self.email_config['smtp_password'])
+                server.send_message(msg)
+            self.logger.info("Email notification sent successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to send email notification: {str(e)}")
 
     async def adaptive_sleep(self):
         now = datetime.now()
@@ -201,7 +228,7 @@ class SFTPMonitor:
 
             await asyncio.sleep(RABBITMQ_HEARTBEAT_INTERVAL)
 
-    async def monitor(self):
+    async def monitor_initial(self):
         self.logger.info("Starting SFTP monitoring...")
 
         # Test basic connectivity
@@ -315,11 +342,15 @@ class SFTPMonitor:
                 except asyncio.CancelledError:
                     break
                 except Exception as e:
-                    self.logger.error(f"Error in SFTP connection: {e}")
-                    error_message = f"Failed to establish SFTP connection: {str(e)}"
+                    # self.logger.error(f"Error in SFTP connection: {e}")
+                    # error_message = f"Failed to establish SFTP connection: {str(e)}"
+                    # self.logger.critical(error_message)
+                    # await self.send_discord_notification(error_message, is_error=True)
+                    # await asyncio.sleep(SFTP_BASE_SLEEP_TIME)
+                    error_message = f"MONITOR_SFTP CRASH: {type(e).__name__} - {str(e)}"
                     self.logger.critical(error_message)
-                    await self.send_discord_notification(error_message, is_error=True)
-                    await asyncio.sleep(SFTP_BASE_SLEEP_TIME)
+                    # await self.send_email_notification(error_message, is_error=True)
+                    await asyncio.sleep(60)
 
         finally:
             heartbeat_task.cancel()
@@ -332,6 +363,161 @@ class SFTPMonitor:
                 self.connection.close()
             self.logger.info("RabbitMQ connection closed and heartbeat task cancelled.")
 
+    async def monitor(self):
+        self.logger.info("Starting SFTP monitoring...")
+
+        while True:
+            try:
+                # Test basic connectivity
+                if not self.test_connection(self.sftp_host, self.sftp_port):
+                    raise ConnectionError(f"Cannot establish basic connection to {self.sftp_host}:{self.sftp_port}")
+
+                start_time = time.time()
+                self.seen_files = set(self.s3_utils.load_json(LOG_FILE_KEY))
+                end_time = time.time()
+                self.logger.debug(
+                    f"Loaded {len(self.seen_files)} log entries from state in {end_time - start_time:.4f} seconds")
+
+                start_time = time.time()
+                self.connection, self.channel = self.get_rabbitmq_connection()
+                end_time = time.time()
+                self.logger.debug(f"RabbitMQ connection established in {end_time - start_time:.4f} seconds")
+
+                heartbeat_task = asyncio.create_task(self.send_heartbeat())
+
+                last_successful_check = datetime.now()
+                consecutive_failures = 0
+
+                while True:
+                    try:
+                        connect_start = time.time()
+                        async with asyncssh.connect(self.sftp_host, port=self.sftp_port, username=self.sftp_username,
+                                                    password=self.sftp_password, known_hosts=None,
+                                                    connect_timeout=30) as conn:
+                            async with conn.start_sftp_client() as sftp:
+                                connect_end = time.time()
+                                self.logger.debug(
+                                    f"SFTP connection established in {connect_end - connect_start:.4f} seconds")
+
+                                while True:
+                                    try:
+                                        cycle_start = time.time()
+                                        listdir_start = time.time()
+                                        files = await sftp.listdir(self.sftp_directory)
+                                        listdir_end = time.time()
+                                        self.logger.debug(
+                                            f"SFTP directory listing took {listdir_end - listdir_start:.4f} seconds")
+
+                                        new_files = [f for f in files if
+                                                     f not in self.seen_files and f not in {'.', '..'}]
+
+                                        for filename in new_files:
+                                            file_path = f"{self.sftp_directory}/{filename}"
+                                            stat_start = time.time()
+                                            file_attr = await sftp.stat(file_path)
+                                            stat_end = time.time()
+                                            self.logger.debug(
+                                                f"File stat for {filename} took {stat_end - stat_start:.4f} seconds")
+
+                                            file_mtime = datetime.fromtimestamp(file_attr.mtime)
+                                            detection_time = datetime.now()
+                                            detection_delay = (detection_time - file_mtime).total_seconds()
+                                            self.logger.info(
+                                                f"File {filename} detected {detection_delay:.4f} seconds after last modification")
+
+                                            self.logger.info(f'{filename} not in seen files')
+                                            file_info = {
+                                                "filename": filename,
+                                                "path": file_path,
+                                                "timestamp": file_mtime.isoformat(),
+                                                "detection_time": detection_time.isoformat(),
+                                                "detection_delay": detection_delay
+                                            }
+                                            file_info_str = json.dumps(file_info)
+
+                                            publish_start = time.time()
+                                            if self.publish_to_rabbitmq(file_info_str):
+                                                self.seen_files.add(filename)
+                                                publish_end = time.time()
+                                                self.logger.info(
+                                                    f"Message for {filename} published in {publish_end - publish_start:.4f} seconds")
+                                            else:
+                                                self.logger.warning(
+                                                    f"Failed to publish message for file: {filename}. Retrying...")
+                                                self.connection, self.channel = self.get_rabbitmq_connection()
+                                                retry_start = time.time()
+                                                if self.publish_to_rabbitmq(file_info_str):
+                                                    self.seen_files.add(filename)
+                                                    retry_end = time.time()
+                                                    self.logger.debug(
+                                                        f"Message for {filename} published after retry in {retry_end - retry_start:.4f} seconds")
+                                                else:
+                                                    self.logger.error(
+                                                        f"Failed to publish message for file: {filename} after retry.")
+
+                                        if new_files:
+                                            save_start = time.time()
+                                            self.s3_utils.save_json(LOG_FILE_KEY, list(self.seen_files))
+                                            save_end = time.time()
+                                            self.logger.debug(
+                                                f"Saved seen files to S3 in {save_end - save_start:.4f} seconds")
+
+                                        last_successful_check = datetime.now()
+                                        consecutive_failures = 0
+
+                                        cycle_end = time.time()
+                                        self.logger.debug(
+                                            f"Full monitoring cycle took {cycle_end - cycle_start:.4f} seconds")
+
+                                        sleep_time = await self.adaptive_sleep()
+                                        self.logger.debug(f"Sleeping for {sleep_time} seconds")
+                                        await asyncio.sleep(sleep_time)
+
+                                    except asyncio.CancelledError:
+                                        raise
+                                    except Exception as e:
+                                        self.logger.error(f"Error during SFTP monitoring: {e}")
+                                        consecutive_failures += 1
+                                        if consecutive_failures >= 5:
+                                            error_message = f"SFTP monitoring failed continuously for 5 minutes. Last error: {str(e)}"
+                                            self.logger.critical(error_message)
+                                            await self.send_discord_notification(error_message, is_error=True)
+                                            raise ConnectionError(error_message)
+                                        await asyncio.sleep(SFTP_BASE_SLEEP_TIME)
+
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as e:
+                        self.logger.error(f"Error in SFTP connection: {e}")
+                        consecutive_failures += 1
+                        if consecutive_failures >= 5:
+                            error_message = f"Failed to establish SFTP connection after 5 attempts: {str(e)}"
+                            self.logger.critical(error_message)
+                            await self.send_discord_notification(error_message, is_error=True)
+                            raise ConnectionError(error_message)
+                        await asyncio.sleep(SFTP_BASE_SLEEP_TIME)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                error_message = f"MONITOR_SFTP CRASH: {type(e).__name__} - {str(e)}"
+                self.logger.critical(error_message)
+                # await self.send_email_notification(error_message, is_error=True)
+                await asyncio.sleep(60)  # Wait for 1 minute before attempting to restart the entire process
+
+            finally:
+                if heartbeat_task:
+                    heartbeat_task.cancel()
+                    try:
+                        await heartbeat_task
+                    except asyncio.CancelledError:
+                        pass
+
+                if self.connection and self.connection.is_open:
+                    self.connection.close()
+                self.logger.info("RabbitMQ connection closed and heartbeat task cancelled.")
+
+        self.logger.info("Exiting monitor method.")
     async def debug_mode(self):
         self.logger.info("Entering debug mode: sending test messages.")
 
