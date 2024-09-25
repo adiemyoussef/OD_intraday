@@ -780,6 +780,7 @@ def send_to_discord(webhook_url, file_paths, content=None, title=None, descripti
     :param footer_text: Footer text for the embed
     :return: Status code of the second request
     """
+
     if not isinstance(file_paths, list):
         file_paths = [file_paths]
 
@@ -798,18 +799,30 @@ def send_to_discord(webhook_url, file_paths, content=None, title=None, descripti
         "embeds": [embed],
         "content": content or ""  # Ensure content is initialized
     }
+    # headers = {
+    #     "Content-Type": "application/json"
+    # }
 
-    # Send the first request (embed only)
-    response = requests.post(webhook_url, json=payload)
-
-    print(response)
-
-    if response.status_code == 200 or response.status_code == 204:
+    try:
+        response = requests.post(webhook_url, data=json.dumps(payload))#, headers=headers)
+        response.raise_for_status()  # This will raise an exception for HTTP errors
         print("Embedded message sent successfully to Discord!")
-    else:
-        print(f"Failed to Embedded message. Status code: {response.status_code}")
-        print(f"Response content: {response.content}")
-        breakpoint()
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to send embedded message. Error: {e}")
+        print(f"Response content: {response.content if response else 'No response'}")
+        return False
+
+    # # Send the first request (embed only)
+    # response = requests.post(webhook_url, json=payload)
+    #
+    # print(response)
+    #
+    # if response.status_code == 200 or response.status_code == 204:
+    #     print("Embedded message sent successfully to Discord!")
+    # else:
+    #     print(f"Failed to Embedded message. Status code: {response.status_code}")
+    #     print(f"Response content: {response.content}")
+    #     breakpoint()
 
     # Second Request: Send the GIFs separately
     sorted_file_paths = sort_file_paths(file_paths)

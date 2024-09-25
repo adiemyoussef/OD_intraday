@@ -126,11 +126,11 @@ HEATMAP_CHANNEL = 'https://discord.com/api/webhooks/1278125396671332393/Y02pRK5X
 CHARM_HEATMAP_CHANNEL = 'https://discord.com/api/webhooks/1281065101805359134/pJzUD5GQufw3W9wUa4E9_GbwcZPgAsx61A6JssGiNbebUZ94SyOkWk83FurbEpxvFeb4'
 
 WEBHOOK_URLS = {
-    'zero_dte': 'https://discord.com/api/webhooks/zero_dte_webhook_url',
-    'one_dte': 'https://discord.com/api/webhooks/one_dte_webhook_url',
-    'gex': 'https://discord.com/api/webhooks/gex_webhook_url',
-    'depthview': 'https://discord.com/api/webhooks/depthview_webhook_url',
-    'options_charts': 'https://discord.com/api/webhooks/options_charts_webhook_url',
+    'zero_dte': 'https://discord.com/api/webhooks/1273463250230444143/74Z8Xo4Wes7jwzdonzcLZ_tCm8hdFDYlvPfdTcftKHjkI_K8GNA1ZayQmv_ZoEuie_8_',
+    'one_dte': 'https://discord.com/api/webhooks/1275269470151245938/qNZXtA_ySwcJJJf6bS_myYqU-uDd71zHV--XJBR7xb6uVhs7ccjKE59_c8y9AMZ86OC_',
+    'gex': 'https://discord.com/api/webhooks/1277599354932428842/c2Ix3cPdLzI0fzxDdoGRye8nyKPLZj0dqmIxOiRQP2DYFx7YbgphUe8rAsWqkZUKiD0f',
+    'depthview': 'TOTO',
+    'options_charts': 'TOTO',
     'dev': 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 }
 
