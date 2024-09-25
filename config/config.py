@@ -142,10 +142,8 @@ class WebhookUrl(Enum):
 
 
 HEATMAPS_START_TIME = '06:50:00'
-START_TIME_PRE_MARKET = '15:00:00'
-START_TIME_MARKET = '15:00:00'
-
-
+START_TIME_PRE_MARKET = '06:00:00'
+START_TIME_MARKET = '08:00:00'
 DEFAULT_POS_TYPES = ['Net', 'C','P']
 
 #--------------- DATA PROCESSING ---------------------#
