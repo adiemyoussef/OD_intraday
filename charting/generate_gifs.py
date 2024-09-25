@@ -2,6 +2,7 @@ import uuid
 from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
+from prefect import task, flow, get_run_logger,get_client
 #3from imageio.plugins import ffmpeg
 from plotly.subplots import make_subplots
 import imageio.v2 as imageio
@@ -780,7 +781,7 @@ def send_to_discord(webhook_url, file_paths, content=None, title=None, descripti
     :param footer_text: Footer text for the embed
     :return: Status code of the second request
     """
-
+    prefect_logger = get_run_logger()
     if not isinstance(file_paths, list):
         file_paths = [file_paths]
 
@@ -799,17 +800,18 @@ def send_to_discord(webhook_url, file_paths, content=None, title=None, descripti
         "embeds": [embed],
         "content": content or ""  # Ensure content is initialized
     }
-    # headers = {
-    #     "Content-Type": "application/json"
-    # }
 
     try:
-        response = requests.post(webhook_url, data=json.dumps(payload))#, headers=headers)
+        # response = requests.post(webhook_url, data=json.dumps(payload))#, headers=headers)
+        response = requests.post(webhook_url, json=payload)
         response.raise_for_status()  # This will raise an exception for HTTP errors
+        prefect_logger.info("Embedded message sent successfully to Discord!")
         print("Embedded message sent successfully to Discord!")
     except requests.exceptions.RequestException as e:
         print(f"Failed to send embedded message. Error: {e}")
         print(f"Response content: {response.content if response else 'No response'}")
+        prefect_logger.error(f"Failed to send embedded message. Error: {e}")
+        prefect_logger.error(f"Response content: {response.content if response else 'No response'}")
         return False
 
     # # Send the first request (embed only)
@@ -846,10 +848,12 @@ def send_to_discord(webhook_url, file_paths, content=None, title=None, descripti
 
     if response.status_code == 200 or response.status_code == 204:
         print("GIFs sent successfully to Discord!")
+        prefect_logger.info("GIFs sent successfully to Discord!")
     else:
         print(f"Failed to send GIFs. Status code: {response.status_code}")
         print(f"Response content: {response.content}")
-
+        prefect_logger.error(f"Failed to send GIFs. Status code: {response.status_code}")
+        prefect_logger.error(f"Response content: {response.content}")
     return response.status_code == 200
 
 #---------------------#

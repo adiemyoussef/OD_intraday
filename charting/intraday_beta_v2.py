@@ -7,6 +7,7 @@ import pytz
 import requests
 from prefect import flow, task
 from prefect.tasks import task_input_hash, Task
+
 from datetime import timedelta, datetime, date
 from typing import List, Optional
 #from charting.generate_gifs import generate_gif, send_to_discord
