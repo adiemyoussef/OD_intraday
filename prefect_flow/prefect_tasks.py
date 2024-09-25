@@ -38,7 +38,7 @@ from utilities.logging_config import *
 from charting.intraday_beta_v2 import *
 from heatmaps_simulation.heatmap_task import *
 
-prefect_logger = get_run_logger()
+
 # Setup
 mp.set_start_method("fork", force=True)
 dill.settings['recurse'] = True
@@ -74,10 +74,7 @@ logger.info(f'Postgre Status -- > {pg_data.get_status()}')
 logger.info(f'Prod Postgre Status -- > {prod_pg_data.get_status()}')
 logger.info(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
 
-prefect_logger.info(f"Initializing db status: {db_utils.get_status()}")
-prefect_logger.info(f'Postgre Status -- > {pg_data.get_status()}')
-prefect_logger.info(f'Prod Postgre Status -- > {prod_pg_data.get_status()}')
-prefect_logger.info(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
+
 
 # -------------------------------------------#
 
