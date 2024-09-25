@@ -513,6 +513,10 @@ def generate_revised_book(override_entries=False, sleep_time=600, retry_cycles=6
     dates_to_run = filtered_df[filtered_df['as_of_date'].isna()]['quote_date'].dt.date.values
     prefect_logger.info(f'Quote dates to run: {dates_to_run}')
 
+    # if not dates_to_run:
+    #     prefect_logger.info("No dates to process. All quote dates are up to date.")
+    #     return  # or perform some other action
+
     for date in reversed(dates_to_run):
         prefect_logger.info(f'Starting for quote_date: {date}')
 

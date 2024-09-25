@@ -489,7 +489,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
         images=[dict(
             source=img_src,
             xref="paper", yref="paper",
-            x=0.15, y=0.7,
+            x=0.15, y=0.8,
             sizex=0.65, sizey=0.65,
             sizing="contain",
             opacity=0.25,  # Increased opacity for better visibility
