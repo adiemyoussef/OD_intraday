@@ -29,7 +29,8 @@ import uuid
 from pathlib import Path
 import imageio
 import numpy as np
-
+import os
+from pathlib import Path
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -192,6 +193,7 @@ def generate_color_scale(base_color, is_positive):
 
     rgb = colorsys.hsv_to_rgb(hsv[0], hsv[1], v)
     return f'rgb({int(rgb[0] * 255)},{int(rgb[1] * 255)},{int(rgb[2] * 255)})'
+
 
 
 def generate_frame(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type,metric_to_compute,last_price,
@@ -607,24 +609,30 @@ def generate_discord_compatible_video(input_video_path, output_video_path):
         return None
 
 
+def get_image_path(img_path='config/images/position_0DTE_exp.png'):
+    # Get the directory of the current script
+    script_dir = Path(__file__).resolve().parent
+
+    # Construct the full path to the image
+    full_img_path = script_dir.parent / img_path
+
+    print(f"Attempting to load image from: {full_img_path}")
+
+    if not full_img_path.exists():
+        print(f"Warning: Image file not found at {full_img_path}")
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Script directory: {script_dir}")
+        return None
+
+    return str(full_img_path)
+
 def generate_video(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
                    metric,last_price,
                    img_path='config/images/logo_dark.png',
                    output_video='None.mp4'):
 
-    # Get the current working directory
-    current_dir = os.getcwd()
-    print(f"Current working directory: {current_dir}")
 
-    # Construct the full path to the image
-    full_img_path = os.path.abspath(os.path.join(current_dir, img_path))
-    print(f"Full image path: {full_img_path}")
-
-    # Check if the file exists
-    if not os.path.exists(full_img_path):
-        print(f"Warning: Image file not found at {full_img_path}")
-        # You might want to use a default image or continue without an image
-
+    full_img_path = get_image_path(img_path)
 
     # # Get the project root directory
     # project_root = Path(__file__).parent.parent
