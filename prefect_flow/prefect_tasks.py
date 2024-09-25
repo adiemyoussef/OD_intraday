@@ -1,7 +1,6 @@
 import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor,as_completed
-
 import anyio
 import pandas as pd
 from aio_pika import Message, exceptions as aio_pika_exceptions
@@ -10,8 +9,6 @@ import time as time_module
 from prefect import task, flow, get_run_logger,get_client
 from prefect.tasks import task_input_hash
 from prefect.deployments import run_deployment
-from prefect_dask import DaskTaskRunner
-
 from datetime import datetime, timedelta, time  # This imports the time class from datetime
 from datetime import time as datetime_time
 from zoneinfo import ZoneInfo
@@ -41,6 +38,7 @@ from utilities.logging_config import *
 from charting.intraday_beta_v2 import *
 from heatmaps_simulation.heatmap_task import *
 
+prefect_logger = get_run_logger()
 # Setup
 mp.set_start_method("fork", force=True)
 dill.settings['recurse'] = True
@@ -68,8 +66,6 @@ prod_pg_data = PostGreData(
     password=POSGRE_PROD_DB_PASSWORD,
     database=POSGRE_PROD_DB_NAME
 )
-
-
 rabbitmq_utils = RabbitMQUtilities(RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS, logger=logger)
 sftp_utils = SFTPUtility(SFTP_HOST, SFTP_PORT, SFTP_USERNAME, SFTP_PASSWORD, logger=logger)
 
@@ -78,6 +74,10 @@ logger.info(f'Postgre Status -- > {pg_data.get_status()}')
 logger.info(f'Prod Postgre Status -- > {prod_pg_data.get_status()}')
 logger.info(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
 
+prefect_logger.info(f"Initializing db status: {db_utils.get_status()}")
+prefect_logger.info(f'Postgre Status -- > {pg_data.get_status()}')
+prefect_logger.info(f'Prod Postgre Status -- > {prod_pg_data.get_status()}')
+prefect_logger.info(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
 
 # -------------------------------------------#
 
@@ -1200,7 +1200,7 @@ def Intraday_Flow():
     expected_file_override = None  # '/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-15_15_00_1.csv.zip'
 
     db_utils.connect()
-
+    pg_data.connect()
     try:
 
         # TODO: initial_price, last_price = get_prices()
