@@ -1156,18 +1156,6 @@ def compare_dataframes(posn_only, final_book_clean_insert):
 
 
 # ----------------- FLOWS ------------------#
-@flow(name="Post-Processing Flow 1")
-def post_processing_flow_1():
-    logger = get_run_logger()
-    logger.info("Post-Processing Flow 1 is running")
-    # Add any post-processing logic here
-
-
-@flow(name="Post-Processing Flow 2")
-def post_processing_flow_2():
-    logger = get_run_logger()
-    logger.info("Post-Processing Flow 2 is running")
-    # Add any post-processing logic here
 
 
 @flow(
@@ -1453,9 +1441,9 @@ def Intraday_Flow():
                         if current_time > datetime_time(7, 0):
                             intraday_gamma_heatmap(db, effective_datetime, current_date)
                             intraday_charm_heatmap(db, effective_datetime, current_date)
-                            # prefect_logger.info("Triggering gif flows...")
-                            # run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
-                            # prefect_logger.info("Gif flows triggered.")
+                            prefect_logger.info("Triggering gif flows...")
+                            run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
+                            prefect_logger.info("Gif flows triggered.")
 
 
 
