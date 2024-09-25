@@ -16,6 +16,7 @@ from utilities.misc_utils import *
 from config.config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 import os
 from datetime import datetime, time
+from datetime import datetime, time
 import numpy as np
 import plotly.graph_objects as go
 
