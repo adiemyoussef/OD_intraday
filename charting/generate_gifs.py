@@ -612,13 +612,26 @@ def generate_video(data, candlesticks, session_date, participant_input, position
                    img_path='config/images/logo_dark.png',
                    output_video='None.mp4'):
 
-
-    # Get the project root directory
-    project_root = Path(__file__).parent.parent
+    # Get the current working directory
+    current_dir = os.getcwd()
+    print(f"Current working directory: {current_dir}")
 
     # Construct the full path to the image
-    #full_img_path = project_root / img_path
-    full_img_path = img_path
+    full_img_path = os.path.abspath(os.path.join(current_dir, img_path))
+    print(f"Full image path: {full_img_path}")
+
+    # Check if the file exists
+    if not os.path.exists(full_img_path):
+        print(f"Warning: Image file not found at {full_img_path}")
+        # You might want to use a default image or continue without an image
+
+
+    # # Get the project root directory
+    # project_root = Path(__file__).parent.parent
+    #
+    # # Construct the full path to the image
+    # #full_img_path = project_root / img_path
+    # full_img_path = img_path
     # Get unique timestamps
     timestamps = data['effective_datetime'].unique()
 
