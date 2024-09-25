@@ -551,7 +551,7 @@ def fetch_gamma_data(db, effective_date, effective_datetime):
         FROM intraday.intraday_gamma
         WHERE effective_datetime <= '{effective_datetime}' -- (SELECT max(effective_datetime) FROM intraday.intraday_gamma)
         and effective_date = '{effective_date}'
-        and time(effective_datetime) >= '06:50:00'
+        and time(effective_datetime) >= '{HEATMAPS_START_TIME}'
     ),
     consumed_gamma AS (
         SELECT 
@@ -604,7 +604,7 @@ def fetch_charm_data(db, effective_date, effective_datetime):
         FROM intraday.intraday_charm
         WHERE effective_datetime <= '{effective_datetime}' -- (SELECT max(effective_datetime) FROM intraday.intraday_charm)
         and effective_date = '{effective_date}'
-        and time(effective_datetime) >= '08:30:00'
+        and time(effective_datetime) >= '{HEATMAPS_START_TIME}'
     ),
     consumed_charm AS (
         SELECT 

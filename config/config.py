@@ -140,8 +140,12 @@ class WebhookUrl(Enum):
     URL_2 = 'https://discord.com/api/webhooks/your-webhook-url-2'
     # Add more webhook URLs as needed
 
+
+HEATMAPS_START_TIME = '06:50:00'
 START_TIME_PRE_MARKET = '15:00:00'
 START_TIME_MARKET = '15:00:00'
+
+
 DEFAULT_POS_TYPES = ['Net', 'C','P']
 
 #--------------- DATA PROCESSING ---------------------#
