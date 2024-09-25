@@ -789,8 +789,8 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
 
 if __name__ == "__main__":
     zero_dte_flow()
-    #one_dte_flow()
-    #GEX_flow()
+    one_dte_flow()
+    GEX_flow()
     #plot_depthview(webhook_url=WebhookUrl.DEFAULT)
     #generate_heatmap_gif()
     #all_GEX_flow()
