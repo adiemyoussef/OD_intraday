@@ -28,7 +28,7 @@ from functools import partial
 
 default_date = date.today()
 STRIKE_RANGE = [5500, 5900]
-DEBUG_MODE = True  # Set to False for production
+DEBUG_MODE = False  # Set to False for production
 
 
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
