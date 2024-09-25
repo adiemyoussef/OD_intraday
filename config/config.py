@@ -218,7 +218,8 @@ LOGO_light = os.path.join('..', 'config', 'images', 'logo_light.png')
 GEX_0DTE = os.path.join('..', 'config', 'images', 'GEX_0DTE_exp.png')
 GEX_upcoming_exp = os.path.join('..', 'config', 'images', 'GEX_upcoming_exp.png')
 
-POS_0DTE = os.path.join('..', 'config', 'images', 'position_0DTE_exp.png')
+#POS_0DTE = os.path.join('..', 'config', 'images', 'position_0DTE_exp.png')
+POS_0DTE = os.path.join('config', 'images', 'position_0DTE_exp.png')
 POS_UPCOMING_EXP = os.path.join('..', 'config', 'images', 'position_upcoming_exp.png')
 
 

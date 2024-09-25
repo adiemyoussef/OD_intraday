@@ -205,6 +205,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
     else:
         x_axis_title = "Position"
 
+    print(f'This is the full_img_path passed to generate_frame: {full_img_path}')
 
     try:
         img = Image.open(full_img_path)
@@ -212,7 +213,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
         img.save(buffered, format="PNG")
         img_str = base64.b64encode(buffered.getvalue()).decode()
         img_src = f"data:image/png;base64,{img_str}"
-        #print(f"Image loaded successfully from {full_img_path}")
+
     except Exception as e:
         print(f"Error loading image: {e}")
         img_src = None
