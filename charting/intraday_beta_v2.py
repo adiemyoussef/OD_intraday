@@ -94,22 +94,28 @@ def fetch_data(session_date: str,effective_datetime:str, strike_range: List[int]
 
     prefect_logger.info(f'{prod_pg_data.get_status()}')
 
+
+
     metrics = db.execute_query(metrics_query)
     candlesticks = prod_pg_data.execute_query(candlesticks_query)
     last_price = prod_pg_data.execute_query(last_price_query)
 
+    unique_effectivedatetime = candlesticks['effective_datetime'].unique()
+    prefect_logger.info(f'distinct effective_datetimes: {unique_effectivedatetime}')
 
     if candlesticks.empty:
         prefect_logger.info("No candlesticks Available")
 
     else:
-        candlesticks['effective_datetime'] = (
-            pd.to_datetime(candlesticks['effective_datetime'], utc=True)  # Set timezone to UTC
-            .dt.tz_convert('America/New_York')  # Convert to Eastern Time
-            .dt.tz_localize(None)  # Remove timezone information (make naive)
-        )
+        # candlesticks['effective_datetime'] = (
+        #     pd.to_datetime(candlesticks['effective_datetime'], utc=False)  # Set timezone to UTC
+        #     .dt.tz_convert('America/New_York')  # Convert to Eastern Time
+        #     .dt.tz_localize(None)  # Remove timezone information (make naive)
+        # )
         candlesticks.drop_duplicates(keep='first', inplace=False)
 
+    unique_effectivedatetime = candlesticks['effective_datetime'].unique()
+    prefect_logger.info(f'distinct effective_datetimes: {unique_effectivedatetime}')
 
     return metrics, candlesticks, last_price
 
