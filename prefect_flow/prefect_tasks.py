@@ -268,7 +268,7 @@ def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_
         # {"name": "📈 Analysis Type", "value": "Intraday Gamma Heatmap", "inline": True},
         {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
     ]
-    footer_text = f"Generated on {friendly_time} | By OptionsDepth Inc."
+    footer_text = f"Generated on {friendly_time} | By OptionsDepth.com"
 
     # Prepare the embed
     embed = {
@@ -401,7 +401,7 @@ def send_charm_heatmap_discord(charm_chart: go.Figure, as_of_time_stamp: str, se
         # {"name": "📈 Analysis Type", "value": "Intraday Gamma Heatmap", "inline": True},
         {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
     ]
-    footer_text = f"Generated on {friendly_time} | By OptionsDepth Inc."
+    footer_text = f"Generated on {friendly_time} | By OptionsDepth.com"
 
     # Prepare the embed
     embed = {
@@ -1453,9 +1453,9 @@ def Intraday_Flow():
                         if current_time > datetime_time(7, 0):
                             intraday_gamma_heatmap(db, effective_datetime, current_date)
                             intraday_charm_heatmap(db, effective_datetime, current_date)
-                            prefect_logger.info("Triggering gif flows...")
-                            run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
-                            prefect_logger.info("Gif flows triggered.")
+                            # prefect_logger.info("Triggering gif flows...")
+                            # run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
+                            # prefect_logger.info("Gif flows triggered.")
 
 
 

@@ -1,7 +1,8 @@
 import pandas_market_calendars as mcal
 import os
 from prefect.blocks.system import JSON, Secret
-
+from PIL import Image
+from enum import Enum
 nyse = mcal.get_calendar('NYSE')
 
 def load_db_config():
@@ -31,7 +32,12 @@ def load_discord_webhook():
 def load_other_config():
     return JSON.load("other-config").value
 
-
+def load_logo(path):
+    try:
+        return Image.open(path)
+    except FileNotFoundError:
+        print(f"Warning: Logo file not found at {path}. Using placeholder.")
+        return Image.new('RGBA', (100, 100), color=(73, 109, 137))
 
 
 # Load configurations
@@ -112,13 +118,33 @@ RABBITMQ_MAX_RUNTIME = rabbitmq_config['max_runtime']
 RABBITMQ_MAX_ACK_RETRIES = rabbitmq_config['max_ack_retries']
 PROCESS_MESSAGE_QUEUE_RETRY_DELAY = other_config.get('process_message_queue_retry_delay', 5)
 
+#---------------------- DISCORD -------------------------#
 # Discord Configuration
 WEBHOOK_URL = discord_webhook
 DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 HEATMAP_CHANNEL = 'https://discord.com/api/webhooks/1278125396671332393/Y02pRK5XTUKURHoSF6tIlSDzHBPUzUqDHzA8ybsat4Z-zCN8EeyXmyjir7SwMB_OQm42'
 CHARM_HEATMAP_CHANNEL = 'https://discord.com/api/webhooks/1281065101805359134/pJzUD5GQufw3W9wUa4E9_GbwcZPgAsx61A6JssGiNbebUZ94SyOkWk83FurbEpxvFeb4'
 
+WEBHOOK_URLS = {
+    'zero_dte': 'https://discord.com/api/webhooks/zero_dte_webhook_url',
+    'one_dte': 'https://discord.com/api/webhooks/one_dte_webhook_url',
+    'gex': 'https://discord.com/api/webhooks/gex_webhook_url',
+    'depthview': 'https://discord.com/api/webhooks/depthview_webhook_url',
+    'options_charts': 'https://discord.com/api/webhooks/options_charts_webhook_url',
+    'dev': 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
+}
 
+class WebhookUrl(Enum):
+    DEFAULT = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
+    URL_1 = 'https://discord.com/api/webhooks/your-webhook-url-1'
+    URL_2 = 'https://discord.com/api/webhooks/your-webhook-url-2'
+    # Add more webhook URLs as needed
+
+START_TIME_PRE_MARKET = '07:00:00'
+START_TIME_MARKET = '07:00:00'
+DEFAULT_POS_TYPES = ['Net', 'C','P']
+
+#--------------- DATA PROCESSING ---------------------#
 # Data Processing
 OPTION_SYMBOLS_TO_PROCESS = other_config.get('option_symbols_to_process', ['SPX', 'SPXW'])
 CSV_CHUNKSIZE = other_config.get('csv_chunksize', 100000)
@@ -156,6 +182,7 @@ HAT_SPX_TICKER = '^SPX'
 YAHOO_SPX_TICKER = "^GSPC"
 RISK_FREE_RATE = 0.055
 
+#------------------- VISUALS ------------------- #
 # Charting
 IMAGE_WIDTH = 1440
 IMAGE_HEIGTH = 810
@@ -187,6 +214,14 @@ BAR_POSN_COLORS = {
 # Watermarks
 LOGO_dark = os.path.join('..', 'config', 'images', 'logo_dark.png')
 LOGO_light = os.path.join('..', 'config', 'images', 'logo_light.png')
+
+GEX_0DTE = os.path.join('..', 'config', 'images', 'GEX_0DTE_exp.png')
+GEX_upcoming_exp = os.path.join('..', 'config', 'images', 'GEX_upcoming_exp.png')
+
+POS_0DTE = os.path.join('..', 'config', 'images', 'position_0DTE_exp.png')
+POS_UPCOMING_EXP = os.path.join('..', 'config', 'images', 'position_upcoming_exp.png')
+
+
 
 if __name__ == "__main__":
     print("#----------- VARIABLES ------------#")

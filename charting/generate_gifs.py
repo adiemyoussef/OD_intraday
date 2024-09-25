@@ -499,7 +499,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
 
     # Add copyright sign at bottom left
     fig.add_annotation(
-        text="© OptionsDepth Inc.",
+        text="© OptionsDepth.com",
         xref="paper", yref="paper",
         x=-0.05, y=-0.05,
         showarrow=False,
@@ -508,7 +508,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
 
     # Add "Powered by OptionsDepth inc." at bottom right
     fig.add_annotation(
-        text="Powered by OptionsDepth Inc.",
+        text="Powered by OptionsDepth.com",
         xref="paper", yref="paper",
         x=0.99, y=-0.05,
         showarrow=False,
@@ -616,8 +616,8 @@ def generate_video(data, candlesticks, session_date, participant_input, position
     project_root = Path(__file__).parent.parent
 
     # Construct the full path to the image
-    full_img_path = project_root / img_path
-
+    #full_img_path = project_root / img_path
+    full_img_path = img_path
     # Get unique timestamps
     timestamps = data['effective_datetime'].unique()
 
