@@ -610,29 +610,35 @@ def generate_discord_compatible_video(input_video_path, output_video_path):
 
 
 def get_image_path(img_path='config/images/position_0DTE_exp.png'):
-    # Get the directory of the current script
-    script_dir = Path(__file__).resolve().parent
+    # List of possible base directories to check
+    base_dirs = [
+        Path(__file__).resolve().parent.parent,  # Two levels up from the script
+        Path(__file__).resolve().parent,         # One level up from the script
+        Path.cwd(),                              # Current working directory
+        Path.home(),                             # User's home directory
+    ]
 
-    # Construct the full path to the image
-    full_img_path = script_dir.parent / img_path
+    for base_dir in base_dirs:
+        full_img_path = base_dir / img_path
+        print(f"Checking for image at: {full_img_path}")
+        if full_img_path.exists():
+            print(f"Image found at: {full_img_path}")
+            return str(full_img_path)
 
-    print(f"Attempting to load image from: {full_img_path}")
-
-    if not full_img_path.exists():
-        print(f"Warning: Image file not found at {full_img_path}")
-        print(f"Current working directory: {os.getcwd()}")
-        print(f"Script directory: {script_dir}")
-        return None
-
-    return str(full_img_path)
+    print("Image not found in any of the expected locations.")
+    print(f"Script location: {Path(__file__).resolve()}")
+    print(f"Current working directory: {os.getcwd()}")
+    return None
 
 def generate_video(data, candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,
                    metric,last_price,
                    img_path='config/images/logo_dark.png',
                    output_video='None.mp4'):
 
-
     full_img_path = get_image_path(img_path)
+
+    if full_img_path is None:
+        print("Warning: Proceeding without background image.")
 
     # # Get the project root directory
     # project_root = Path(__file__).parent.parent
