@@ -481,7 +481,7 @@ def generate_book(ticker:str, date:str):
     version="1.0.0",
     #retries=10,
     #retry_delay_seconds=300, #5 minutes
-    timeout_seconds=3600,
+    timeout_seconds=12000,
 )
 def generate_revised_book(override_entries=False, sleep_time=600, retry_cycles=6):
     """
