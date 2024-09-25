@@ -31,6 +31,8 @@ import imageio
 import numpy as np
 import os
 from pathlib import Path
+from utilities.misc_utils import *
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -207,7 +209,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
     else:
         x_axis_title = "Position"
 
-    print(f'This is the full_img_path passed to generate_frame: {full_img_path}')
+    #print(f'This is the full_img_path passed to generate_frame: {full_img_path}')
 
     try:
         img = Image.open(full_img_path)
@@ -284,20 +286,15 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
     #TODO: config_file
     colors = {
         'Net': {
-            #'negative': 'rgb(0,0,130)',    # dark blue
             'negative': 'rgb(0,149,255)',  # light blue
             'positive': 'rgb(0,149,255)'  # light blue
 
         },
         'C': {
-            # 'negative': 'rgb(50,168,82)',   # dark green
-            # 'positive': 'rgb(48,199,40)',  # light green
             'negative': 'rgb(0,217,51)',  # dark green
             'positive': 'rgb(0,217,51)'  # light green
         },
         'P': {
-            # 'negative': 'rgb(160,0,0)',   # dark red
-            # 'positive': 'rgb(255,0,0)'   # light red
             'negative': 'rgb(204,3,0)',  # dark red
             'positive': 'rgb(204,3,0)'  # light red
         }
@@ -492,10 +489,10 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
         images=[dict(
             source=img_src,
             xref="paper", yref="paper",
-            x=0.15, y=0.6,
-            sizex=0.75, sizey=0.75,
+            x=0.15, y=0.7,
+            sizex=0.65, sizey=0.65,
             sizing="contain",
-            opacity=0.3,  # Increased opacity for better visibility
+            opacity=0.25,  # Increased opacity for better visibility
             layer="below"
         )] if img_src else []
     )
@@ -506,7 +503,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
         xref="paper", yref="paper",
         x=-0.05, y=-0.05,
         showarrow=False,
-        font=dict(size=10, color="gray")
+        font=dict(size=11, color="gray")
     )
 
     # Add "Powered by OptionsDepth inc." at bottom right
@@ -515,7 +512,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
         xref="paper", yref="paper",
         x=0.99, y=-0.05,
         showarrow=False,
-        font=dict(size=10, color="gray"),
+        font=dict(size=11, color="gray"),
         xanchor="right"
     )
 
@@ -815,11 +812,21 @@ def send_to_discord(webhook_url, file_paths, content=None, title=None, descripti
         breakpoint()
 
     # Second Request: Send the GIFs separately
+    sorted_file_paths = sort_file_paths(file_paths)
+
+    # Now use the sorted paths to create the files dictionary
     files = {}
-    for i, file_path in enumerate(file_paths):
+    for i, file_path in enumerate(sorted_file_paths):
         with open(file_path, 'rb') as f:
             file_content = f.read()
         files[f"file{i}"] = (os.path.basename(file_path), file_content, "image/gif")
+
+    # # Second Request: Send the GIFs separately
+    # files = {}
+    # for i, file_path in enumerate(file_paths):
+    #     with open(file_path, 'rb') as f:
+    #         file_content = f.read()
+    #     files[f"file{i}"] = (os.path.basename(file_path), file_content, "image/gif")
 
     # Send the second request (GIFs only)
     response = requests.post(webhook_url, files=files)
