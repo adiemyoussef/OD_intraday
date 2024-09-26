@@ -295,7 +295,8 @@ def zero_dte_flow(
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-        strike_range = get_strike_range(db,session_date)
+        # strike_range = get_strike_range(db,session_date)
+        strike_range = [5580,5900]
     if expiration is None:
         expiration = session_date
     if position_types is None:
@@ -347,7 +348,8 @@ def one_dte_flow(
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-        strike_range = get_strike_range(db,session_date, range_value = 0.025, range_type = 'percent')
+        #strike_range = get_strike_range(db,session_date, range_value = 0.025, range_type = 'percent')
+        strike_range = [5580, 5900]
     if position_types is None:
         position_types = DEFAULT_POS_TYPES
     elif 'All' in position_types:
@@ -401,7 +403,8 @@ def GEX_flow(
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-        strike_range = get_strike_range(db,session_date, range_value = 0.025, range_type = 'percent')
+        #strike_range = get_strike_range(db,session_date, range_value = 0.025, range_type = 'percent')
+        strike_range = [5580, 5900]
     if position_types is None:
         position_types = DEFAULT_POS_TYPES
     if expiration is None:
