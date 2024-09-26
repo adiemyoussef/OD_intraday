@@ -1,7 +1,6 @@
 import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor,as_completed
-
 import anyio
 import pandas as pd
 from aio_pika import Message, exceptions as aio_pika_exceptions
@@ -10,8 +9,6 @@ import time as time_module
 from prefect import task, flow, get_run_logger,get_client
 from prefect.tasks import task_input_hash
 from prefect.deployments import run_deployment
-from prefect_dask import DaskTaskRunner
-
 from datetime import datetime, timedelta, time  # This imports the time class from datetime
 from datetime import time as datetime_time
 from zoneinfo import ZoneInfo
@@ -41,6 +38,7 @@ from utilities.logging_config import *
 from charting.intraday_beta_v2 import *
 from heatmaps_simulation.heatmap_task import *
 
+
 # Setup
 mp.set_start_method("fork", force=True)
 dill.settings['recurse'] = True
@@ -61,12 +59,21 @@ pg_data = PostGreData(
     password=POSGRE_DB_PASSWORD,
     database=POSGRE_DB_NAME
 )
+prod_pg_data = PostGreData(
+    host=POSGRE_PROD_DB_HOST,
+    port=POSGRE_PROD_DB_PORT,
+    user=POSGRE_PROD_DB_USER,
+    password=POSGRE_PROD_DB_PASSWORD,
+    database=POSGRE_PROD_DB_NAME
+)
 rabbitmq_utils = RabbitMQUtilities(RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS, logger=logger)
 sftp_utils = SFTPUtility(SFTP_HOST, SFTP_PORT, SFTP_USERNAME, SFTP_PASSWORD, logger=logger)
 
 logger.info(f"Initializing db status: {db_utils.get_status()}")
 logger.info(f'Postgre Status -- > {pg_data.get_status()}')
+logger.info(f'Prod Postgre Status -- > {prod_pg_data.get_status()}')
 logger.info(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
+
 
 
 # -------------------------------------------#
@@ -306,7 +313,7 @@ def send_heatmap_discord(gamma_chart: go.Figure, as_of_time_stamp: str, session_
 
 
 @task(name="Send latest gamma heatmap to discord", task_run_name="Latest gamma heatmap to discord")
-def intraday_gamma_heatmap(db, effective_datetime: str, effective_date: str):
+def intraday_gamma_heatmap(db, pg, effective_datetime: str, effective_date: str):
     prefect_logger = get_run_logger()
 
     raw_gamma_data = fetch_gamma_data(db, effective_date, effective_datetime)
@@ -316,7 +323,7 @@ def intraday_gamma_heatmap(db, effective_datetime: str, effective_date: str):
     prefect_logger.info("Fetched all Data")
     # Fetch candlestick data (assuming you still need this)
     cd_query = f"""
-    SELECT * FROM optionsdepth_stage.charts_candlestick
+    SELECT * FROM public.charts_candlestick
     WHERE ticker = 'SPX' 
     AND 
     effective_date = '{effective_date}'
@@ -326,13 +333,13 @@ def intraday_gamma_heatmap(db, effective_datetime: str, effective_date: str):
     effective_datetime > '{effective_date} 09:20:00'
     """
 
-    candlesticks = db.execute_query(cd_query)
+    candlesticks = pg.execute_query(cd_query)
 
     if candlesticks.empty:
         spx_candlesticks = None
     else:
         prefect_logger.info(f"Fetched candlesticks")
-        candlesticks_resampled = resample_and_convert_timezone(candlesticks)
+        candlesticks_resampled = candlesticks.copy() #resample_and_convert_timezone(candlesticks)
         spx_candlesticks = candlesticks_resampled.set_index('effective_datetime', drop=False)
 
     # Filter data for current effective_datetime
@@ -442,7 +449,7 @@ def send_charm_heatmap_discord(charm_chart: go.Figure, as_of_time_stamp: str, se
 
 
 @task(name="Send latest gamma heatmap to discord", task_run_name="Latest gamma heatmap to discord")
-def intraday_charm_heatmap(db, effective_datetime: str, effective_date: str):
+def intraday_charm_heatmap(db, pg, effective_datetime: str, effective_date: str):
     prefect_logger = get_run_logger()
 
     raw_charm_data = fetch_charm_data(db, effective_date, effective_datetime)
@@ -452,7 +459,7 @@ def intraday_charm_heatmap(db, effective_datetime: str, effective_date: str):
     prefect_logger.info("Fetched all Data")
     # Fetch candlestick data (assuming you still need this)
     cd_query = f"""
-    SELECT * FROM optionsdepth_stage.charts_candlestick
+    SELECT * FROM public.charts_candlestick
     WHERE ticker = 'SPX' 
     AND 
     effective_date = '{effective_date}'
@@ -462,13 +469,13 @@ def intraday_charm_heatmap(db, effective_datetime: str, effective_date: str):
     effective_datetime > '{effective_date} 09:20:00'
     """
 
-    candlesticks = db.execute_query(cd_query)
+    candlesticks = pg.execute_query(cd_query)
 
     if candlesticks.empty:
         spx_candlesticks = None
     else:
         prefect_logger.info(f"Fetched candlesticks")
-        candlesticks_resampled = resample_and_convert_timezone(candlesticks)
+        candlesticks_resampled = candlesticks.copy() #resample_and_convert_timezone(candlesticks)
         spx_candlesticks = candlesticks_resampled.set_index('effective_datetime', drop=False)
 
     # Filter data for current effective_datetime
@@ -1190,7 +1197,7 @@ def Intraday_Flow():
     expected_file_override = None  # '/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-15_15_00_1.csv.zip'
 
     db_utils.connect()
-
+    pg_data.connect()
     try:
 
         # TODO: initial_price, last_price = get_prices()
@@ -1439,8 +1446,8 @@ def Intraday_Flow():
 
                         # TODO: modify the other params to remove this and start at the same time as the book generation
                         if current_time > datetime_time(7, 0):
-                            intraday_gamma_heatmap(db, effective_datetime, current_date)
-                            intraday_charm_heatmap(db, effective_datetime, current_date)
+                            intraday_gamma_heatmap(db,prod_pg_data, effective_datetime, current_date)
+                            intraday_charm_heatmap(db,prod_pg_data, effective_datetime, current_date)
                             prefect_logger.info("Triggering gif flows...")
                             run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
                             prefect_logger.info("Gif flows triggered.")

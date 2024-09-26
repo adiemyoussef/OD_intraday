@@ -7,13 +7,14 @@ import pytz
 import requests
 from prefect import flow, task
 from prefect.tasks import task_input_hash, Task
-
+from prefect import task, flow, get_run_logger,get_client
 from datetime import timedelta, datetime, date
 from typing import List, Optional
 #from charting.generate_gifs import generate_gif, send_to_discord
 from charting.generate_gifs import generate_gif, send_to_discord,generate_video
-from utilities.db_utils import DatabaseUtilities
+
 from utilities.misc_utils import *
+from utilities.db_utils import *
 from config.config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 import os
 from datetime import datetime, time
@@ -37,6 +38,15 @@ db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()
 print(f'{db.get_status()}')
 
+prod_pg_data = PostGreData(
+    host=POSGRE_PROD_DB_HOST,
+    port=POSGRE_PROD_DB_PORT,
+    user=POSGRE_PROD_DB_USER,
+    password=POSGRE_PROD_DB_PASSWORD,
+    database=POSGRE_PROD_DB_NAME
+)
+prod_pg_data.connect()
+print(f'{prod_pg_data.get_status()}')
 
 def get_webhook_url(flow_name):
     if DEBUG_MODE:
@@ -50,7 +60,7 @@ def parse_strike_range(strike_range: str) -> List[int]:
 
 @task(cache_key_fn=None, cache_expiration=timedelta(hours=0, minutes=1))
 def fetch_data(session_date: str,effective_datetime:str, strike_range: List[int], expiration: str, start_time:str = '07:00:00') -> [pd.DataFrame]:
-
+    prefect_logger = get_run_logger()
     start_of_video = f'{session_date} {start_time}'
 
     metrics_query = f"""
@@ -71,37 +81,43 @@ def fetch_data(session_date: str,effective_datetime:str, strike_range: List[int]
         metrics_query += f" AND expiration_date_original = '{expiration}'"
 
     candlesticks_query = f"""
-    SELECT * FROM optionsdepth_stage.charts_candlestick
+    SELECT * FROM public.charts_candlestick
     where effective_date = '{session_date}'
     and
     ticker = 'SPX'
     """
 
     last_price_query = f"""
-    SELECT close FROM optionsdepth_stage.charts_candlestick 
-    WHERE id = (SELECT MAX(id) FROM optionsdepth_stage.charts_candlestick WHERE ticker = 'SPX')
+    SELECT close FROM public.charts_candlestick 
+    WHERE id = (SELECT MAX(id) FROM public.charts_candlestick WHERE ticker = 'SPX')
     """
+
+    prefect_logger.info(f'{prod_pg_data.get_status()}')
+
 
 
     metrics = db.execute_query(metrics_query)
-    candlesticks = db.execute_query(candlesticks_query)
-    last_price = db.execute_query(last_price_query)
+    candlesticks = prod_pg_data.execute_query(candlesticks_query)
+    last_price = prod_pg_data.execute_query(last_price_query)
 
+    unique_effectivedatetime = candlesticks['effective_datetime'].unique()
+    prefect_logger.info(f'distinct effective_datetimes: {unique_effectivedatetime}')
 
     if candlesticks.empty:
-        print("No candlesticks Available")
+        prefect_logger.info("No candlesticks Available")
 
     else:
-        candlesticks['effective_datetime'] = (
-            pd.to_datetime(candlesticks['effective_datetime'], utc=True)  # Set timezone to UTC
-            .dt.tz_convert('America/New_York')  # Convert to Eastern Time
-            .dt.tz_localize(None)  # Remove timezone information (make naive)
-        )
+        # candlesticks['effective_datetime'] = (
+        #     pd.to_datetime(candlesticks['effective_datetime'], utc=False)  # Set timezone to UTC
+        #     .dt.tz_convert('America/New_York')  # Convert to Eastern Time
+        #     .dt.tz_localize(None)  # Remove timezone information (make naive)
+        # )
         candlesticks.drop_duplicates(keep='first', inplace=False)
 
+    unique_effectivedatetime = candlesticks['effective_datetime'].unique()
+    prefect_logger.info(f'distinct effective_datetimes: {unique_effectivedatetime}')
 
     return metrics, candlesticks, last_price
-
 
 @task(cache_key_fn=None, cache_expiration=timedelta(hours=0, minutes=1))
 def fetch_data_depthview(session_date: str, strike_range: List[int], expiration: str = None) -> [pd.DataFrame]:
@@ -120,6 +136,7 @@ def fetch_data_depthview(session_date: str, strike_range: List[int], expiration:
     metrics = db.execute_query(metrics_query)
 
     return metrics
+
 @task
 def process_data(metric: pd.DataFrame,candlesticks: pd.DataFrame, session_date: str, participant: str,
                  strike_range: List[int], expiration: str, position_types: List[str]) -> List[str]:
