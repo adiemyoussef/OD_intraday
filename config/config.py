@@ -5,6 +5,9 @@ from PIL import Image
 from enum import Enum
 nyse = mcal.get_calendar('NYSE')
 
+
+def load_bot_space_config():
+    return JSON.load("intraday-bot").value
 def load_db_config():
     return JSON.load("database-credentials").value
 
@@ -41,6 +44,7 @@ def load_logo(path):
 
 
 # Load configurations
+intradaybot_space = load_bot_space_config()
 postgresql_config = load_postgre_db_config()
 postgresql_STAGE_config = load_postgre_STAGE_db_config()
 postgresql_PROD_config = load_postgre_PROD_db_config()
@@ -50,6 +54,12 @@ rabbitmq_config = load_rabbitmq_config()
 do_spaces_config = load_do_spaces_config()
 discord_webhook = load_discord_webhook()
 other_config = load_other_config()
+
+# intraday-bot space
+INTRADAYBOT_ENDPOINT = intradaybot_space['end-point']
+INTRADAYBOT_SECRETKEY= intradaybot_space['secret_key']
+INTRADAYBOT_ACCESSKEY = intradaybot_space['access_key']
+INTRADAYBOT_SPACENAME = 'intraday-bot'
 
 # MySQL Database Configuration
 DB_HOST = db_config['host']

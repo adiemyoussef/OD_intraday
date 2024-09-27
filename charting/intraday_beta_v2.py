@@ -11,18 +11,18 @@ from prefect import task, flow, get_run_logger,get_client
 from datetime import timedelta, datetime, date
 from typing import List, Optional
 #from charting.generate_gifs import generate_gif, send_to_discord
-from charting.generate_gifs import generate_gif, send_to_discord,generate_video
+from charting.generate_gifs import generate_gif, generate_frame_new,send_to_discord,generate_video
 
 from utilities.misc_utils import *
 from utilities.db_utils import *
-from config.config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+from config.config import *
 import os
-from datetime import datetime, time
+
 from datetime import datetime, time
 import numpy as np
 import plotly.graph_objects as go
 
-from config.config import *
+
 
 import concurrent.futures
 import time as time_module
@@ -34,7 +34,7 @@ import subprocess
 
 default_date = date.today()
 STRIKE_RANGE = [5500, 5900]
-DEBUG_MODE = False  # Set to False for production
+DEBUG_MODE = True  # Set to False for production
 
 
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
@@ -53,9 +53,9 @@ print(f'Prod PG status:{prod_pg_data.get_status()}')
 
 spaces = DigitalOceanSpaces(
     region_name='nyc3',
-    endpoint_url='https://nyc3.digitaloceanspaces.com',
-    access_key='YOUR_SPACES_ACCESS_KEY',
-    secret_key='YOUR_SPACES_SECRET_KEY'
+    endpoint_url=INTRADAYBOT_ENDPOINT,
+    access_key=INTRADAYBOT_ACCESSKEY,
+    secret_key=INTRADAYBOT_SECRETKEY
 )
 spaces.connect()
 print(f'Space status:{spaces.get_status()}')
@@ -266,68 +266,68 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
 
 @task
 def test_generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration, position_type,
-                        last_price, metric='positioning', img_path='config/images/logo_dark.png'):
-    space_name = 'your-space-name'
+                        last_price, metric='positioning', img_path='config/images/logo_dark.png', space_name= INTRADAYBOT_SPACENAME):
 
-    # Generate a unique identifier for this set of parameters
-    param_hash = hash(f"{session_date}_{participant}_{strike_range}_{expiration}_{position_type}_{metric}")
+    position_type = ['Net']
+    for pos in position_type:
+        print(f"Processing: {session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
+        param_hash = hash(f"{session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
+        last_timestamp_key = f"last_timestamp_{param_hash}"
 
-    # Check the last processed timestamp for these parameters
-    last_timestamp_key = f"last_timestamp_{param_hash}"
-    try:
-        # Then you can use its methods:
-        # spaces.upload_to_spaces('local_file.txt', 'your-space-name', 'remote_file.txt')
-        spaces.download_from_spaces(space_name, last_timestamp_key, 'last_timestamp.txt')
-        objects = spaces.list_objects('your-space-name', 'prefix/')
-
-        # download_from_spaces(space_name, last_timestamp_key, 'last_timestamp.txt')
-        with open('last_timestamp.txt', 'r') as f:
-            last_timestamp = pd.to_datetime(f.read().strip())
-    except:
+        # Read the last timestamp
         last_timestamp = None
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            temp_file_name = temp_file.name
 
-    # Filter data for new timestamps only
-    if last_timestamp:
-        new_data = data[data['effective_datetime'] > last_timestamp]
-    else:
-        new_data = data
+        try:
+            if spaces.download_from_spaces(space_name, last_timestamp_key, temp_file_name):
+                with open(temp_file_name, 'r') as f:
+                    last_timestamp = pd.to_datetime(f.read().strip())
+        finally:
+            os.remove(temp_file_name)
 
-    # Generate only new frames
-    new_frames = []
-    for timestamp in new_data['effective_datetime'].unique():
-        frame_path,_ = generate_frame_new(new_data, candlesticks, timestamp, participant, strike_range, expiration,
-                                    position_type, metric, last_price, img_path)
-        breakpoint()
-        spaces_key = f"frames_{param_hash}/{timestamp.strftime('%Y%m%d%H%M%S')}.png"
-        spaces.upload_to_spaces(frame_path, space_name, spaces_key)
-        # upload_to_spaces(frame_path, space_name, spaces_key)
-        new_frames.append(spaces_key)
-        os.remove(frame_path)  # Remove the temporary file
+        # Filter data for new timestamps only
+        if last_timestamp:
+            new_data = data[data['effective_datetime'] > last_timestamp]
+        else:
+            new_data = data
 
-    # Update the last processed timestamp
-    if new_frames:
-        with open('last_timestamp.txt', 'w') as f:
-            f.write(str(new_data['effective_datetime'].max()))
-        spaces.upload_to_spaces('last_timestamp.txt', space_name, last_timestamp_key)
+        # Generate only new frames
+        new_frames = []
+        for timestamp in new_data['effective_datetime'].unique():
+            fig,frame_path = generate_frame_new(new_data, candlesticks, timestamp, participant, strike_range, expiration,
+                                        pos, metric, last_price, img_path)
 
-    # Generate video from all frames
-    all_frames = sorted(
-        [obj['Key'] for obj in client.list_objects(Bucket=space_name, Prefix=f"frames_{param_hash}/")['Contents']])
+            spaces_key = f"frames_{param_hash}/{timestamp.strftime('%Y%m%d%H%M%S')}.png"
+            spaces.upload_to_spaces(frame_path, space_name, spaces_key)
+            # upload_to_spaces(frame_path, space_name, spaces_key)
+            new_frames.append(spaces_key)
+            os.remove(frame_path)  # Remove the temporary file
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        for spaces_key in all_frames:
-            local_file = os.path.join(tmpdir, os.path.basename(spaces_key))
-            spaces.download_from_spaces(space_name, spaces_key, local_file)
+        # Update the last processed timestamp
+        if new_frames:
+            with open('last_timestamp.txt', 'w') as f:
+                f.write(str(new_data['effective_datetime'].max()))
+            spaces.upload_to_spaces('last_timestamp.txt', space_name, last_timestamp_key)
 
-        output_video = f'video_{param_hash}.mp4'
-        ffmpeg_command = f'ffmpeg -framerate 3 -pattern_type glob -i "{tmpdir}/*.png" -c:v libx264 -pix_fmt yuv420p {output_video}'
-        subprocess.run(ffmpeg_command, shell=True, check=True)
+        # Generate video from all frames
+        all_frames = sorted(spaces.list_objects(space_name, prefix=f"frames_{param_hash}/"))
 
-        # Upload the video to Spaces
-        spaces.upload_to_spaces(output_video, space_name, f"videos/{output_video}")
-        os.remove(output_video)
 
-    return f"https://{space_name}.nyc3.digitaloceanspaces.com/videos/{output_video}"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for spaces_key in all_frames:
+                local_file = os.path.join(tmpdir, os.path.basename(spaces_key))
+                spaces.download_from_spaces(space_name, spaces_key, local_file)
+
+            output_video = f'video_{param_hash}.mp4'
+            ffmpeg_command = f'ffmpeg -framerate 3 -pattern_type glob -i "{tmpdir}/*.png" -c:v libx264 -pix_fmt yuv420p {output_video}'
+            subprocess.run(ffmpeg_command, shell=True, check=True)
+
+            # Upload the video to Spaces
+            spaces.upload_to_spaces(output_video, space_name, f"videos/{output_video}")
+            os.remove(output_video)
+
+        return f"https://{space_name}.nyc3.digitaloceanspaces.com/videos/{output_video}"
 
 
 @task
@@ -963,6 +963,8 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
 
 
 if __name__ == "__main__":
+    test_zero_dte_flow()
+    breakpoint()
     zero_dte_flow()
     one_dte_flow()
     GEX_flow()
