@@ -390,7 +390,7 @@ def test_generate_video_task_old(data, candlesticks, session_date, participant, 
 @task
 def test_generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration, position_types,
                              last_price, metric='positioning', img_path='config/images/logo_dark.png',
-                             space_name=INTRADAYBOT_SPACENAME, webhook_url=None):
+                             space_name=INTRADAYBOT_SPACENAME):
     """
     Generate and process video frames for multiple position types, create videos, and optionally send to Discord.
     This version uses DigitalOcean Spaces for persistent tracking of generated frames.
@@ -762,7 +762,118 @@ def test_zero_dte_flow(
     else:
         print(f"Failed to process or send intraday data for {session_date}")
 
+@flow(name="TEST - 1DTE gifs")
+def test_one_dte_flow(
+        session_date: Optional[date] = default_date,
+        strike_range: Optional[List[int]] = None,
+        expiration: Optional[str] = None,
+        participant: str = 'total_customers',
+        position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
+        webhook_url: str = None
+):
+    webhook_url = webhook_url or get_webhook_url('dev')
 
+    expiration = str(session_date)
+
+    # Set default values if not provided
+    if session_date is None:
+        session_date = datetime.now().strftime('%Y-%m-%d')
+    if strike_range is None:
+        # strike_range = get_strike_range(db,session_date)
+        strike_range = [5580, 5900]
+    if expiration is None:
+        expiration = get_trading_day(session_date, n=1, direction='next', return_format='str')
+    if position_types is None:
+        position_types = DEFAULT_POS_TYPES
+    elif 'All' in position_types:
+        position_types = DEFAULT_POS_TYPES
+
+    current_time = datetime.now().time()
+
+    if current_time < time(12, 0):
+        start_time = START_TIME_PRE_MARKET
+    elif time(12, 0) <= current_time < time(23, 0):
+        start_time = START_TIME_MARKET
+    else:  # 7:00 PM or later
+        start_time = START_TIME_PRE_MARKET
+
+    print(f"Start time set to: {start_time}")
+
+    # Fetch data
+    metrics, candlesticks, last_price = fetch_data(session_date, None, strike_range, expiration, start_time)
+    as_of_time_stamp = str(metrics["effective_datetime"].max())
+    last_price = last_price.values[0][0]
+    # Process data and generate GIFs
+    # paths_to_send = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+    #                                    position_types, last_price ,'positioning', POS_0DTE)
+    # print(f"Video and frames generated at: {paths_to_send}")
+
+    # Generate video with new frames
+    video_url = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+                                         position_types, last_price, metric='positioning', img_path=POS_0DTE,
+                                         space_name=INTRADAYBOT_SPACENAME)
+
+    # Send Discord message with Video URL
+    video_success = send_discord_message(video_url, as_of_time_stamp, session_date, participant, strike_range,
+                                         expiration, position_types, 'positioning', webhook_url)
+
+    if video_success:
+        print(f"Successfully processed and sent intraday data (video) for {session_date}")
+    else:
+        print(f"Failed to process or send intraday data for {session_date}")
+
+@flow(name="TEST - GEX gifs")
+def test_GEX_flow(
+        session_date: Optional[date] = None,
+        strike_range: Optional[List[int]] = None,
+        expiration: Optional[str] = None,
+        participant: str = 'mm',
+        position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
+        webhook_url: str = None
+):
+
+    #Default values
+    webhook_url = webhook_url or get_webhook_url('gex')
+    if session_date is None:
+        session_date = datetime.now().strftime('%Y-%m-%d')
+    if strike_range is None:
+        #strike_range = get_strike_range(db,session_date, range_value = 0.025, range_type = 'percent')
+        strike_range = [5580, 5900]
+    if position_types is None:
+        position_types = DEFAULT_POS_TYPES
+    if expiration is None:
+        expiration = session_date
+
+    current_time = datetime.now().time()
+    if current_time < time(12, 0):
+        start_time = START_TIME_PRE_MARKET
+    elif time(12, 0) <= current_time < time(23, 0):
+        start_time = START_TIME_MARKET
+    else:  # 7:00 PM or later
+        start_time = START_TIME_PRE_MARKET
+
+    print(f"Start time set to: {start_time}")
+
+
+    # Fetch data
+    metrics, candlesticks,last_price = fetch_data(session_date,None, strike_range, expiration, start_time)
+    as_of_time_stamp = str(metrics["effective_datetime"].max())
+    last_price = last_price.values[0][0]
+    # videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+    #                                    position_types, last_price,"GEX", GEX_0DTE)
+    # Generate video with new frames
+    video_url = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+                                         position_types, last_price, metric='GEX', img_path=GEX_0DTE,
+                                          space_name=INTRADAYBOT_SPACENAME)
+
+    # Send Discord message with Video URL
+    video_success = send_discord_message(video_url, as_of_time_stamp, session_date, participant, strike_range,
+                                         expiration, position_types, 'positioning', webhook_url)
+
+    if video_success:
+        print(f"Successfully processed and sent intraday data (video) for {session_date}")
+    else:
+        print(f"Failed to process or send intraday data for {session_date}")
 # ------------------ DEPTHVIEW ------------------#
 
 
@@ -1111,7 +1222,8 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
 
 if __name__ == "__main__":
     test_zero_dte_flow()
-
+    test_one_dte_flow()
+    test_GEX_flow()
     # zero_dte_flow()
     # one_dte_flow()
     # GEX_flow()
