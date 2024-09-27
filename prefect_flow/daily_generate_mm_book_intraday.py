@@ -502,7 +502,7 @@ def generate_revised_book(override_entries=False, sleep_time=600, retry_cycles=6
     # Perform a left join
     merged_df = pd.merge(oc_dates, as_of_dates, left_on='quote_date', right_on='as_of_date', how='left')
     merged_df['quote_date'] = pd.to_datetime(merged_df['quote_date'])
-    filtered_df = merged_df[merged_df['quote_date'] > '2022-01-22']
+    filtered_df = merged_df[merged_df['quote_date'] > '2024-01-22']
     dates_to_run = filtered_df[filtered_df['as_of_date'].isna()]['quote_date'].dt.date.values
     prefect_logger.info(f'Quote dates to run: {dates_to_run}')
 

@@ -628,19 +628,21 @@ def get_initial_book(get_unrevised_book: Callable):
         if limit2am <= current_time.time() < limit7pm:  # Between 2 AM and 7 PM
             prefect_logger.info(f"Operating during Revised book hours")
             query = f"""
-            SELECT * FROM public.charts_dailybook 
+            SELECT * FROM intraday.new_daily_book_format 
+            -- SELECT * FROM public.charts_dailybook 
             WHERE effective_date = '{current_date}' AND revised = 'Y'
             """
-            session_book = prod_pg_data.execute_query(query)
+            session_book = db.execute_query(query)
 
             prefect_logger.info(f"Got Revised book of {session_book['effective_date']}")
 
             if session_book.empty:
                 query = f"""
-                SELECT * FROM public.charts_dailybook 
+                SELECT * FROM intraday.new_daily_book_format 
+                -- SELECT * FROM public.charts_dailybook 
                 WHERE effective_date = '{current_date}' AND revised = 'N'
                 """
-                session_book = prod_pg_data.execute_query(query)
+                session_book = db.execute_query(query)
                 prefect_logger.info("Getting Unrevised book")
                 if session_book.empty:
                     send_notification(f"No session_book found for {current_date}. Using unrevised session_book.")
@@ -889,16 +891,16 @@ async def build_latest_book(initial_book, intraday_data):
                         'total_customers_posn']
 
     for col in position_columns:
-        # merged[col] = merged[col].fillna(0) + merged[f'{col}_intraday'].fillna(0)
+        merged[col] = merged[col].fillna(0) + merged[f'{col}_intraday'].fillna(0)
 
         #TODO: Newly added with PostGre book data type being changed
-        if is_numeric_dtype(merged[col]) and is_numeric_dtype(merged[f'{col}_intraday']):
-            merged[col] = merged[col].fillna(0).astype(float)
-            merged[f'{col}_intraday'] = merged[f'{col}_intraday'].fillna(0).astype(float)
-            merged[col] = merged.apply(lambda row: safe_add(row[col], row[f'{col}_intraday']), axis=1)
-        else:
-            # Handle non-numeric columns if necessary
-            pass
+        # if is_numeric_dtype(merged[col]) and is_numeric_dtype(merged[f'{col}_intraday']):
+        #     merged[col] = merged[col].fillna(0).astype(float)
+        #     merged[f'{col}_intraday'] = merged[f'{col}_intraday'].fillna(0).astype(float)
+        #     merged[col] = merged.apply(lambda row: safe_add(row[col], row[f'{col}_intraday']), axis=1)
+        # else:
+        #     # Handle non-numeric columns if necessary
+        #     pass
 
         merged.loc[merged[col].isna(), col] = merged[f'{col}_intraday']
     merged['expiration_date_original'] = merged['expiration_date_original'].fillna(
