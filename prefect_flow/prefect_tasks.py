@@ -1209,7 +1209,7 @@ def Intraday_Flow():
     flow_start_time = time_module.time()
     current_time = datetime.now(ZoneInfo("America/New_York")).time()
 
-    expected_file_override = '/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-09-27_06_00_1.csv.zip'
+    expected_file_override = None #'/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-09-27_06_00_1.csv.zip'
 
     db_utils.connect()
     pg_data.connect()
