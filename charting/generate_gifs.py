@@ -52,7 +52,7 @@ import mimetypes
 import tempfile
 import urllib.parse
 from typing import List, Optional
-
+import platform
 from pathlib import Path
 from utilities.misc_utils import *
 from utilities.db_utils import *
@@ -555,16 +555,43 @@ def generate_frame_new(data, candlesticks, timestamp, participant, strike_input,
 
     #print(f'This is the full_img_path passed to generate_frame: {full_img_path}')
 
+    # Improved cross-platform image loading with error handling and path information
+    img_src = None
     try:
-        img = Image.open(full_img_path)
-        buffered = BytesIO()
-        img.save(buffered, format="PNG")
-        img_str = base64.b64encode(buffered.getvalue()).decode()
-        img_src = f"data:image/png;base64,{img_str}"
+        # Get the absolute path of the script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
 
+        # Go up one level to the project root
+        project_root = os.path.dirname(script_dir)
+        # Construct the full path to the image using os.path.join for cross-platform compatibility
+        full_img_path = os.path.normpath(os.path.join(project_root, 'config', 'images', os.path.basename(full_img_path)))
+
+        print(f"Attempting to load image from: {full_img_path}")
+        print(f"Current platform: {platform.system()}")
+
+        if os.path.isfile(full_img_path):
+            with Image.open(full_img_path) as img:
+                buffered = BytesIO()
+                img.save(buffered, format="PNG")
+                img_str = base64.b64encode(buffered.getvalue()).decode()
+                img_src = f"data:image/png;base64,{img_str}"
+            print(f"Image loaded successfully from: {full_img_path}")
+        else:
+            print(f"Image file not found at: {full_img_path}")
+            print(f"Current working directory: {os.getcwd()}")
+            print(f"Contents of {os.path.dirname(full_img_path)}:")
+            print(os.listdir(os.path.dirname(full_img_path)))
+
+            # Check for case-sensitive file systems (mainly for macOS)
+            if platform.system() == "Darwin":  # macOS
+                lower_case_files = [f.lower() for f in os.listdir(os.path.dirname(full_img_path))]
+                if os.path.basename(full_img_path).lower() in lower_case_files:
+                    print(
+                        "Note: The image file might exist with a different case. macOS is case-insensitive but case-preserving.")
     except Exception as e:
         print(f"Error loading image: {e}")
-        img_src = None
+        print(f"Attempted to load from: {full_img_path}")
+        print(f"Current working directory: {os.getcwd()}")
 
 
     metrics_data = data[data['effective_datetime'] <= timestamp].copy()
