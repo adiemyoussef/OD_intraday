@@ -27,6 +27,8 @@ import json
 import boto3
 from botocore.client import Config
 from io import BytesIO
+import decimal
+from pandas.api.types import is_numeric_dtype
 
 # Import your utility classes
 from utilities.sftp_utils import *
@@ -887,7 +889,17 @@ async def build_latest_book(initial_book, intraday_data):
                         'total_customers_posn']
 
     for col in position_columns:
-        merged[col] = merged[col].fillna(0) + merged[f'{col}_intraday'].fillna(0)
+        # merged[col] = merged[col].fillna(0) + merged[f'{col}_intraday'].fillna(0)
+
+        #TODO: Newly added with PostGre book data type being changed
+        if is_numeric_dtype(merged[col]) and is_numeric_dtype(merged[f'{col}_intraday']):
+            merged[col] = merged[col].fillna(0).astype(float)
+            merged[f'{col}_intraday'] = merged[f'{col}_intraday'].fillna(0).astype(float)
+            merged[col] = merged.apply(lambda row: safe_add(row[col], row[f'{col}_intraday']), axis=1)
+        else:
+            # Handle non-numeric columns if necessary
+            pass
+
         merged.loc[merged[col].isna(), col] = merged[f'{col}_intraday']
     merged['expiration_date_original'] = merged['expiration_date_original'].fillna(
         merged['expiration_date_intraday'])

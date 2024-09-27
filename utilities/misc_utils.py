@@ -24,7 +24,7 @@ import numpy as np
 import pandas_market_calendars as mcal
 from datetime import datetime, timedelta
 import logging
-
+import decimal
 nyse = mcal.get_calendar('NYSE')
 logger = logging.getLogger(__name__)
 
@@ -751,3 +751,11 @@ def sort_file_paths(file_paths):
             return (2, 0)  # Lowest priority for any other files
 
     return sorted(file_paths, key=get_priority)
+
+def safe_add(a, b):
+    if isinstance(a, decimal.Decimal):
+        return a + decimal.Decimal(str(b))
+    elif isinstance(b, decimal.Decimal):
+        return decimal.Decimal(str(a)) + b
+    else:
+        return a + b
