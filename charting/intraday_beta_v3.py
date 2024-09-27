@@ -773,8 +773,6 @@ def test_one_dte_flow(
 ):
     webhook_url = webhook_url or get_webhook_url('dev')
 
-    expiration = str(session_date)
-
     # Set default values if not provided
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
@@ -810,7 +808,7 @@ def test_one_dte_flow(
 
     # Generate video with new frames
     video_url = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
-                                         position_types, last_price, metric='positioning', img_path=POS_0DTE,
+                                         position_types, last_price, metric='positioning', img_path=POS_UPCOMING_EXP,
                                          space_name=INTRADAYBOT_SPACENAME)
 
     # Send Discord message with Video URL
