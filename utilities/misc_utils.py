@@ -639,7 +639,7 @@ def fetch_charm_data(db, effective_date, effective_datetime):
 
 
 def resample_and_convert_timezone(df:pd.DataFrame, datetime_column='effective_datetime', resample_interval='5T',
-                                  target_timezone='US/Eastern'):
+                                  source_timezone='US/Eastern',target_timezone='US/Eastern'):
     """
     Resample a dataframe with 1-minute OHLCV data to a specified interval and convert timezone.
 
@@ -662,7 +662,8 @@ def resample_and_convert_timezone(df:pd.DataFrame, datetime_column='effective_da
     # Check if the index is timezone-aware
     if df.index.tzinfo is None:
         # If timezone-naive, assume it's UTC and localize
-        df.index = df.index.tz_localize('UTC')
+        df.index = df.index.tz_localize(source_timezone)
+        #df.index = df.index.tz_localize('UTC')
 
     # Convert to target timezone
     target_tz = pytz.timezone(target_timezone)

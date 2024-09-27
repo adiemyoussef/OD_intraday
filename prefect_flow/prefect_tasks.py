@@ -330,7 +330,7 @@ def intraday_gamma_heatmap(db, pg, effective_datetime: str, effective_date: str)
     AND 
     effective_date = '{effective_date}'
     AND 
-    effective_datetime <= '{cd_formatted_datetime}'
+    effective_datetime <= '{effective_datetime}'
     AND
     effective_datetime > '{effective_date} 09:20:00'
     """
@@ -341,7 +341,7 @@ def intraday_gamma_heatmap(db, pg, effective_datetime: str, effective_date: str)
         spx_candlesticks = None
     else:
         prefect_logger.info(f"Fetched candlesticks")
-        candlesticks_resampled = candlesticks.copy() #resample_and_convert_timezone(candlesticks)
+        candlesticks_resampled = resample_and_convert_timezone(candlesticks) #candlesticks.copy()
         spx_candlesticks = candlesticks_resampled.set_index('effective_datetime', drop=False)
 
     # Filter data for current effective_datetime
