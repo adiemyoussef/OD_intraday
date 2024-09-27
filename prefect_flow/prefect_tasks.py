@@ -1217,9 +1217,6 @@ def Intraday_Flow():
 
         # TODO: initial_price, last_price = get_prices()
 
-        # parallel_subflows = [zero_dte_flow(), one_dte_flow()]
-        # await asyncio.gather(*parallel_subflows)
-
         initial_book = get_initial_book(get_unrevised_book)
         book_date_loaded = initial_book["effective_date"].unique()
         prefect_logger.info(f"Initial Book of {book_date_loaded} loaded")
