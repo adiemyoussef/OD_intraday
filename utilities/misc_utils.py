@@ -685,6 +685,37 @@ def resample_and_convert_timezone(df:pd.DataFrame, datetime_column='effective_da
 
     return df_resampled
 
+def resample_ohlcv_data(df: pd.DataFrame, datetime_column='effective_datetime', resample_interval='5T'):
+    """
+    Resample a dataframe with OHLCV data to a specified interval.
+
+    Parameters:
+    df (pandas.DataFrame): Input dataframe with OHLCV data
+    datetime_column (str): Name of the datetime column (default: 'effective_datetime')
+    resample_interval (str): Pandas resample rule (default: '5T' for 5 minutes)
+
+    Returns:
+    pandas.DataFrame: Resampled dataframe
+    """
+
+    # Ensure the datetime column is in the correct format
+    df[datetime_column] = pd.to_datetime(df[datetime_column])
+
+    # Set the datetime column as index
+    df = df.set_index(datetime_column)
+
+    # Resample to the specified interval
+    df_resampled = df.resample(resample_interval).agg({
+        'open': 'first',
+        'high': 'max',
+        'low': 'min',
+        'close': 'last',
+    })
+
+    # Reset index to make datetime a column again
+    df_resampled.reset_index(inplace=True)
+
+    return df_resampled
 def process_gamma_data(df):
     df['effective_datetime'] = pd.to_datetime(df['effective_datetime'])
     df['sim_datetime'] = pd.to_datetime(df['sim_datetime'])

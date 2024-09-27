@@ -5,47 +5,64 @@ import uuid
 import pandas as pd
 import pytz
 import requests
-from prefect import flow, task#-Line 2
+from prefect import flow, task
 from prefect.tasks import task_input_hash, Task
-from prefect.deployments import run_deployment
-from prefect import task, get_run_logger
+from prefect import task, flow, get_run_logger, get_client
 from datetime import timedelta, datetime, date
 from typing import List, Optional
-#from charting.generate_gifs import generate_gif, send_to_discord
-from charting.generate_frames import generate_gif, send_to_discord,generate_video
-from utilities.db_utils import DatabaseUtilities
+# from charting.generate_gifs import generate_gif, send_to_discord
+from charting.generate_gifs import generate_gif, generate_frame_new, send_to_discord, generate_video, \
+    send_to_discord_new
+
 from utilities.misc_utils import *
-from config.config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+from utilities.db_utils import *
+from config.config import *
 import os
+
 from datetime import datetime, time
 import numpy as np
 import plotly.graph_objects as go
-from PIL import Image
-from config.config import *
-from enum import Enum
+
 import concurrent.futures
 import time as time_module
 from functools import partial
 
-DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
-#https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ
+import tempfile
+
+import subprocess
 
 default_date = date.today()
 STRIKE_RANGE = [5500, 5900]
+DEBUG_MODE = False  # Set to False for production
 
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()
-print(f'{db.get_status()}')
+print(f'MySQL status:{db.get_status()}')
+
+prod_pg_data = PostGreData(
+    host=POSGRE_PROD_DB_HOST,
+    port=POSGRE_PROD_DB_PORT,
+    user=POSGRE_PROD_DB_USER,
+    password=POSGRE_PROD_DB_PASSWORD,
+    database=POSGRE_PROD_DB_NAME
+)
+prod_pg_data.connect()
+print(f'Prod PG status:{prod_pg_data.get_status()}')
+
+do_space = DigitalOceanSpaces(
+    region_name='nyc3',
+    endpoint_url=INTRADAYBOT_ENDPOINT,
+    access_key=INTRADAYBOT_ACCESSKEY,
+    secret_key=INTRADAYBOT_SECRETKEY
+)
+do_space.connect()
+print(f'Space status:{do_space.get_status()}')
 
 
-
-
-def load_logo():
-    try:
-        return Image.open(LOGO_dark)
-    except FileNotFoundError:
-        print(f"Warning: Logo file not found at {LOGO_dark}. Using placeholder.")
-        return Image.new('RGBA', (100, 100), color=(73, 109, 137))
+def get_webhook_url(flow_name):
+    if DEBUG_MODE:
+        return WEBHOOK_URLS['dev']
+    return WEBHOOK_URLS.get(flow_name, WEBHOOK_URLS['dev'])
 
 
 @task
@@ -53,15 +70,16 @@ def parse_strike_range(strike_range: str) -> List[int]:
     values = list(map(int, strike_range.split(',')))
     return [min(values), max(values)]
 
-@task(cache_key_fn=None, cache_expiration=timedelta(hours=0, minutes=1))
-def fetch_data(session_date: str,effective_datetime:str, strike_range: List[int], expiration: str, start_time:str = '07:00:00') -> [pd.DataFrame]:
 
+@task(cache_key_fn=None, cache_expiration=timedelta(hours=0, minutes=1))
+def fetch_data(session_date: str, effective_datetime: str, strike_range: List[int], expiration: str,
+               start_time: str = '07:00:00') -> [pd.DataFrame]:
+    prefect_logger = get_run_logger()
     start_of_video = f'{session_date} {start_time}'
 
     metrics_query = f"""
     SELECT * FROM intraday.intraday_books
     WHERE effective_date = '{session_date}'
-    -- and expiration_date != '2024-09-20 09:15:00'
     """
 
     if effective_datetime is not None:
@@ -77,41 +95,45 @@ def fetch_data(session_date: str,effective_datetime:str, strike_range: List[int]
         metrics_query += f" AND expiration_date_original = '{expiration}'"
 
     candlesticks_query = f"""
-    SELECT * FROM optionsdepth_stage.charts_candlestick
+    SELECT * FROM public.charts_candlestick
     where effective_date = '{session_date}'
     and
     ticker = 'SPX'
     """
 
     last_price_query = f"""
-    SELECT close FROM optionsdepth_stage.charts_candlestick 
-    WHERE id = (SELECT MAX(id) FROM optionsdepth_stage.charts_candlestick WHERE ticker = 'SPX')
+    SELECT close FROM public.charts_candlestick 
+    WHERE id = (SELECT MAX(id) FROM public.charts_candlestick WHERE ticker = 'SPX')
     """
 
+    prefect_logger.info(f'{prod_pg_data.get_status()}')
 
     metrics = db.execute_query(metrics_query)
-    candlesticks = db.execute_query(candlesticks_query)
-    last_price = db.execute_query(last_price_query)
+    candlesticks = prod_pg_data.execute_query(candlesticks_query)
+    last_price = prod_pg_data.execute_query(last_price_query)
 
+    unique_effectivedatetime = candlesticks['effective_datetime'].unique()
+    prefect_logger.info(f'distinct effective_datetimes: {unique_effectivedatetime}')
 
     if candlesticks.empty:
-        print("No candlesticks Available")
+        prefect_logger.info("No candlesticks Available")
 
     else:
-        candlesticks['effective_datetime'] = (
-            pd.to_datetime(candlesticks['effective_datetime'], utc=True)  # Set timezone to UTC
-            .dt.tz_convert('America/New_York')  # Convert to Eastern Time
-            .dt.tz_localize(None)  # Remove timezone information (make naive)
-        )
+        # candlesticks['effective_datetime'] = (
+        #     pd.to_datetime(candlesticks['effective_datetime'], utc=False)  # Set timezone to UTC
+        #     .dt.tz_convert('America/New_York')  # Convert to Eastern Time
+        #     .dt.tz_localize(None)  # Remove timezone information (make naive)
+        # )
         candlesticks.drop_duplicates(keep='first', inplace=False)
 
+    unique_effectivedatetime = candlesticks['effective_datetime'].unique()
+    prefect_logger.info(f'distinct effective_datetimes: {unique_effectivedatetime}')
 
     return metrics, candlesticks, last_price
 
 
 @task(cache_key_fn=None, cache_expiration=timedelta(hours=0, minutes=1))
 def fetch_data_depthview(session_date: str, strike_range: List[int], expiration: str = None) -> [pd.DataFrame]:
-
     metrics_query = f"""
     SELECT * FROM intraday.intraday_books
     WHERE effective_date = '{session_date}'
@@ -122,17 +144,18 @@ def fetch_data_depthview(session_date: str, strike_range: List[int], expiration:
     if expiration is not None:
         metrics_query += f"AND expiration_date_original = '{expiration}'"
 
-
     metrics = db.execute_query(metrics_query)
 
     return metrics
+
+
 @task
-def process_data(metric: pd.DataFrame,candlesticks: pd.DataFrame, session_date: str, participant: str,
+def process_data(metric: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
                  strike_range: List[int], expiration: str, position_types: List[str]) -> List[str]:
     gif_paths = []
     for position_type in position_types:
         gif_path = generate_gif(
-            metric,candlesticks, session_date, participant, position_type,
+            metric, candlesticks, session_date, participant, position_type,
             strike_range, expiration,
             output_gif=f'animated_chart_{position_type}.gif'
         )
@@ -142,23 +165,21 @@ def process_data(metric: pd.DataFrame,candlesticks: pd.DataFrame, session_date: 
             print(f"Failed to generate GIF for {position_type}")
     return gif_paths
 
-@task
-def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
-                        strike_range: List[int], expiration: str, position_type: list, last_price:float, metric:str = 'positioning'):
-    prefect_logger = get_run_logger()
-    prefect_logger.info(f"Starting generate_video_task for {session_date}")
-    prefect_logger.info(f"Parameters: participant={participant}, strike_range={strike_range}, expiration={expiration}, position_type={position_type}, metric={metric}")
 
-    videos_paths =[]
+@task
+def generate_video_task_(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
+                         strike_range: List[int], expiration: str, position_type: list, last_price: float,
+                         metric: str = 'positioning', img_path='config/images/logo_dark.png'):
+    videos_paths = []
     last_frame_paths = []
 
     for pos_type in position_type:
+        print(f'generate_video_task_ for {pos_type}')
 
         video_path, last_frame_path = generate_video(
             data, candlesticks, session_date, participant, pos_type,
-            strike_range, expiration, metric, last_price,
-
-            output_video = f'{pos_type}_{expiration}_{uuid.uuid4().hex}_animated_chart.mp4'
+            strike_range, expiration, metric, last_price, img_path=img_path,
+            output_video=f'{pos_type}_{expiration}_animated_chart.mp4'
         )
         videos_paths.append(video_path)
         last_frame_paths.append(last_frame_path)
@@ -168,30 +189,32 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
 
     return paths
 
+
 def generate_video_wrapper(pos_type, data, candlesticks, session_date, participant,
-                           strike_range, expiration, metric, last_price):
+                           strike_range, expiration, metric, last_price, img_path):
     start_time = time_module.time()
 
+    # def generate_video(data, candlesticks, session_date, participant_input, position_type_input, strike_input,
+    #                    expiration_input,
+    #                    metric, last_price,
+    #                    img_path='config/images/logo_dark.png',
+    #                    output_video='None.mp4')
 
     video_path, last_frame_path = generate_video(
         data, candlesticks, session_date, participant, pos_type,
-        strike_range, expiration, metric, last_price,
-        output_video=f'{pos_type}_{expiration}_{uuid.uuid4().hex}_animated_chart.mp4'
+        strike_range, expiration, metric, last_price, img_path=img_path,
+        output_video=f'{pos_type}_{expiration}_animated_chart.mp4'
     )
     end_time = time_module.time()
     duration = end_time - start_time
     print(f"Video generation for {pos_type} completed in {duration:.2f} seconds")
     return video_path, last_frame_path
 
+
 @task
-def generate_video_task_parallel(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
-                        strike_range: List[int], expiration: str, position_type: list, last_price:float, metric:str = 'positioning'):
-
-    prefect_logger = get_run_logger()
-    prefect_logger.info(f"Starting generate_video_task for {session_date}")
-    prefect_logger.info(f"Parameters: participant={participant}, strike_range={strike_range}, expiration={expiration}, position_type={position_type}, metric={metric}")
-
-
+def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_date: str, participant: str,
+                        strike_range: List[int], expiration: str, position_type: list, last_price: float,
+                        metric: str = 'positioning', img_path='config/images/logo_dark.png'):
     videos_paths = []
     last_frame_paths = []
 
@@ -205,9 +228,10 @@ def generate_video_task_parallel(data: pd.DataFrame, candlesticks: pd.DataFrame,
         strike_range=strike_range,
         expiration=expiration,
         metric=metric,
-        last_price=last_price
+        last_price=last_price,
+        img_path=img_path
     )
-    prefect_logger.info(f"Starting Parallel execution")
+
     # Use ThreadPoolExecutor to parallelize the video generation
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Submit tasks for each position type
@@ -218,26 +242,251 @@ def generate_video_task_parallel(data: pd.DataFrame, candlesticks: pd.DataFrame,
             pos_type = future_to_pos_type[future]
             try:
                 video_path, last_frame_path = future.result()
-                print(f'video_path: {video_path}')
-                print(f'last_frame_path: {last_frame_path}')
                 videos_paths.append(video_path)
                 last_frame_paths.append(last_frame_path)
-                prefect_logger.info(f"Successfully generated video for {pos_type}")
             except Exception as exc:
-                prefect_logger.error(f"Video generation for {pos_type} generated an exception: {exc}")
+                print(f"Video generation for {pos_type} generated an exception: {exc}")
                 breakpoint()
 
     # Combined paths with last_frame_paths first, followed by videos_paths
     paths = last_frame_paths + videos_paths
 
-    prefect_logger.info(f"Video generation complete. Total videos: {len(videos_paths)}, Total frames: {len(last_frame_paths)}")
-    prefect_logger.debug(f"Video paths: {videos_paths}")
-    prefect_logger.debug(f"Last frame paths: {last_frame_paths}")
-
     return paths
 
+
+# def generate_frame(data, candlesticks, timestamp, participant, strike_range, expiration, position_type, metric,
+#                    last_price, img_path):
+#     # Your existing frame generation code here
+#     # ...
+#
+#     # Instead of saving to a local directory, save to a temporary file
+#     with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
+#         fig.write_image(tmpfile.name, scale=3)
+#
+#     return tmpfile.name
+
+
 @task
-def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_date: str, participant: str,
+def test_generate_video_task_old(data, candlesticks, session_date, participant, strike_range, expiration,
+                                 position_types,
+                                 last_price, metric='positioning', img_path='config/images/logo_dark.png',
+                                 space_name=INTRADAYBOT_SPACENAME, webhook_url=None):
+    """
+    Generate and process video frames for multiple position types, create videos, and optionally send to Discord.
+
+    This function processes options data for specified position types (e.g., 'Net', 'C', 'P'),
+    generates video frames, creates videos, and stores them in DigitalOcean Spaces. It also
+    keeps track of the last processed timestamp to avoid redundant processing in subsequent runs.
+
+    Args:
+        data (pd.DataFrame): The options data to process.
+        candlesticks (pd.DataFrame): Candlestick data for the underlying asset.
+        session_date (str): The date of the trading session.
+        participant (str): The market participant type (e.g., 'mm', 'total_customers').
+        strike_range (list): The range of strike prices to consider.
+        expiration (str): The expiration date for the options.
+        position_types (list): List of position types to process (e.g., ['Net', 'C', 'P']).
+        last_price (float): The last price of the underlying asset.
+        metric (str): The metric to compute (default: 'positioning').
+        img_path (str): Path to the background image for frames.
+        space_name (str): Name of the DigitalOcean Space to use.
+        webhook_url (str): Discord webhook URL for sending results (optional).
+
+    Returns:
+        dict: A dictionary containing video and latest frame URLs for each position type.
+    """
+
+    # Set default position types if not provided
+    if not position_types:
+        position_types = ['Net', 'C', 'P']
+
+    results = {}
+
+    for pos in position_types:
+        print(f"Processing: {session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
+
+        # Create a unique hash for this combination of parameters
+        param_hash = hash(f"{session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
+        last_timestamp_key = f"last_timestamp_{param_hash}"
+        frames_prefix = f"frames_{param_hash}/"
+
+        # Retrieve the last processed timestamp from DigitalOcean Spaces
+        last_timestamp = None
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            temp_file_name = temp_file.name
+            if do_space.download_from_spaces(space_name, last_timestamp_key, temp_file_name):
+                with open(temp_file_name, 'r') as f:
+                    last_timestamp = pd.to_datetime(f.read().strip())
+        os.remove(temp_file_name)
+
+        # Filter data to process only new timestamps
+        if last_timestamp:
+            new_data = data[data['effective_datetime'] > last_timestamp]
+        else:
+            new_data = data
+
+        # Generate new frames for the filtered data
+        new_frames = []
+        for timestamp in new_data['effective_datetime'].unique():
+            fig, frame_path = generate_frame_new(new_data, candlesticks, timestamp, participant, strike_range,
+                                                 expiration,
+                                                 pos, metric, last_price, img_path)
+            spaces_key = f"{frames_prefix}{timestamp.strftime('%Y%m%d%H%M%S')}.png"
+            do_space.upload_to_spaces(frame_path, space_name, spaces_key)
+            new_frames.append(spaces_key)
+            os.remove(frame_path)  # Remove the temporary file
+
+        # Retrieve all frames (existing + new) from DigitalOcean Spaces
+        all_frames = sorted(do_space.list_objects(space_name, prefix=frames_prefix))
+
+        # Generate video from all frames
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Download all frames to a temporary directory
+            for spaces_key in all_frames:
+                local_file = os.path.join(tmpdir, os.path.basename(spaces_key))
+                do_space.download_from_spaces(space_name, spaces_key, local_file)
+
+            # Use ffmpeg to create a video from the frames
+            output_video = f'video_{param_hash}.mp4'
+            ffmpeg_command = f'ffmpeg -framerate 3 -pattern_type glob -i "{tmpdir}/*.png" -c:v libx264 -pix_fmt yuv420p {output_video}'
+            subprocess.run(ffmpeg_command, shell=True, check=True)
+
+            # Upload the generated video to DigitalOcean Spaces
+            video_key = f"videos/{output_video}"
+            do_space.upload_to_spaces(output_video, space_name, video_key)
+            os.remove(output_video)
+
+        # Create URLs for the video and latest frame
+        video_url = f"https://{space_name}.nyc3.digitaloceanspaces.com/{video_key}"
+        latest_frame_key = all_frames[-1] if all_frames else None
+        latest_frame_url = f"https://nyc3.digitaloceanspaces.com/{latest_frame_key}" if latest_frame_key else None
+
+        # Store results for this position type
+        results[pos] = {
+            'video_url': video_url,
+            'latest_frame_url': latest_frame_url
+        }
+
+        # Send results to Discord if a webhook URL is provided
+        if webhook_url:
+            as_of_time_stamp = str(data["effective_datetime"].max())
+            success = send_discord_message([video_url, latest_frame_url], as_of_time_stamp, session_date, participant,
+                                           strike_range, expiration, [pos], metric, webhook_url)
+
+            # Update the last processed timestamp if Discord message was sent successfully
+            if success:
+                latest_timestamp = data['effective_datetime'].max()
+                with open('last_timestamp.txt', 'w') as f:
+                    f.write(str(latest_timestamp))
+                do_space.upload_to_spaces('last_timestamp.txt', space_name, last_timestamp_key)
+                print(f"Updated last processed timestamp to {latest_timestamp} for {pos}")
+            else:
+                print(f"Failed to send to Discord. Last timestamp not updated for {pos}")
+        else:
+            print("No webhook URL provided. Video not sent to Discord.")
+
+    return results
+
+
+@task
+def test_generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration, position_types,
+                             last_price, metric='positioning', img_path='config/images/logo_dark.png',
+                             space_name=INTRADAYBOT_SPACENAME, webhook_url=None):
+    """
+    Generate and process video frames for multiple position types, create videos, and optionally send to Discord.
+    This version uses DigitalOcean Spaces for persistent tracking of generated frames.
+
+    Args:
+        [All arguments remain the same as in the previous version]
+
+    Returns:
+        dict: A dictionary containing video and latest frame URLs for each position type.
+    """
+
+    if not position_types:
+        position_types = ['Net', 'C', 'P']
+
+    results = {}
+
+    for pos in position_types:
+        print(f"Processing: {session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
+
+        # Create a unique identifier for this combination of parameters
+        combo_id = f"{session_date}_{participant}_{'-'.join(map(str, strike_range))}_{expiration}_{pos}_{metric}"
+        print(f"Generated {combo_id} for {session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
+        # Keys for storing metadata and frames in DigitalOcean Spaces
+        metadata_key = f"metadata/{combo_id}.json"
+        frames_prefix = f"frames/{combo_id}/"
+
+        # Retrieve or initialize metadata
+        metadata = do_space.get_or_initialize_metadata(space_name, metadata_key)
+
+        # Filter data to process only new timestamps
+        last_timestamp = pd.to_datetime(metadata['last_timestamp']) if metadata['last_timestamp'] else None
+        if last_timestamp:
+            new_data = data[data['effective_datetime'] > last_timestamp]
+        else:
+            new_data = data
+
+        unprocessed_effectivedatetimes = new_data['effective_datetime'].unique()
+        print(f'Unique time_stamps to process: {unprocessed_effectivedatetimes}')
+
+        # Generate new frames for the filtered data
+        new_frames = []
+        for timestamp in new_data['effective_datetime'].unique():
+            print(f'Processing: {timestamp}')
+            fig, frame_path = generate_frame_new(new_data, candlesticks, timestamp, participant, strike_range,
+                                                 expiration,
+                                                 pos, metric, last_price, img_path)
+            frame_key = f"{frames_prefix}{timestamp.strftime('%Y%m%d%H%M%S')}.png"
+            do_space.upload_to_spaces(frame_path, space_name, frame_key)
+            new_frames.append(frame_key)
+            metadata['frames'].append(frame_key)
+            os.remove(frame_path)  # Remove the temporary file
+
+        # Update metadata with new frames and last timestamp
+        if new_frames:
+            metadata['last_timestamp'] = str(new_data['effective_datetime'].max())
+            do_space.update_metadata(space_name, metadata_key, metadata)
+
+        # Generate video from all frames
+        video_url, latest_frame_url = generate_video_from_frames(do_space, space_name, metadata['frames'], combo_id)
+
+        # Store results for this position type
+        results[pos] = {
+            'video_url': video_url,
+            'latest_frame_url': latest_frame_url
+        }
+
+    return results
+
+
+def generate_video_from_frames(do_space, space_name, frame_keys, combo_id):
+    """Generate video from frames and return video and latest frame URLs."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Download all frames to a temporary directory
+        for frame_key in frame_keys:
+            local_file = os.path.join(tmpdir, os.path.basename(frame_key))
+            do_space.download_from_spaces(space_name, frame_key, local_file)
+
+        # Use ffmpeg to create a video from the frames
+        output_video = f'video_{combo_id}.mp4'
+        ffmpeg_command = f'ffmpeg -framerate 3 -pattern_type glob -i "{tmpdir}/*.png" -c:v libx264 -pix_fmt yuv420p {output_video}'
+        subprocess.run(ffmpeg_command, shell=True, check=True)
+
+        # Upload the generated video to DigitalOcean Spaces
+        video_key = f"videos/{output_video}"
+        do_space.upload_to_spaces(output_video, space_name, video_key)
+        os.remove(output_video)
+
+    video_url = f"https://nyc3.digitaloceanspaces.com/{video_key}"
+    latest_frame_url = f"https://nyc3.digitaloceanspaces.com/{frame_keys[-1]}" if frame_keys else None
+
+    return video_url, latest_frame_url
+
+
+@task
+def send_discord_message(file_paths: List[str], as_of_time_stamp: str, session_date: str, participant: str,
                          strike_range: List[int], expiration: str, position_types: List[str], metric: str,
                          webhook_url: str) -> bool:
     participant_mapping = {
@@ -263,172 +512,144 @@ def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_da
         {"name": "", "value": "", "inline": True},
         {"name": "📈 Analysis Type", "value": f"Intraday {metric} Movement", "inline": True},
         {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
-        {"name": "", "value":"", "inline": True},
+        {"name": "", "value": "", "inline": True},
         {"name": "👥 Participant(s)", "value": participant_text, "inline": True},
         {"name": "🎯 Strike Range", "value": f"{strike_range[0]} - {strike_range[1]}", "inline": True},
         {"name": "📅 Expiration(s)", "value": expiration, "inline": True},
         {"name": "", "value": "", "inline": True},
         {"name": "", "value": "", "inline": True},
         {"name": "", "value": "", "inline": True},
-        # {"name": "💡 Interpretation", "value": (
-        #     "• Green bars indicate Calls positioning\n"
-        #     "• Red bars indicate Puts positioning\n"
-        #     "• Blue bars indicate Net positioning\n"
-        #     "\n"
-        #     "• ■ represents current position magnitude\n"
-        #     "• ● represents the start of day position magnitude\n"
-        #     "• ✖ represents the prior update position magnitude\n"
-        #     "\n"
-        # ), "inline": False},
     ]
-    footer_text = f"Generated on {current_time} | By OptionsDepth Inc."
+    footer_text = f"Generated on {current_time} | By OptionsDepth.com"
 
-    breakpoint()
-    success = send_to_discord(
+    success = send_to_discord_new(
         webhook_url,
         file_paths,
-        content="🚀 New options chart analysis is ready! Check out the latest market insights below.",
+        content="",  # "🚀 New options chart analysis is ready! Check out the latest market insights below.",
         title=title,
         description=description,
         fields=fields,
-        footer_text=footer_text
+        footer_text=footer_text,
+        do_spaces=do_space
     )
 
-    # Clean up the gif files after sending
-    for path in file_paths:
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            print(f"Warning: Could not delete file {path}. It may have already been deleted.")
+    # # Clean up the gif files after sending
+    # for path in file_paths:
+    #     try:
+    #         print(f'Suppose to remove: {path}')
+    #         #os.remove(path)
+    #     except FileNotFoundError:
+    #         print(f"Warning: Could not delete file {path}. It may have already been deleted.")
 
     return success
 
+
 @flow(name="0DTE gifs")
 def zero_dte_flow(
-    session_date: Optional[date] = default_date,
-    strike_range: Optional[List[int]] = None,
-    expiration: Optional[str] = None,
-    participant: str = 'total_customers',
-    position_types: Optional[List[str]] = None,
-    webhook_url: str = DEV_CHANNEL
-    ):
-    prefect_logger = get_run_logger()
+        session_date: Optional[date] = default_date,
+        strike_range: Optional[List[int]] = None,
+        expiration: Optional[str] = None,
+        participant: str = 'total_customers',
+        position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
+        webhook_url: str = None
+):
+    webhook_url = webhook_url or get_webhook_url('zero_dte')
 
-    position_types = ['Net', 'C','P']
     expiration = str(session_date)
-
 
     # Set default values if not provided
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-
-        strike_range = get_strike_range(db,session_date)
-
+        # strike_range = get_strike_range(db,session_date)
+        strike_range = [5580, 5900]
     if expiration is None:
         expiration = session_date
     if position_types is None:
-        position_types = ['C', 'P', 'Net']
+        position_types = DEFAULT_POS_TYPES
     elif 'All' in position_types:
-        position_types = ['C', 'P', 'Net']
-
-
+        position_types = DEFAULT_POS_TYPES
 
     current_time = datetime.now().time()
 
-    if current_time < time(12, 0):  # Before 12:00 PM
-        start_time = '05:00:00'
-    elif time(12, 0) <= current_time < time(23, 0):  # Between 12:00 PM and 7:00 PM
-        start_time = '09:00:00'
+    if current_time < time(12, 0):
+        start_time = START_TIME_PRE_MARKET
+    elif time(12, 0) <= current_time < time(23, 0):
+        start_time = START_TIME_MARKET
     else:  # 7:00 PM or later
-        start_time = '05:00:00'  # You might want to adjust this for the after 7:00 PM case
+        start_time = START_TIME_PRE_MARKET
 
     print(f"Start time set to: {start_time}")
 
     # Fetch data
-    metrics, candlesticks, last_price = fetch_data(session_date, None,strike_range, expiration, start_time)
+    metrics, candlesticks, last_price = fetch_data(session_date, None, strike_range, expiration, start_time)
     as_of_time_stamp = str(metrics["effective_datetime"].max())
     last_price = last_price.values[0][0]
-
-
     # Process data and generate GIFs
-    # paths_to_send = generate_video_task_(metrics, candlesticks, session_date, participant, strike_range, expiration,
-    #                                    position_types, last_price ,'positioning')
     paths_to_send = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
-                                       position_types, last_price ,'positioning')
+                                        position_types, last_price, 'positioning', POS_0DTE)
     print(f"Video and frames generated at: {paths_to_send}")
 
     # Send Discord message with Videos
-    video_success = send_discord_message(paths_to_send, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types,'positioning', webhook_url)
+    video_success = send_discord_message(paths_to_send, as_of_time_stamp, session_date, participant, strike_range,
+                                         expiration, position_types, 'positioning', webhook_url)
 
     if video_success:
         print(f"Successfully processed and sent intraday data (GIF and video) for {session_date}")
     else:
         print(f"Failed to process or send intraday data for {session_date}")
+
 
 @flow(name="1DTE gifs")
 def one_dte_flow(
-    session_date: Optional[date] = default_date,
-    strike_range: Optional[List[int]] = None,
-    expiration: Optional[str] = None,
-    participant: str = 'total_customers',
-    position_types: Optional[List[str]] = None,
-    webhook_url: str = DEV_CHANNEL
+        session_date: Optional[date] = default_date,
+        strike_range: Optional[List[int]] = None,
+        expiration: Optional[str] = None,
+        participant: str = 'total_customers',
+        position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
+        webhook_url: str = None
 ):
-
-    #session_date = '2024-09-23'
-
     # Set default values if not provided
+    webhook_url = webhook_url or get_webhook_url('one_dte')
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-        strike_range = get_strike_range(db,session_date, range_value = 0.025, range_type = 'percent')
-
-
+        # strike_range = get_strike_range(db,session_date, range_value = 0.025, range_type = 'percent')
+        strike_range = [5580, 5900]
     if position_types is None:
-        position_types = ['Net','C','P']
+        position_types = DEFAULT_POS_TYPES
+    elif 'All' in position_types:
+        position_types = DEFAULT_POS_TYPES
     if expiration is None:
         expiration = get_trading_day(session_date, n=1, direction='next', return_format='str')
 
-    elif 'All' in position_types:
-        position_types = ['C', 'P', 'Net']
-
-
-
     current_time = datetime.now().time()
-
-    if current_time < time(12, 0):  # Before 12:00 PM
-        start_time = '05:00:00'
-    elif time(12, 0) <= current_time < time(23, 0):  # Between 12:00 PM and 7:00 PM
-        start_time = '09:00:00'
+    if current_time < time(12, 0):
+        start_time = START_TIME_PRE_MARKET
+    elif time(12, 0) <= current_time < time(23, 0):
+        start_time = START_TIME_MARKET
     else:  # 7:00 PM or later
-        start_time = '05:00:00'  # You might want to adjust this for the after 7:00 PM case
+        start_time = START_TIME_PRE_MARKET
 
     print(f"Start time set to: {start_time}")
 
-
     # Fetch data
-    data, candlesticks, last_price = fetch_data(session_date, None,strike_range, expiration, start_time)
+    data, candlesticks, last_price = fetch_data(session_date, None, strike_range, expiration, start_time)
 
     as_of_time_stamp = str(data["effective_datetime"].max())
     last_price = last_price.values[0][0]
-    # Process data and generate GIFs
-    #gif_paths = process_data(data, candlesticks, session_date, participant, strike_range, expiration, position_types)
-
-    # videos_paths = generate_video_task_(data, candlesticks, session_date, participant, strike_range, expiration,
-    #                                    position_types,last_price ,'positioning')
     videos_paths = generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration,
-                                       position_types,last_price ,'positioning')
+                                       position_types, last_price, 'positioning', POS_UPCOMING_EXP)
     print(f"Video generated at: {videos_paths}")
 
     # Send Discord message with Videos
-    video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types,'positioning', webhook_url)
+    video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range,
+                                         expiration, position_types, 'positioning', webhook_url)
 
     if video_success:
         print(f"Successfully processed and sent intraday data (GIF and video) for {session_date}")
     else:
         print(f"Failed to process or send intraday data for {session_date}")
-
 
 
 @flow(name="GEX gifs")
@@ -437,48 +658,42 @@ def GEX_flow(
         strike_range: Optional[List[int]] = None,
         expiration: Optional[str] = None,
         participant: str = 'mm',
-        position_types: Optional[List[str]] = None,
-        webhook_url: str = DEV_CHANNEL
+        position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
+        webhook_url: str = None
 ):
-
-
+    # Default values
+    webhook_url = webhook_url or get_webhook_url('gex')
     if session_date is None:
-        #TODO: the latest effective_date of the book
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-        #TODO: +/- 200 pts from SPOT Open
-        strike_range = STRIKE_RANGE
+        # strike_range = get_strike_range(db,session_date, range_value = 0.025, range_type = 'percent')
+        strike_range = [5580, 5900]
     if position_types is None:
-        position_types = ['Net','C','P']
-        #position_types = ['Net']
-
+        position_types = DEFAULT_POS_TYPES
     if expiration is None:
         expiration = session_date
 
     current_time = datetime.now().time()
-
-    if current_time < time(12, 0):  # Before 12:00 PM
-        start_time = '05:00:00'
-    elif time(12, 0) <= current_time < time(23, 0):  # Between 12:00 PM and 7:00 PM
-        start_time = '09:00:00'
+    if current_time < time(12, 0):
+        start_time = START_TIME_PRE_MARKET
+    elif time(12, 0) <= current_time < time(23, 0):
+        start_time = START_TIME_MARKET
     else:  # 7:00 PM or later
-        start_time = '05:00:00'  # You might want to adjust this for the after 7:00 PM case
+        start_time = START_TIME_PRE_MARKET
 
     print(f"Start time set to: {start_time}")
+
     # Fetch data
-    metrics, candlesticks,last_price = fetch_data(session_date,None, strike_range, expiration, start_time)
+    metrics, candlesticks, last_price = fetch_data(session_date, None, strike_range, expiration, start_time)
     as_of_time_stamp = str(metrics["effective_datetime"].max())
-
     last_price = last_price.values[0][0]
-
-    # videos_paths = generate_video_task_(metrics, candlesticks, session_date, participant, strike_range, expiration,
-    #                                    position_types, last_price,"GEX")
     videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
-                                       position_types, last_price,"GEX")
+                                       position_types, last_price, "GEX", GEX_0DTE)
     print(f"Video generated at: {videos_paths}")
 
     # Send Discord message with Videos
-    video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types,'GEX', webhook_url)
+    video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range,
+                                         expiration, position_types, 'GEX', webhook_url)
 
     if video_success:
         print(f"Successfully processed and sent intraday data (GIF and video) for {session_date}")
@@ -486,342 +701,89 @@ def GEX_flow(
         print(f"Failed to process or send intraday data for {session_date}")
     pass
 
-@flow(name="All expirations GEX gifs")
-def all_GEX_flow(
-        session_date: Optional[date] = None,
+
+# -------------------DEV TEST---------------------#
+@flow(name="TEST - 0DTE gifs")
+def test_zero_dte_flow(
+        session_date: Optional[date] = default_date,
         strike_range: Optional[List[int]] = None,
         expiration: Optional[str] = None,
-        participant: str = 'mm',
-        position_types: Optional[List[str]] = None,
-        webhook_url: str = 'https://discord.com/api/webhooks/1281238194699898900/NKdEGh7PHeucQd7xItqxHWGgg9HwHHe8IQ0VRK5qAtPkc9fTrsPz0p_VVZcneZEl6wmH'
-        #DEV_CHANNEL
+        participant: str = 'total_customers',
+        position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
+        webhook_url: str = None
 ):
+    webhook_url = webhook_url or get_webhook_url('dev')
 
+    expiration = str(session_date)
 
+    # Set default values if not provided
     if session_date is None:
-        #TODO: the latest effective_date of the book
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-        #TODO: +/- 200 pts from SPOT Open
-        strike_range = STRIKE_RANGE
-    if position_types is None:
-        position_types = ['Net','C','P']
+        # strike_range = get_strike_range(db,session_date)
+        strike_range = [5580, 5900]
     if expiration is None:
-        expiration = 'all'
+        expiration = session_date
+    if position_types is None:
+        position_types = DEFAULT_POS_TYPES
+    elif 'All' in position_types:
+        position_types = DEFAULT_POS_TYPES
 
     current_time = datetime.now().time()
 
-    if current_time < time(12, 0):  # Before 12:00 PM
-        start_time = '09:30:00'
-    elif time(12, 0) <= current_time < time(23, 0):  # Between 12:00 PM and 7:00 PM
-        start_time = '09:30:00'
+    if current_time < time(12, 0):
+        start_time = START_TIME_PRE_MARKET
+    elif time(12, 0) <= current_time < time(23, 0):
+        start_time = START_TIME_MARKET
     else:  # 7:00 PM or later
-        start_time = '07:00:00'  # You might want to adjust this for the after 7:00 PM case
+        start_time = START_TIME_PRE_MARKET
 
     print(f"Start time set to: {start_time}")
+
     # Fetch data
-    metrics, candlesticks,last_price = fetch_data(session_date,None, strike_range, None, start_time)
+    metrics, candlesticks, last_price = fetch_data(session_date, None, strike_range, expiration, start_time)
     as_of_time_stamp = str(metrics["effective_datetime"].max())
-
     last_price = last_price.values[0][0]
+    # Process data and generate GIFs
+    # paths_to_send = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+    #                                    position_types, last_price ,'positioning', POS_0DTE)
+    # print(f"Video and frames generated at: {paths_to_send}")
 
-    videos_paths = generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
-                                       position_types, last_price, "GEX")
-    print(f"Video generated at: {videos_paths}")
-    breakpoint()
-    # Send Discord message with Videos
-    video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types,'GEX', webhook_url)
+    # Generate video with new frames
+    video_url = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+                                         position_types, last_price, metric='positioning', img_path=POS_0DTE,
+                                         space_name=INTRADAYBOT_SPACENAME)
+
+    # Send Discord message with Video URL
+    video_success = send_discord_message(video_url, as_of_time_stamp, session_date, participant, strike_range,
+                                         expiration, position_types, 'positioning', webhook_url)
 
     if video_success:
-        print(f"Successfully processed and sent intraday data (GIF and video) for {session_date}")
+        print(f"Successfully processed and sent intraday data (video) for {session_date}")
     else:
         print(f"Failed to process or send intraday data for {session_date}")
-    pass
-#------------------ DEPTHVIEW ------------------#
-class WebhookUrl(Enum):
-    DEFAULT = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
-    URL_1 = 'https://discord.com/api/webhooks/your-webhook-url-1'
-    URL_2 = 'https://discord.com/api/webhooks/your-webhook-url-2'
-    # Add more webhook URLs as needed
-
-@flow(name="Depthview flow")
-def plot_depthview(
-    session_date: Optional[date] = default_date,
-    strike_range: Optional[List[int]] = None,
-    expiration: Optional[str] = None,
-    participant: str = 'mm',
-    position_types: Optional[List[str]] = None,
-    #webhook_url: str = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
-    webhook_url: WebhookUrl = WebhookUrl.DEFAULT
-    ):
-
-    print(f"Using webhook URL: {webhook_url.value}")
-
-    # Replace the original Image.open(LOGO_dark) with:
-    img = load_logo()
-
-    current_time = datetime.now().time()
-
-    if current_time < time(12, 0):  # Before 12:00 PM
-        start_time = '07:00:00'
-    elif time(12, 0) <= current_time < time(23, 0):  # Between 12:00 PM and 7:00 PM
-        start_time = '09:00:00'
-    else:  # 7:00 PM or later
-        start_time = '07:00:00'  # You might want to adjust this for the after 7:00 PM case
-
-    print(f"Start time set to: {start_time}")
-    strike_range = STRIKE_RANGE
-    metric_type = "GEX"
-    position_types = "all"
-
-    metrics,candlesticks, last_price = fetch_data(session_date, "2024-09-09 14:00:00" ,strike_range, None,None)
-
-    # Title formatting
-    if metric_type == "GEX":
-        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Market Makers' GEX</span>"
-        colorscale = "RdBu"
-        title_colorbar = f"{metric_type}<br>(M$/point)"
 
 
-    elif metric_type == "DEX":
-        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer DEX</span>"
-        title_colorbar = f"{metric_type}<br>(δ)"
-
-    elif metric_type == "position":
-        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer Position</span>"
-        title_colorbar = f"{metric_type}<br>(contracts #)"
+# ------------------ DEPTHVIEW ------------------#
 
 
-    if position_types == "calls":
-        option_types_title = "Filtered for calls only"
-
-    elif position_types == "puts":
-        option_types_title = "Filtered for puts only"
-
-    elif position_types == "all":
-        option_types_title = "All contracts, puts and calls combined"
-
-
-
-    # Ensure that the DataFrame values are floats
-    metrics["metric"] = metrics[f"{participant}_posn"] * metrics['gamma']
-    metrics["metric"] = metrics["metric"].astype(float)
-    metrics['strike_price'] = metrics['strike_price'].astype(float)
-    metrics['expiration_date_original'] = metrics['expiration_date_original'].astype(str)
-    z = metrics.pivot_table(index='strike_price', columns='expiration_date_original', values="metric").values
-
-    if metric_type != "GEX":
-        colorscale = [
-            [0.0, 'red'],  # Lowest value
-            [0.5, 'white'],  # Mid value at zero
-            [1.0, 'green'],  # Highest value
-        ]
-    else:
-        print("Totoooooo")
-    # Calculate the mid value for the color scale (centered at zero)
-    # zmin = metrics[metric_type].min()
-    # zmax = metrics[metric_type].max()
-
-    zmin = metrics["metric"].min()
-    zmax = metrics["metric"].max()
-    val_range = max(abs(zmin), abs(zmax))
-
-    y_min = math.floor(metrics['strike_price'].min() / 10) * 10
-    y_max = math.ceil(metrics['strike_price'].max() / 10) * 10
-
-    # Apply symmetric log scale transformation
-    def symmetric_log_scale(value, log_base=10):
-        return np.sign(value) * np.log1p(np.abs(value)) / np.log(log_base)
-
-    z_log = symmetric_log_scale(z)
-
-
-    # Round the original values for display in hover text
-    rounded_z = np.around(z, decimals=2)
-
-
-    # Create the heatmap using Plotly
-    fig = go.Figure(data=go.Heatmap(
-        z=z_log,
-        x=metrics['expiration_date_original'].unique(),
-        y=metrics['strike_price'].unique(),
-        text=np.where(np.isnan(rounded_z), '', rounded_z),
-        xgap=1,  # Add small gap between columns
-        ygap=1,  # Add small gap between rows
-        zsmooth='best',  # Smooth the colors
-        texttemplate="%{text}",
-        colorscale=colorscale,
-        zmin=-symmetric_log_scale(val_range),
-        zmax=symmetric_log_scale(val_range),
-        colorbar=dict(
-            title=title_colorbar,
-            tickvals=symmetric_log_scale(np.array([-val_range, 0, val_range])),
-            ticktext=[-round(val_range), 0, round(val_range)]
-        ),
-        zmid=0,
-        hovertemplate='Expiration: %{x}<br>Strike: %{y}<br>' + metric_type + ': %{text}<extra></extra>'
-    ))
-
-
-    fig.update_layout(
-        title=dict(
-            text=(
-                  f"{dynamic_title}"
-                  # f"<br><span style='font-size:20px;'>As of {effective_datetime}</span>"
-                  f"<br><span style='font-size:20px;'>{option_types_title}</span>"
-
-            ),
-            font=dict(family="Noto Sans SemiBold", color="white"),
-            y=0.96,  # Adjust to control the vertical position of the title
-            x=0.0,
-
-            pad=dict(t=10, b=10, l=40)  # Adjust padding around the title
-        ),
-
-
-        margin=dict(l=40, r=40, t=130, b=30),  # Adjust overall margins
-        xaxis=dict(
-            title='Expiration Date',
-            tickangle=-45,
-            tickmode='linear',
-            type='category'
-        ),
-        yaxis=dict(
-            title='Strike Price',
-            tickmode='linear',
-            dtick=10
-        ),
-        font=dict(family="Noto Sans Medium", color='white'),
-        autosize=True,
-        plot_bgcolor='white',
-        paper_bgcolor='#053061',  # Dark blue background
-
-    )
-
-    # Update layout with rounded y-axis range
-    fig.update_layout(
-        xaxis=dict(
-            showgrid=False,
-            ticks="",
-            showline=False,
-            zeroline=False,
-            constrain="domain",
-        ),
-        yaxis=dict(
-            showgrid=False,
-            ticks="outside",
-            # showline=True,
-            zeroline=False,
-            constrain="domain",
-            #range=[y_min, y_max],  # Set the rounded range
-            dtick=10,  # Set tick interval to 10
-        ),
-        plot_bgcolor='rgba(0,0,0,0)',
-    )
-
-    # Ensure heatmap cells align perfectly with axis ticks
-    fig.update_traces(
-        xaxis='x',
-        yaxis='y'
-    )
-
-    fig.add_layout_image(
-        dict(
-            source=img,
-            xref="paper",
-            yref="paper",
-            x=1,
-            y=1.15,
-            xanchor="right",
-            yanchor="top",
-            sizex=0.175,
-            sizey=0.175,
-            sizing="contain",
-            layer="above"
-        )
-    )
-
-    fig.update_layout(
-        width=1920,  # Full HD width
-        height=1080,  # Full HD height
-        font=dict(size=16)  # Increase font size for better readability
-
-    )
-
-    # fig.show()
-    breakpoint()
-
-    title = f"📊 {session_date} Intraday Depthview"
-    current_time = datetime.utcnow()
-    # Define the Eastern Time zone
-    eastern_tz = pytz.timezone('America/New_York')
-    # Convert UTC time to Eastern Time
-    eastern_time = current_time.replace(tzinfo=pytz.utc).astimezone(eastern_tz)
-    # Format the time in a friendly way
-    friendly_time = eastern_time.strftime("%B %d, %Y at %I:%M %p %Z")
-    fields = [
-        # {"name": "📈 Analysis Type", "value": "Intraday Gamma Heatmap", "inline": True},
-        {"name": "⏰ As of:", "value": "2024-09-05 09:30:00", "inline": True},
-    ]
-    footer_text = f"Generated on {friendly_time} | By OptionsDepth Inc."
-
-    # Prepare the embed
-    embed = {
-        "title": title,
-        "color": 3447003,  # A nice blue color
-        "fields": fields,
-        "footer": {"text": footer_text},
-        "image": {"url": "attachment://depthview.png"}  # Reference the attached image
-    }
-
-    # Convert Plotly figure to image bytes
-    img_bytes = fig.to_image(format="png", scale=3)
-
-    # Prepare the payload
-    payload = {
-        "embeds": [embed]
-    }
-
-    # Prepare the files dictionary
-    files = {
-        "payload_json": (None, json.dumps(payload), "application/json"),
-        "file": ("depthview.png", img_bytes, "image/png")
-    }
-
-    # Send the request
-    response = requests.post(webhook_url.value, files=files)
-
-    if response.status_code == 200 or response.status_code == 204:
-        print(f"Heatmap for {session_date} sent successfully to Discord!")
-        fig.show()
-        return True
-    else:
-        print(f"Failed to send heatmap. Status code: {response.status_code}")
-        print(f"Response content: {response.content}")
-        return False
-
-
-#---------------- HEATMAP GIF -------------------- #
+# ---------------- HEATMAP GIF -------------------- #
 
 def generate_heatmap_gif(
-    session_date: Optional[date] = default_date,
-    webhook_url: str = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
-    ):
+        session_date: Optional[date] = default_date,
+        webhook_url: str = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
+):
     pass
 
-#------------ STATIC CHARTS ----------------------#
-import pandas as pd
-import pandas as pd
-import plotly.graph_objects as go
-import requests
-import json
-from io import BytesIO
-def plot_options_data(df:pd.DataFrame,
-                      aggregation:str,
+
+# ------------ STATIC CHARTS ----------------------#
+
+def plot_options_data(df: pd.DataFrame,
+                      aggregation: str,
                       strike_input: list,
                       expiration_input: str,
-                      participant:str = "total_customers",
-                      view:str ='both'):
+                      participant: str = "total_customers",
+                      view: str = 'both'):
     """
     Plots the options data based on specified aggregation and view.
 
@@ -843,46 +805,46 @@ def plot_options_data(df:pd.DataFrame,
     print('-------------------------')
 
     # --------------------------- Strikes ---------------------------
-    if strike_input  == "all":
-        subtitle_strike= "All Strikes"
+    if strike_input == "all":
+        subtitle_strike = "All Strikes"
 
     # - list --> range
     if isinstance(strike_input, list):
         print("------------- range strikes -------------")
 
         df = df[(df['strike_price'] >= min(strike_input)) & (df['strike_price'] <= max(strike_input))]
-        subtitle_strike=f"For range: {min(strike_input)} to {max(strike_input)} strikes"
+        subtitle_strike = f"For range: {min(strike_input)} to {max(strike_input)} strikes"
 
     # - tuple --> list
     elif isinstance(strike_input, tuple):
         print("------------- list strikes -------------")
         df = df[df['strike_price'].isin(strike_input)]
-        subtitle_strike=f"For the following strikes: {', '.join([str(item) for item in strike_input])}"
+        subtitle_strike = f"For the following strikes: {', '.join([str(item) for item in strike_input])}"
 
     # - string --> single
     if isinstance(strike_input, int):
         print("------------- single strike -------------")
         df = df[df['strike_price'] == strike_input]
-        subtitle_strike=f"Strike: {strike_input} uniquely"
+        subtitle_strike = f"Strike: {strike_input} uniquely"
 
     # - string "all" --> everything # keep dataframe the same. define title string
     if expiration_input == "all":
         subtitle_expiration = "All Expirations"
 
-    #---------------------------------- Expirations------------------------
+    # ---------------------------------- Expirations------------------------
     # - list --> range
     if isinstance(expiration_input, list):
         print("------------- range expirations -------------")
 
-        print(type(expiration_input[0])) #string TODO fix to datetime
+        print(type(expiration_input[0]))  # string TODO fix to datetime
         df = df[df['expiration_date_original'].between(min(expiration_input), max(expiration_input))]
-        subtitle_expiration=f"For {min(expiration_input).strftime('%Y-%m-%d')} to {max(expiration_input).strftime('%Y-%m-%d')} expirations range"
+        subtitle_expiration = f"For {min(expiration_input).strftime('%Y-%m-%d')} to {max(expiration_input).strftime('%Y-%m-%d')} expirations range"
 
     # - tuple --> list
     elif isinstance(expiration_input, tuple):
         print("------------- list expirations -------------")
         df = df[df['expiration_date_original'].isin(expiration_input)]
-        subtitle_expiration=f"For {', '.join([date.strftime('%Y-%m-%d') for date in expiration_input])} specific expirations"
+        subtitle_expiration = f"For {', '.join([date.strftime('%Y-%m-%d') for date in expiration_input])} specific expirations"
 
     # - string --> single
     if isinstance(expiration_input, str):
@@ -890,26 +852,25 @@ def plot_options_data(df:pd.DataFrame,
         date_format = '%Y-%m-%d'
         expiration_input_date_obj = datetime.strptime(expiration_input, date_format).date()
         df = df[df['expiration_date_original'] == expiration_input_date_obj]
-        subtitle_expiration=f"For the {expiration_input} expiration"
+        subtitle_expiration = f"For the {expiration_input} expiration"
 
-
-
-    #-------------------------------------- plotting --------------------------------------
+    # -------------------------------------- plotting --------------------------------------
     # Aggregate data
     if aggregation == 'strike':
-        grouped = df.groupby(['strike_price', 'call_put_flag']).agg({f'{participant}_posn': 'sum'}).unstack(fill_value=0)
+        grouped = df.groupby(['strike_price', 'call_put_flag']).agg({f'{participant}_posn': 'sum'}).unstack(
+            fill_value=0)
         grouped.columns = grouped.columns.droplevel()
         orientation = 'h'
         yaxis_title = "Strike Value"
         xaxis_title = "Net Position"
         y_parameters = dict(
-                showgrid=True,  # Show major gridlines
-                gridcolor='#95a0ab',  # Color of major gridlines
-                gridwidth=1,  # Width of major gridlines
-                dtick=5,  # Major tick every 500
-                tick0=0,  # Start ticks from 0
-                showticklabels=True
-            )
+            showgrid=True,  # Show major gridlines
+            gridcolor='#95a0ab',  # Color of major gridlines
+            gridwidth=1,  # Width of major gridlines
+            dtick=5,  # Major tick every 500
+            tick0=0,  # Start ticks from 0
+            showticklabels=True
+        )
         x_parameters = None
 
     elif aggregation == "expiration":
@@ -950,15 +911,13 @@ def plot_options_data(df:pd.DataFrame,
     fig.update_layout(
         title=f"SPX: Net Customer Options Positioning <br><sup>{subtitle_strike}<br>{subtitle_expiration}</sup>",
     )
-    #------------------
-
+    # ------------------
 
     if y_parameters:
         fig.update_layout(yaxis=y_parameters)
 
     if x_parameters:
         fig.update_layout(xaxis=x_parameters)
-
 
     # Update layout
     fig.update_layout(
@@ -1016,16 +975,16 @@ def plot_options_data(df:pd.DataFrame,
 
     # Add copyright sign at bottom left
     fig.add_annotation(
-        text="© OptionsDepth Inc.",
+        text="© OptionsDepth",
         xref="paper", yref="paper",
         x=-0.05, y=-0.05,
         showarrow=False,
         font=dict(size=10, color="gray")
     )
 
-    # Add "Powered by OptionsDepth inc." at bottom right
+    # Add "Powered by OptionsDepth.com" at bottom right
     fig.add_annotation(
-        text="Powered by OptionsDepth Inc.",
+        text="Powered by OptionsDepth.com",
         xref="paper", yref="paper",
         x=0.99, y=-0.05,
         showarrow=False,
@@ -1040,32 +999,27 @@ def plot_options_data(df:pd.DataFrame,
 
     )
 
-
     return fig
 
 
-def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
+def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
                                      strike_range: list = None,
-                                     expiration:str = None,
+                                     expiration: str = None,
                                      session_date: str = '2024-09-13',
                                      participant: str = "total_customers",
                                      output_dir: str = 'temp_charts',
-                                     webhook_url: str =DEV_CHANNEL,):
-
+                                     webhook_url: str = DEV_CHANNEL, ):
     expiration = '2024-09-16'
-    #description = "TOTO EST EXCITEYYYYY"
-    #content = "Je suis sous beeeef"
 
     # Set default values if not provided
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-        #TODO: +/- 200 pts from SPOT Open
+        # TODO: +/- 200 pts from SPOT Open
         strike_range = STRIKE_RANGE
     if expiration is None:
-        #TODO: Next business day not day
-        expiration = None
-
+        # TODO: Next business day not day
+        expiration = '2024-09-24'  # str(get_next_expiration_date(session_date))
 
     current_time = datetime.now().time()
 
@@ -1079,22 +1033,22 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
     print(f"Start time set to: {start_time}")
 
     # Fetch data
-    data, candlesticks, last_price = fetch_data(session_date, '2024-09-13 12:00:00',strike_range, expiration, start_time)
+    data, candlesticks, last_price = fetch_data(session_date, '2024-09-13 12:00:00', strike_range, expiration,
+                                                start_time)
 
     as_of_time_stamp = str(data["effective_datetime"].max())
     last_price = last_price.values[0][0]
-
 
     # Create a unique temporary directory to store charts
     temp_dir = os.path.join(output_dir, f'charts_{uuid.uuid4().hex}')
     os.makedirs(temp_dir, exist_ok=True)
 
     # Generate Calls and Puts chart
-    fig_calls_puts = plot_options_data(data, 'strike', strike_range, expiration, participant,view='both')
+    fig_calls_puts = plot_options_data(data, 'strike', strike_range, expiration, participant, view='both')
     # fig_calls_puts.show()
 
     # Generate Net chart
-    fig_net = plot_options_data(data, 'strike', strike_range, expiration, participant,view='net')
+    fig_net = plot_options_data(data, 'strike', strike_range, expiration, participant, view='net')
     # fig_net.show()
 
     # Save the charts as image files
@@ -1114,9 +1068,9 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
         {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
         {"name": "👥 Participant:", "value": participant, "inline": True}
     ]
-    footer_text = f"Generated on {as_of_time_stamp} | By OptionsDepth Inc."
+    footer_text = f"Generated on {as_of_time_stamp} | By OptionsDepth.com"
 
-    file_paths = [calls_puts_path,net_path]
+    file_paths = [calls_puts_path, net_path]
 
     if not isinstance(file_paths, list):
         file_paths = [file_paths]
@@ -1124,7 +1078,7 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
     # First Request: Send the embedded message
     embed = {
         "title": title or "Options Chart Analysis",
-        #"description": "Here's the latest options chart analysis.",
+        # "description": "Here's the latest options chart analysis.",
         "color": 3447003,  # A nice blue color
         "fields": fields or [],
         "footer": {"text": footer_text or "Generated by Options Analysis Bot"},
@@ -1133,10 +1087,9 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
 
     # Prepare the payload with the embed
     payload = {
-        #"embeds": [embed],
-        #"content": content or ""  # Ensure content is initialized
+        # "embeds": [embed],
+        # "content": content or ""  # Ensure content is initialized
     }
-
 
     # Second Request: Send the GIFs separately
     files = {}
@@ -1157,19 +1110,16 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
     return response.status_code == 200
 
 
-@flow(name= "Main test flow")
-def main_flow():
-    # Main flow logic here
-
-    # When the main flow completes, trigger other flows concurrently
-    run_zero_dte = run_deployment(name="zero_dte_flow", wait_for_completion=False)
-    run_one_dte = run_deployment(name="one_dte_flow", wait_for_completion=False)
-    run_gex = run_deployment(name="GEX_flow", wait_for_completion=False)
-
-    # Optionally, wait for all flows to complete, if needed
-    return run_zero_dte, run_one_dte, run_gex
-
 if __name__ == "__main__":
-    zero_dte_flow()
-    one_dte_flow()
-    GEX_flow()
+    test_zero_dte_flow()
+    breakpoint()
+    # zero_dte_flow()
+    # one_dte_flow()
+    # GEX_flow()
+    # plot_depthview(webhook_url=WebhookUrl.DEFAULT)
+    # generate_heatmap_gif()
+    # all_GEX_flow()
+    # i=0
+    # while i < 20:
+    #     i+=1
+    #     generate_and_send_options_charts()
