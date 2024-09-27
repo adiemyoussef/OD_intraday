@@ -11,8 +11,7 @@ from prefect import task, flow, get_run_logger, get_client
 from datetime import timedelta, datetime, date
 from typing import List, Optional
 # from charting.generate_gifs import generate_gif, send_to_discord
-from charting.generate_gifs import generate_gif, generate_frame_new, send_to_discord, generate_video, \
-    send_to_discord_new
+from charting.generate_gifs import generate_gif, generate_frame_new, send_to_discord, generate_video,send_to_discord_new
 
 from utilities.misc_utils import *
 from utilities.db_utils import *
