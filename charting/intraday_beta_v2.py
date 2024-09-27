@@ -34,7 +34,7 @@ import subprocess
 
 default_date = date.today()
 STRIKE_RANGE = [5500, 5900]
-DEBUG_MODE = True  # Set to False for production
+DEBUG_MODE = False  # Set to False for production
 
 
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
@@ -274,6 +274,8 @@ def test_generate_video_task(data, candlesticks, session_date, participant, stri
         param_hash = hash(f"{session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
         last_timestamp_key = f"last_timestamp_{param_hash}"
 
+        print(f"param_hash:{param_hash} for last_timestamp_key:{last_timestamp_key}")
+
         # Read the last timestamp
         last_timestamp = None
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
@@ -327,7 +329,7 @@ def test_generate_video_task(data, candlesticks, session_date, participant, stri
             spaces.upload_to_spaces(output_video, space_name, f"videos/{output_video}")
             os.remove(output_video)
 
-        return f"https://{space_name}.nyc3.digitaloceanspaces.com/videos/{output_video}"
+        return f"https://nyc3.digitaloceanspaces.com/videos/{output_video}"
 
 
 @task
@@ -592,9 +594,9 @@ def test_zero_dte_flow(
     as_of_time_stamp = str(metrics["effective_datetime"].max())
     last_price = last_price.values[0][0]
     # Process data and generate GIFs
-    paths_to_send = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
-                                       position_types, last_price ,'positioning', POS_0DTE)
-    print(f"Video and frames generated at: {paths_to_send}")
+    # paths_to_send = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+    #                                    position_types, last_price ,'positioning', POS_0DTE)
+    # print(f"Video and frames generated at: {paths_to_send}")
 
     # Generate video with new frames
     video_url = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
@@ -963,8 +965,8 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
 
 
 if __name__ == "__main__":
-    test_zero_dte_flow()
-    breakpoint()
+    #test_zero_dte_flow()
+    #breakpoint()
     zero_dte_flow()
     one_dte_flow()
     GEX_flow()
