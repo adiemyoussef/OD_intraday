@@ -28,6 +28,9 @@ import concurrent.futures
 import time as time_module
 from functools import partial
 
+import tempfile
+
+import subprocess
 
 default_date = date.today()
 STRIKE_RANGE = [5500, 5900]
@@ -36,7 +39,7 @@ DEBUG_MODE = False  # Set to False for production
 
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()
-print(f'{db.get_status()}')
+print(f'MySQL status:{db.get_status()}')
 
 prod_pg_data = PostGreData(
     host=POSGRE_PROD_DB_HOST,
@@ -46,7 +49,16 @@ prod_pg_data = PostGreData(
     database=POSGRE_PROD_DB_NAME
 )
 prod_pg_data.connect()
-print(f'{prod_pg_data.get_status()}')
+print(f'Prod PG status:{prod_pg_data.get_status()}')
+
+spaces = DigitalOceanSpaces(
+    region_name='nyc3',
+    endpoint_url='https://nyc3.digitaloceanspaces.com',
+    access_key='YOUR_SPACES_ACCESS_KEY',
+    secret_key='YOUR_SPACES_SECRET_KEY'
+)
+spaces.connect()
+print(f'Space status:{spaces.get_status()}')
 
 def get_webhook_url(flow_name):
     if DEBUG_MODE:
@@ -237,6 +249,86 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
     paths = last_frame_paths + videos_paths
 
     return paths
+
+
+
+# def generate_frame(data, candlesticks, timestamp, participant, strike_range, expiration, position_type, metric,
+#                    last_price, img_path):
+#     # Your existing frame generation code here
+#     # ...
+#
+#     # Instead of saving to a local directory, save to a temporary file
+#     with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
+#         fig.write_image(tmpfile.name, scale=3)
+#
+#     return tmpfile.name
+
+
+@task
+def test_generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration, position_type,
+                        last_price, metric='positioning', img_path='config/images/logo_dark.png'):
+    space_name = 'your-space-name'
+
+    # Generate a unique identifier for this set of parameters
+    param_hash = hash(f"{session_date}_{participant}_{strike_range}_{expiration}_{position_type}_{metric}")
+
+    # Check the last processed timestamp for these parameters
+    last_timestamp_key = f"last_timestamp_{param_hash}"
+    try:
+        # Then you can use its methods:
+        # spaces.upload_to_spaces('local_file.txt', 'your-space-name', 'remote_file.txt')
+        spaces.download_from_spaces(space_name, last_timestamp_key, 'last_timestamp.txt')
+        objects = spaces.list_objects('your-space-name', 'prefix/')
+
+        # download_from_spaces(space_name, last_timestamp_key, 'last_timestamp.txt')
+        with open('last_timestamp.txt', 'r') as f:
+            last_timestamp = pd.to_datetime(f.read().strip())
+    except:
+        last_timestamp = None
+
+    # Filter data for new timestamps only
+    if last_timestamp:
+        new_data = data[data['effective_datetime'] > last_timestamp]
+    else:
+        new_data = data
+
+    # Generate only new frames
+    new_frames = []
+    for timestamp in new_data['effective_datetime'].unique():
+        frame_path,_ = generate_frame_new(new_data, candlesticks, timestamp, participant, strike_range, expiration,
+                                    position_type, metric, last_price, img_path)
+        breakpoint()
+        spaces_key = f"frames_{param_hash}/{timestamp.strftime('%Y%m%d%H%M%S')}.png"
+        spaces.upload_to_spaces(frame_path, space_name, spaces_key)
+        # upload_to_spaces(frame_path, space_name, spaces_key)
+        new_frames.append(spaces_key)
+        os.remove(frame_path)  # Remove the temporary file
+
+    # Update the last processed timestamp
+    if new_frames:
+        with open('last_timestamp.txt', 'w') as f:
+            f.write(str(new_data['effective_datetime'].max()))
+        spaces.upload_to_spaces('last_timestamp.txt', space_name, last_timestamp_key)
+
+    # Generate video from all frames
+    all_frames = sorted(
+        [obj['Key'] for obj in client.list_objects(Bucket=space_name, Prefix=f"frames_{param_hash}/")['Contents']])
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for spaces_key in all_frames:
+            local_file = os.path.join(tmpdir, os.path.basename(spaces_key))
+            spaces.download_from_spaces(space_name, spaces_key, local_file)
+
+        output_video = f'video_{param_hash}.mp4'
+        ffmpeg_command = f'ffmpeg -framerate 3 -pattern_type glob -i "{tmpdir}/*.png" -c:v libx264 -pix_fmt yuv420p {output_video}'
+        subprocess.run(ffmpeg_command, shell=True, check=True)
+
+        # Upload the video to Spaces
+        spaces.upload_to_spaces(output_video, space_name, f"videos/{output_video}")
+        os.remove(output_video)
+
+    return f"https://{space_name}.nyc3.digitaloceanspaces.com/videos/{output_video}"
+
 
 @task
 def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_date: str, participant: str,
@@ -454,6 +546,67 @@ def GEX_flow(
     else:
         print(f"Failed to process or send intraday data for {session_date}")
     pass
+#-------------------DEV TEST---------------------#
+@flow(name="TEST - 0DTE gifs")
+def test_zero_dte_flow(
+    session_date: Optional[date] = default_date,
+    strike_range: Optional[List[int]] = None,
+    expiration: Optional[str] = None,
+    participant: str = 'total_customers',
+    position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
+    webhook_url: str = None
+    ):
+
+    webhook_url = webhook_url or get_webhook_url('dev')
+
+    expiration = str(session_date)
+
+    # Set default values if not provided
+    if session_date is None:
+        session_date = datetime.now().strftime('%Y-%m-%d')
+    if strike_range is None:
+        # strike_range = get_strike_range(db,session_date)
+        strike_range = [5580,5900]
+    if expiration is None:
+        expiration = session_date
+    if position_types is None:
+        position_types = DEFAULT_POS_TYPES
+    elif 'All' in position_types:
+        position_types = DEFAULT_POS_TYPES
+
+
+
+    current_time = datetime.now().time()
+
+    if current_time < time(12, 0):
+        start_time = START_TIME_PRE_MARKET
+    elif time(12, 0) <= current_time < time(23, 0):
+        start_time = START_TIME_MARKET
+    else:  # 7:00 PM or later
+        start_time = START_TIME_PRE_MARKET
+
+    print(f"Start time set to: {start_time}")
+
+    # Fetch data
+    metrics, candlesticks, last_price = fetch_data(session_date, None,strike_range, expiration, start_time)
+    as_of_time_stamp = str(metrics["effective_datetime"].max())
+    last_price = last_price.values[0][0]
+    # Process data and generate GIFs
+    paths_to_send = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+                                       position_types, last_price ,'positioning', POS_0DTE)
+    print(f"Video and frames generated at: {paths_to_send}")
+
+    # Generate video with new frames
+    video_url = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
+                                     position_types, last_price, 'positioning', POS_0DTE)
+
+    # Send Discord message with Video URL
+    video_success = send_discord_message(video_url, as_of_time_stamp, session_date, participant, strike_range, expiration, position_types, 'positioning', webhook_url)
+
+    if video_success:
+        print(f"Successfully processed and sent intraday data (video) for {session_date}")
+    else:
+        print(f"Failed to process or send intraday data for {session_date}")
 
 #------------------ DEPTHVIEW ------------------#
 

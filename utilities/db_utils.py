@@ -13,8 +13,18 @@ import mysql.connector
 from enum import Enum
 from tqdm import tqdm
 from psycopg2 import sql,errors
+import boto3
+from botocore.client import Config
+from enum import Enum
+import logging
+from typing import Optional
 
 class DatabaseStatus(Enum):
+    DISCONNECTED = "Disconnected"
+    CONNECTED = "Connected"
+    ERROR = "Error"
+
+class SpacesStatus(Enum):
     DISCONNECTED = "Disconnected"
     CONNECTED = "Connected"
     ERROR = "Error"
@@ -620,4 +630,110 @@ class PostGreData:
             return True
         except Exception as e:
             self.logger.error(f"Failed to check/reconnect to database: {e}")
+            return False
+
+class DigitalOceanSpaces:
+    """
+    A utility class for DigitalOcean Spaces operations with status tracking.
+    """
+
+    def __init__(self, region_name: str, endpoint_url: str, access_key: str, secret_key: str,
+                 logger: Optional[logging.Logger] = None):
+        self.region_name = region_name
+        self.endpoint_url = endpoint_url
+        self.access_key = access_key
+        self.secret_key = secret_key
+        self.client = None
+        self.logger = logger or logging.getLogger(__name__)
+        self.status = SpacesStatus.DISCONNECTED
+        self.last_error = None
+
+    def connect(self):
+        if self.client is None:
+            try:
+                session = boto3.session.Session()
+                self.client = session.client('s3',
+                                             region_name=self.region_name,
+                                             endpoint_url=self.endpoint_url,
+                                             aws_access_key_id=self.access_key,
+                                             aws_secret_access_key=self.secret_key)
+                self.status = SpacesStatus.CONNECTED
+                self.logger.info("DigitalOcean Spaces connection created successfully.")
+            except Exception as e:
+                self.status = SpacesStatus.ERROR
+                self.last_error = str(e)
+                self.logger.error(f"Unexpected error occurred while creating connection: {e}")
+                raise
+
+    def upload_to_spaces(self, local_file: str, space_name: str, spaces_file: str) -> bool:
+        if not self.client:
+            self.connect()
+
+        try:
+            self.client.upload_file(local_file, space_name, spaces_file)
+            self.logger.info(f"Upload Successful: {spaces_file}")
+            return True
+        except Exception as e:
+            self.status = SpacesStatus.ERROR
+            self.last_error = str(e)
+            self.logger.error(f"An error occurred during upload: {e}")
+            return False
+
+    def download_from_spaces(self, space_name: str, spaces_file: str, local_file: str) -> bool:
+        if not self.client:
+            self.connect()
+
+        try:
+            self.client.download_file(space_name, spaces_file, local_file)
+            self.logger.info(f"Download Successful: {local_file}")
+            return True
+        except Exception as e:
+            self.status = SpacesStatus.ERROR
+            self.last_error = str(e)
+            self.logger.error(f"An error occurred during download: {e}")
+            return False
+
+    def list_objects(self, space_name: str, prefix: str = "") -> list:
+        if not self.client:
+            self.connect()
+
+        try:
+            response = self.client.list_objects(Bucket=space_name, Prefix=prefix)
+            return [obj['Key'] for obj in response.get('Contents', [])]
+        except Exception as e:
+            self.status = SpacesStatus.ERROR
+            self.last_error = str(e)
+            self.logger.error(f"An error occurred while listing objects: {e}")
+            return []
+
+    def close(self):
+        self.client = None
+        self.status = SpacesStatus.DISCONNECTED
+        self.logger.info("DigitalOcean Spaces connection closed.")
+
+    def get_status(self) -> dict:
+        """
+        Get the current status of the DigitalOcean Spaces connection.
+
+        :return: A dictionary containing the status and last error (if any)
+        """
+        return {
+            "status": self.status.value,
+            "last_error": self.last_error if self.status == SpacesStatus.ERROR else None
+        }
+
+    def check_connection(self) -> bool:
+        """
+        Check if the DigitalOcean Spaces connection is still alive and reconnect if necessary.
+
+        :return: True if the connection is alive (or successfully reconnected), False otherwise
+        """
+        try:
+            if self.client is None:
+                self.connect()
+            # Perform a simple operation to check if the connection is alive
+            self.client.list_buckets()
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to check/reconnect to DigitalOcean Spaces: {e}")
             return False
