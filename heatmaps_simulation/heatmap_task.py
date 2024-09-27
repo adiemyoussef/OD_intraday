@@ -9,7 +9,7 @@ import argparse
 import os
 from datetime import datetime, timedelta
 import numpy as np
-from charting_test.intraday_plot import *
+from heatmaps_simulation.intraday_plot import *
 from config.config import *
 import logging
 from utilities.db_utils import *
@@ -386,7 +386,7 @@ def heatmap_generation_flow(
     range: float = 0.03,
     open_price: float = 5700,
     effective_datetime: str = None,
-    effective_date: str = '2024-08-26',
+    effective_date: str = '2024-09-27',
     effective_time: str = '09:00:00'
 ):
     prefect_logger = get_run_logger()

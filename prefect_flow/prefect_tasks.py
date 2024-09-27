@@ -626,19 +626,19 @@ def get_initial_book(get_unrevised_book: Callable):
         if limit2am <= current_time.time() < limit7pm:  # Between 2 AM and 7 PM
             prefect_logger.info(f"Operating during Revised book hours")
             query = f"""
-            SELECT * FROM intraday.new_daily_book_format 
+            SELECT * FROM public.charts_dailybook 
             WHERE effective_date = '{current_date}' AND revised = 'Y'
             """
-            session_book = db_utils.execute_query(query)
+            session_book = prod_pg_data.execute_query(query)
 
             prefect_logger.info(f"Got Revised book of {session_book['effective_date']}")
 
             if session_book.empty:
                 query = f"""
-                SELECT * FROM intraday.new_daily_book_format 
+                SELECT * FROM public.charts_dailybook 
                 WHERE effective_date = '{current_date}' AND revised = 'N'
                 """
-                session_book = db_utils.execute_query(query)
+                session_book = prod_pg_data.execute_query(query)
                 prefect_logger.info("Getting Unrevised book")
                 if session_book.empty:
                     send_notification(f"No session_book found for {current_date}. Using unrevised session_book.")
@@ -1194,7 +1194,7 @@ def Intraday_Flow():
     flow_start_time = time_module.time()
     current_time = datetime.now(ZoneInfo("America/New_York")).time()
 
-    expected_file_override = None  # '/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-08-15_15_00_1.csv.zip'
+    expected_file_override = '/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-09-27_06_00_1.csv.zip'
 
     db_utils.connect()
     pg_data.connect()
