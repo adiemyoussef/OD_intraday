@@ -1,4 +1,5 @@
 import csv
+import json
 import math
 from io import StringIO
 from typing import Optional, Union, List, Dict
@@ -654,7 +655,7 @@ class DigitalOceanSpaces:
                 session = boto3.session.Session()
                 self.client = session.client('s3',
                                              region_name=self.region_name,
-                                             endpoint_url=self.endpoint_url,
+                                             endpoint_url="https://nyc3.digitaloceanspaces.com",
                                              aws_access_key_id=self.access_key,
                                              aws_secret_access_key=self.secret_key)
                 self.status = SpacesStatus.CONNECTED
@@ -693,23 +694,140 @@ class DigitalOceanSpaces:
             self.logger.error(f"An error occurred during download: {e}")
             return False
 
-    def list_objects(self, space_name: str, prefix: str = "") -> list:
+    def list_objects(self, space_name: str, prefix: str = "", max_keys: int = 1000) -> list:
+        """
+        List objects in a DigitalOcean Space with pagination support.
+
+        :param space_name: Name of the Space to list objects from
+        :param prefix: Prefix to filter objects (optional)
+        :param max_keys: Maximum number of keys to return (default 1000, use None for all)
+        :return: List of object keys
+        """
+        if not self.client:
+            self.connect()
+
+        all_objects = []
+        continuation_token = None
+
+        try:
+            while True:
+                # Prepare parameters for the list_objects_v2 call
+                params = {
+                    'Bucket': space_name,
+                    'Prefix': prefix,
+                }
+                if continuation_token:
+                    params['ContinuationToken'] = continuation_token
+                if max_keys:
+                    params['MaxKeys'] = min(max_keys - len(all_objects), 1000)  # API limit is 1000 per call
+
+                # Make the API call
+                response = self.client.list_objects_v2(**params)
+
+                # Process the response
+                objects = response.get('Contents', [])
+                all_objects.extend([obj['Key'] for obj in objects])
+                self.logger.debug(f"Retrieved {len(objects)} objects. Total: {len(all_objects)}")
+
+                # Check if we need to paginate
+                if not response.get('IsTruncated') or (max_keys and len(all_objects) >= max_keys):
+                    break
+
+                continuation_token = response.get('NextContinuationToken')
+
+            self.logger.info(f"Successfully listed {len(all_objects)} objects from {space_name} with prefix '{prefix}'")
+            return all_objects
+
+        except self.client.exceptions.NoSuchBucket:
+            self.status = SpacesStatus.ERROR
+            self.last_error = f"Bucket {space_name} does not exist"
+            self.logger.error(self.last_error)
+            return []
+
+        except self.client.exceptions.ClientError as e:
+            self.status = SpacesStatus.ERROR
+            error_code = e.response['Error']['Code']
+            error_message = e.response['Error']['Message']
+            self.last_error = f"ClientError: {error_code} - {error_message}"
+            self.logger.error(f"An error occurred while listing objects: {self.last_error}")
+            return []
+
+        except Exception as e:
+            self.status = SpacesStatus.ERROR
+            self.last_error = str(e)
+            self.logger.error(f"An unexpected error occurred while listing objects: {e}")
+            return []
+
+
+    def get_or_initialize_metadata(self, space_name: str, metadata_key: str) -> dict:
+        """
+        Retrieve existing metadata or initialize new metadata.
+
+        :param space_name: Name of the Space
+        :param metadata_key: Key of the metadata file
+        :return: Dictionary containing metadata
+        """
+        try:
+            metadata_content = self.download_from_spaces_to_string(space_name, metadata_key)
+            return json.loads(metadata_content)
+        except Exception as e:
+            self.logger.warning(f"Failed to retrieve metadata, initializing new: {e}")
+            return {'last_timestamp': None, 'frames': []}
+
+    def update_metadata(self, space_name: str, metadata_key: str, metadata: dict) -> bool:
+        """
+        Update metadata in DigitalOcean Spaces.
+
+        :param space_name: Name of the Space
+        :param metadata_key: Key of the metadata file
+        :param metadata: Dictionary containing metadata to update
+        :return: True if successful, False otherwise
+        """
+        try:
+            self.upload_to_spaces_from_string(json.dumps(metadata), space_name, metadata_key)
+            self.logger.info(f"Metadata updated successfully: {metadata_key}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to update metadata: {e}")
+            return False
+
+    def download_from_spaces_to_string(self, space_name: str, spaces_file: str) -> str:
+        """
+        Download a file from Spaces and return its content as a string.
+
+        :param space_name: Name of the Space
+        :param spaces_file: Key of the file in Spaces
+        :return: Content of the file as a string
+        """
         if not self.client:
             self.connect()
 
         try:
-            response = self.client.list_objects(Bucket=space_name, Prefix=prefix)
-            return [obj['Key'] for obj in response.get('Contents', [])]
+            response = self.client.get_object(Bucket=space_name, Key=spaces_file)
+            return response['Body'].read().decode('utf-8')
         except Exception as e:
-            self.status = SpacesStatus.ERROR
-            self.last_error = str(e)
-            self.logger.error(f"An error occurred while listing objects: {e}")
-            return []
+            self.logger.error(f"An error occurred during download: {e}")
+            raise
 
-    def close(self):
-        self.client = None
-        self.status = SpacesStatus.DISCONNECTED
-        self.logger.info("DigitalOcean Spaces connection closed.")
+    def upload_to_spaces_from_string(self, content: str, space_name: str, spaces_file: str) -> bool:
+        """
+        Upload a string content to Spaces.
+
+        :param content: String content to upload
+        :param space_name: Name of the Space
+        :param spaces_file: Key of the file in Spaces
+        :return: True if successful, False otherwise
+        """
+        if not self.client:
+            self.connect()
+
+        try:
+            self.client.put_object(Bucket=space_name, Key=spaces_file, Body=content.encode('utf-8'))
+            self.logger.info(f"Upload Successful: {spaces_file}")
+            return True
+        except Exception as e:
+            self.logger.error(f"An error occurred during upload: {e}")
+            return False
 
     def get_status(self) -> dict:
         """
@@ -737,3 +855,8 @@ class DigitalOceanSpaces:
         except Exception as e:
             self.logger.error(f"Failed to check/reconnect to DigitalOcean Spaces: {e}")
             return False
+
+    def close(self):
+        self.client = None
+        self.status = SpacesStatus.DISCONNECTED
+        self.logger.info("DigitalOcean Spaces connection closed.")
