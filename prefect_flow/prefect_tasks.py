@@ -548,6 +548,7 @@ def fetch_historical_poly_data(previous_date, current_date, previous_datetime, c
 @task(retries=3, retry_delay_seconds=60, name="process_last_message_in_queue",
       task_run_name="Processing last message in queue...")
 async def process_last_message_in_queue(rabbitmq_utils: RabbitMQUtilities, expected_file_override=None):
+    prefect_logger = get_run_logger()
     logger.info("Processing last message in queue...")
 
     try:
@@ -555,13 +556,13 @@ async def process_last_message_in_queue(rabbitmq_utils: RabbitMQUtilities, expec
 
         if expected_file_override:
             expected_file_name = expected_file_override
-            logger.info(f"[OVERRIDE]: Getting {expected_file_name}")
+            prefect_logger.info(f"[OVERRIDE]: Getting {expected_file_name}")
 
             return expected_file_name
         else:
             expected_file_name = determine_expected_file_name()
 
-        logger.info(f"Expected file name: {expected_file_name}")
+        prefect_logger.info(f"Expected file name: {expected_file_name}")
 
         start_time = datetime.now()
 
@@ -569,7 +570,7 @@ async def process_last_message_in_queue(rabbitmq_utils: RabbitMQUtilities, expec
             try:
                 messages = rabbitmq_utils.fetch_all_messages_in_queue(RABBITMQ_CBOE_QUEUE)
                 message_count = len(messages)
-                logger.debug(f"Messages in queue: {message_count}")
+                prefect_logger.debug(f"Messages in queue: {message_count}")
 
                 if messages:
                     for method_frame, properties, body in reversed(messages):  # Process from newest to oldest
@@ -578,11 +579,11 @@ async def process_last_message_in_queue(rabbitmq_utils: RabbitMQUtilities, expec
                         file_name = msg_body.get("filename")
 
                         if file_name == expected_file_name:
-                            logger.debug(f"[FOUND]: Expected file {expected_file_name}")
+                            prefect_logger.info(f"[FOUND]: Expected file {expected_file_name}")
                             return (method_frame, properties, body), msg_body
                         else:
                             rabbitmq_utils.channel.basic_nack(delivery_tag=method_frame.delivery_tag, requeue=True)
-                            logger.debug(
+                            prefect_logger.info(
                                 f"[NOT FOUND]: Expected file {expected_file_name} not found. Retrying in {PROCESS_MESSAGE_QUEUE_RETRY_DELAY} seconds...")
                 else:
                     logger.debug(f"Queue is empty. Retrying in {PROCESS_MESSAGE_QUEUE_RETRY_DELAY} seconds...")
