@@ -1459,7 +1459,7 @@ def Intraday_Flow():
                         heatmap_generation_flow(final_book_clean_insert, effective_datetime=effective_datetime)
 
                         # TODO: modify the other params to remove this and start at the same time as the book generation
-                        if current_time > datetime_time(7, 0):
+                        if current_time > datetime_time(8, 0):
                             intraday_gamma_heatmap(db,prod_pg_data, effective_datetime, current_date)
                             intraday_charm_heatmap(db,prod_pg_data, effective_datetime, current_date)
                             prefect_logger.info("Triggering gif flows...")
