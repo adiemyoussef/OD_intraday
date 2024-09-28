@@ -471,7 +471,12 @@ def generate_video_from_frames(do_space, space_name, frame_keys, combo_id):
         # Use ffmpeg to create a video from the frames
         output_video = f'video_{combo_id}.mp4'
         ffmpeg_command = f'ffmpeg -framerate 3 -pattern_type glob -i "{tmpdir}/*.png" -c:v libx264 -pix_fmt yuv420p {output_video}'
-        subprocess.run(ffmpeg_command, shell=True, check=True)
+        #subprocess.run(ffmpeg_command, shell=True, check=True)
+
+        result = subprocess.run(ffmpeg_command, shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"FFmpeg command failed. Output:\n{result.stdout}\n{result.stderr}")
+            breakpoint()
 
         # Upload the generated video to DigitalOcean Spaces
         video_key = f"videos/{output_video}"

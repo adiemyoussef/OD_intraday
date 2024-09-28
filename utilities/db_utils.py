@@ -492,7 +492,7 @@ class PostGreData:
 
                 if return_type.lower() == 'dataframe':
                     result = pd.DataFrame(results, columns=columns)
-                    self.logger.debug(f"Executed Query: {result.head()}")
+                    self.logger.info(f"Executed Query: {result.head()}")
                     return result
                 elif return_type.lower() == 'dict':
                     return [dict(row) for row in results]
