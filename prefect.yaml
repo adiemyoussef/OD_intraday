@@ -26,7 +26,7 @@ deployments:
     Acknowledges the processed message in RabbitMQ\n\n    The flow handles various
     edge cases and exceptions, ensuring robust\n    data processing and connection
     management throughout its execution.\n    "
-  entrypoint: prefect_flow/prefect_tasks.py:Intraday_Flow
+  entrypoint: prefect_flow/flow_intraday.py:Intraday_Flow
   parameters: {}
   work_pool:
     name: intraday-paperspace-agent
@@ -222,7 +222,7 @@ deployments:
   parameters: {}
 
 - name: Gather Options Chain
-  entrypoint: prefect_flow/gather_options_chains.py:poly_flow
+  entrypoint: prefect_flow/flow_gather_optionschains.py:poly_flow
   work_pool:
     name: intraday-paperspace-agent
     work_queue_name:
@@ -277,7 +277,7 @@ deployments:
 
 
 - name: Trigger Gif Flows
-  entrypoint: prefect_flow/prefect_tasks.py:trigger_gif_flows
+  entrypoint: prefect_flow/flow_intraday.py:trigger_gif_flows
   work_pool:
     name: intraday-paperspace-agent
     work_queue_name:
@@ -303,7 +303,7 @@ deployments:
     timezone: UTC
     active: false
 - name: Revised Book - MySQL
-  entrypoint: prefect_flow/daily_generate_mm_book_intraday.py:generate_revised_book
+  entrypoint: prefect_flow/flow_dailybook_mysql.py:generate_revised_book
   work_pool:
     name: intraday-paperspace-agent
     work_queue_name:
