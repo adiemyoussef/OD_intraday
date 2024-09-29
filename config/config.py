@@ -179,6 +179,11 @@ INTRADAY_REQUIRED_COLUMNS = [
     'procust_gt_199_open_buy_vol', 'procust_gt_199_close_buy_vol', 'procust_gt_199_open_sell_vol', 'procust_gt_199_close_sell_vol'
 ]
 
+INITIAL_BOOK_COLUMNS = ['id', 'revised', 'time_stamp', 'as_of_date', 'effective_date', 'ticker', 'option_symbol',
+                   'call_put_flag', 'expiration_date_original', 'expiration_date', 'strike_price',
+                   'mm_posn', 'broker_posn', 'firm_posn', 'nonprocust_posn', 'procust_posn',
+                   'total_customers_posn', 'iv', 'delta', 'gamma', 'vega']
+
 VALID_SECURITY_TYPES = {1, 2, 3, 4}
 VALID_CALL_PUT_FLAGS = {'P', 'C'}
 VALID_SERIES_TYPES = {'S', 'N'}

@@ -302,8 +302,6 @@ deployments:
     anchor_date: '2024-09-23T15:29:12.842778+00:00'
     timezone: UTC
     active: false
-
-#--------------- MySQL ----------------- #
 - name: Revised Book - MySQL
   entrypoint: prefect_flow/daily_generate_mm_book_intraday.py:generate_revised_book
   work_pool:

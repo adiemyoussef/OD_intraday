@@ -102,8 +102,6 @@ async def trigger_deployments(deployment_names):
             except Exception as e:
                 prefect_logger.error(f"Failed to trigger deployment '{deployment_name}': {str(e)}")
 
-
-
 def process_greek(greek_name, poly_data, book):
     latest_greek = poly_data.sort_values('time_stamp', ascending=False).groupby('contract_id').first().reset_index()
     latest_greek = latest_greek[['contract_id', greek_name, 'time_stamp']]
@@ -128,7 +126,6 @@ def process_greek(greek_name, poly_data, book):
         print(f"\nWarning: {update_col} not found in merged DataFrame. No updates performed.")
 
     return book
-
 
 def prepare_to_fetch_historical_poly(current_time=None, shift_previous_minutes=0, shift_current_minutes=0):
     """
@@ -180,7 +177,6 @@ def prepare_to_fetch_historical_poly(current_time=None, shift_previous_minutes=0
 
     return previous_date_str, current_date_str, previous_datetime_str, current_datetime_str
 
-
 def filter_and_log_nan_values(final_book: pd.DataFrame) -> pd.DataFrame:
     """
 
@@ -194,7 +190,6 @@ def filter_and_log_nan_values(final_book: pd.DataFrame) -> pd.DataFrame:
     logger.debug(f"MM positions of filtered contracts: \n{nan_rows.groupby('option_symbol')['mm_posn'].sum()}")
 
     return final_book.dropna()
-
 
 def ensure_all_connections_are_open():
     max_attempts = 5
@@ -215,6 +210,41 @@ def ensure_all_connections_are_open():
     logger.error("Failed to establish connections after maximum attempts.")
     return False
 
+@task(name= "Transforming intraday book to fit initial book")
+def transform_intraday_to_session_book(intraday_df: pd.DataFrame, target_date: datetime.date, prev_business_day: datetime.date) -> pd.DataFrame:
+
+    """
+    Description:
+
+    :param intraday_df: Last book of the intraday runs
+    :param target_date:
+    :return: Book to be returned that match the initial book format
+    """
+    prefect_logger = get_run_logger()
+
+    prefect_logger.info("Transforming intraday_df to have an initial book")
+    session_book = intraday_df.copy()
+
+    # Remove 'effective_datetime' and 'open_interest' columns if they exist
+    session_book = session_book.drop(columns=['effective_datetime', 'open_interest'], errors='ignore')
+
+    # Get current time
+    current_time = datetime.now().time()
+
+    # Adjust 'time_stamp', 'as_of_date', and 'effective_date'
+    session_book['time_stamp'] = pd.Timestamp.combine(target_date, current_time)
+    session_book['as_of_date'] = prev_business_day.strftime('%Y-%m-%d')
+    session_book['effective_date'] = target_date.strftime('%Y-%m-%d')
+
+    # Ensure 'revised' column is set to 'N'
+    session_book['revised'] = 'N'
+
+    # Ensure column order matches session book format
+    session_book = session_book[INITIAL_BOOK_COLUMNS]
+
+    prefect_logger.info(f"Transformation result: {session_book.head()}")
+
+    return session_book
 
 # ------------------ UPDATED HEATMAP ------------------#
 @task
@@ -478,6 +508,7 @@ def intraday_charm_heatmap(db, pg, effective_datetime: str, effective_date: str)
         spx_candlesticks = None
     else:
         prefect_logger.info(f"Fetched candlesticks")
+        #candlesticks_resampled = resample_ohlcv_data(candlesticks)
         candlesticks_resampled = candlesticks.copy() #resample_and_convert_timezone(candlesticks)
         spx_candlesticks = candlesticks_resampled.set_index('effective_datetime', drop=False)
 
@@ -622,12 +653,12 @@ def get_initial_book(get_unrevised_book: Callable):
     try:
         current_time = datetime.now(ZoneInfo("America/New_York"))
         current_date = current_time.date()
-        limit2am = current_time.replace(hour=0, minute=15, second=0, microsecond=0).time()
-        limit7pm = current_time.replace(hour=23, minute=0, second=0, microsecond=0).time()
+        start_limit = current_time.replace(hour=0, minute=5, second=0, microsecond=0).time()
+        stop_time = current_time.replace(hour=20, minute=0, second=0, microsecond=0).time()
 
         # TODO: Verify that the current_date is a business date
 
-        if limit2am <= current_time.time() < limit7pm:  # Between 2 AM and 7 PM
+        if start_limit <= current_time.time() < stop_time:  # Between Midnight and 8 PM
             prefect_logger.info(f"Operating during Revised book hours")
             query = f"""
             SELECT * FROM intraday.new_daily_book_format 
@@ -639,34 +670,56 @@ def get_initial_book(get_unrevised_book: Callable):
             prefect_logger.info(f"Got Revised book of {session_book['effective_date']}")
 
             if session_book.empty:
+                prefect_logger.info(
+                    f"No revised session_book found for {current_date}. Using previous day's intraday book.")
+
+                # Find the previous business day using get_trading_day function
+                prev_business_day = get_trading_day(current_date, n=1, direction='previous',
+                                                    return_format='datetime').date()
+                prefect_logger.info(
+                    f"Previous Business day used: {prev_business_day}.")
+
+                # Fetch the last intraday book from the previous business day
                 query = f"""
-                SELECT * FROM intraday.new_daily_book_format 
-                -- SELECT * FROM public.charts_dailybook 
-                WHERE effective_date = '{current_date}' AND revised = 'N'
+                SELECT * FROM intraday.intraday_books
+                WHERE effective_date = '{prev_business_day}'
+                AND expiration_date_original != '{prev_business_day}'
+                AND effective_datetime = (
+                    SELECT MAX(effective_datetime)
+                    FROM intraday.intraday_books
+                    WHERE effective_date = '{prev_business_day}'
+                )
+                ORDER BY expiration_date ASC
                 """
-                session_book = db.execute_query(query)
-                prefect_logger.info("Getting Unrevised book")
-                if session_book.empty:
-                    send_notification(f"No session_book found for {current_date}. Using unrevised session_book.")
+                prev_intraday_book = db.execute_query(query)
+
+                if prev_intraday_book.empty:
+                    prefect_logger.warning(f"No intraday book found for {prev_business_day}. Using unrevised book.")
                     return get_unrevised_book()
-                else:
-                    # send_notification(f"Unrevised session_book found for {current_date}. Proceeding with caution.")
-                    return session_book
+
+                # Log a message if the last effective_datetime is not 18:00:00
+                last_effective_datetime = prev_intraday_book['effective_datetime'].max()
+                if last_effective_datetime.time() != datetime.strptime("18:00:00", "%H:%M:%S").time():
+                    prefect_logger.warning(
+                        f"Last effective_datetime is {last_effective_datetime}, not 18:00:00 as expected.")
+
+                # Transform the intraday book to match the session book format
+                session_book = transform_intraday_to_session_book(prev_intraday_book, current_date, prev_business_day)
+                return session_book
             else:
-                logger.debug(f"Revised session_book loaded for date: {current_date}")
-                # TODO: verify it makes sense
+                prefect_logger.info(f"Revised session_book loaded for date: {current_date}")
                 return session_book
 
-        else:  # Between 8 PM and 2 AM
 
-            # TODO:
-            # if it's sunday, get revised book since it runs Friday-Saturday
-            # else;
-            logger.debug("Using unrevised session_book due to time of day.")
-            return get_unrevised_book()
+        # Between 8 PM and Midnight
+        else:
+
+            # TODO: Add more logic to cover the downtime
+            prefect_logger.info("Using unrevised session_book due to time of day.")
+            pass
 
     except Exception as e:
-        logger.error(f"Error getting initial session_book: {e}")
+        prefect_logger.error(f"Error getting initial session_book: {e}")
         raise
 
 
@@ -1461,11 +1514,11 @@ def Intraday_Flow():
                         if current_time > datetime_time(8, 0):
                             intraday_gamma_heatmap(db,prod_pg_data, effective_datetime, current_date)
                             intraday_charm_heatmap(db,prod_pg_data, effective_datetime, current_date)
+
+                        if current_time > datetime_time(6, 0):
                             prefect_logger.info("Triggering gif flows...")
                             run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
                             prefect_logger.info("Gif flows triggered.")
-
-
 
 
                     else:
@@ -1475,12 +1528,6 @@ def Intraday_Flow():
                         # generate_charts(final_book_clean_insert,effective_datetime=effective_datetime)
 
                     prefect_logger.info(f"Finished flow in {time_module.time() - flow_start_time} sec.")
-
-                    # prefect_logger.info("Triggering gif flows...")
-                    # run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
-                    # prefect_logger.info("Gif flows triggered.")
-
-
 
                 else:
                     logger.warning(f"DataFrame is empty or None for file: {file_info['file_name']}")
@@ -1506,7 +1553,10 @@ async def trigger_gif_flows():
         deployment_names = [
             "0 DTE Flow",
             "1 DTE Flow",
-            "MM GEX Flow"
+            "MM GEX Flow",
+            "TEST - 0 DTE Flow",
+            "TEST - 1 DTE Flow",
+            "TEST - GEX gifs"
         ]
         await trigger_deployments(deployment_names)
         prefect_logger.info("All gif flows have been triggered.")
