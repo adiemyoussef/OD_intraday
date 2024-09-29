@@ -653,7 +653,7 @@ def get_initial_book(get_unrevised_book: Callable):
     try:
         current_time = datetime.now(ZoneInfo("America/New_York"))
         current_date = current_time.date()
-        start_limit = current_time.replace(hour=0, minute=5, second=0, microsecond=0).time()
+        start_limit = current_time.replace(hour=0, minute=0, second=30, microsecond=0).time()
         stop_time = current_time.replace(hour=20, minute=0, second=0, microsecond=0).time()
 
         # TODO: Verify that the current_date is a business date
