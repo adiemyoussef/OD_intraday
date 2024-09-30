@@ -486,10 +486,10 @@ def intraday_charm_heatmap(db, pg, effective_datetime: str, effective_date: str)
     prefect_logger = get_run_logger()
 
     raw_charm_data = fetch_charm_data(db, effective_date, effective_datetime)
-    prefect_logger.info("Fetched raw_gamma_data")
+    prefect_logger.info("Fetched raw_charm_data")
     processed_charm_data = process_charm_data(raw_charm_data)
     cd_formatted_datetime = et_to_utc(effective_datetime)
-    prefect_logger.info("Fetched all Data")
+    prefect_logger.info("Fetched all charm Data")
     # Fetch candlestick data (assuming you still need this)
     cd_query = f"""
     SELECT * FROM public.charts_candlestick
@@ -623,7 +623,7 @@ async def process_last_message_in_queue(rabbitmq_utils: RabbitMQUtilities, expec
                             return (method_frame, properties, body), msg_body
                         else:
                             rabbitmq_utils.channel.basic_nack(delivery_tag=method_frame.delivery_tag, requeue=True)
-                            prefect_logger.info(
+                            prefect_logger.debug(
                                 f"[NOT FOUND]: Expected file {expected_file_name} not found. Retrying in {PROCESS_MESSAGE_QUEUE_RETRY_DELAY} seconds...")
                 else:
                     logger.debug(f"Queue is empty. Retrying in {PROCESS_MESSAGE_QUEUE_RETRY_DELAY} seconds...")
@@ -1517,6 +1517,7 @@ def Intraday_Flow():
                     if current_time < datetime_time(16, 0):
                         prefect_logger.info("It's before 4 PM ET. Proceeding with heatmap generation.")
                         heatmap_generation_flow(final_book_clean_insert, effective_datetime=effective_datetime)
+                        intraday_charm_heatmap(db, prod_pg_data, effective_datetime, current_date)
 
                         # TODO: modify the other params to remove this and start at the same time as the book generation
                         if current_time > datetime_time(8, 0):

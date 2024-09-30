@@ -517,7 +517,7 @@ def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_da
     ]
     footer_text = f"Generated on {current_time} | By OptionsDepth.com"
 
-    success = send_to_discord_new(
+    success = send_to_discord(
         webhook_url,
         file_paths,
         content="", #"🚀 New options chart analysis is ready! Check out the latest market insights below.",
@@ -528,13 +528,13 @@ def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_da
         do_spaces=do_space
     )
 
-    # # Clean up the gif files after sending
-    # for path in file_paths:
-    #     try:
-    #         print(f'Suppose to remove: {path}')
-    #         #os.remove(path)
-    #     except FileNotFoundError:
-    #         print(f"Warning: Could not delete file {path}. It may have already been deleted.")
+    # Clean up the gif files after sending
+    for path in file_paths:
+        try:
+            print(f'Suppose to remove: {path}')
+            #os.remove(path)
+        except FileNotFoundError:
+            print(f"Warning: Could not delete file {path}. It may have already been deleted.")
 
     return success
 
