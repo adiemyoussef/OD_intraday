@@ -675,7 +675,8 @@ def get_initial_book(get_unrevised_book: Callable):
             """
             session_book = db.execute_query(query)
 
-            prefect_logger.info(f"Got Revised book of {session_book['effective_date']}")
+            prefect_logger.info(f"Got Revised book of {session_book['effective_date'].unique()}")
+
 
             if session_book.empty:
                 prefect_logger.info(
@@ -716,6 +717,10 @@ def get_initial_book(get_unrevised_book: Callable):
                 return session_book
             else:
                 prefect_logger.info(f"Revised session_book loaded for date: {current_date}")
+                prefect_logger.info(f"Revised book head {session_book.head()}")
+                prefect_logger.info(f"Revised book tail {session_book.tail()}")
+                prefect_logger.info(f"Returning book....")
+
                 return session_book
 
 
