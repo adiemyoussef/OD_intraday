@@ -165,7 +165,7 @@ def get_strike_range(db,session_date, range_value=200, range_type:str='points'):
     # Query to find the previous session's close price
     query = f"""
     SELECT effective_date, close
-    FROM optionsdepth_stage.charts_candlestick
+    FROM public.charts_candlestick
     WHERE ticker = 'SPX'
     AND effective_date = '{previous_trading_day}'
     ORDER BY effective_datetime DESC
