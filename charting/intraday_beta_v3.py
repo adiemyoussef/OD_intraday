@@ -432,13 +432,19 @@ def test_generate_video_task(data, candlesticks, session_date, participant, stri
 
         # Filter data to process only new timestamps, but include necessary historical data
         last_timestamp = pd.to_datetime(metadata['last_timestamp']) if metadata['last_timestamp'] else None
+        current_day_start = pd.Timestamp(session_date).floor('D')
+        day_data = data[data['effective_datetime'] >= current_day_start]
+
+        print(f"Last time_stamp: {last_timestamp}")
+        if not day_data.empty:
+            first_datetime = day_data['effective_datetime'].min()
+            start_of_day_data = data[data['effective_datetime'] == first_datetime]
+        else:
+            start_of_day_data = pd.DataFrame()  # Empty DataFrame if no data for the day
+
         if last_timestamp:
             # Include the last processed data point
             last_processed_data = data[data['effective_datetime'] == last_timestamp]
-
-            # Include the first data point of the current day
-            current_day_start = pd.Timestamp(session_date).floor('D')
-            start_of_day_data = data[data['effective_datetime'] >= current_day_start].iloc[0:1]
 
             # Include all new data points
             new_data = data[data['effective_datetime'] > last_timestamp]
