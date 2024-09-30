@@ -112,7 +112,7 @@ def fetch_data(session_date: str, effective_datetime: str, strike_range: List[in
     last_price = prod_pg_data.execute_query(last_price_query)
 
     unique_effectivedatetime = candlesticks['effective_datetime'].unique()
-    prefect_logger.info(f'distinct effective_datetimes: {unique_effectivedatetime}')
+    prefect_logger.info(f'Candlesticks distinct effective_datetimes: {unique_effectivedatetime}')
 
     if candlesticks.empty:
         prefect_logger.info("No candlesticks Available")
@@ -126,7 +126,7 @@ def fetch_data(session_date: str, effective_datetime: str, strike_range: List[in
         candlesticks.drop_duplicates(keep='first', inplace=False)
 
     unique_effectivedatetime = candlesticks['effective_datetime'].unique()
-    prefect_logger.info(f'distinct effective_datetimes: {unique_effectivedatetime}')
+    prefect_logger.info(f'Candlesticks distinct effective_datetimes: {unique_effectivedatetime}')
 
     return metrics, candlesticks, last_price
 
