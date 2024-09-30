@@ -1520,6 +1520,13 @@ def Intraday_Flow():
                     effective_datetime = str(final_book_clean_insert["effective_datetime"].unique()[0])
 
                     if current_time < datetime_time(16, 0):
+
+                        if current_time > datetime_time(4, 0):
+                            prefect_logger.info("Triggering gif flows...")
+                            run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
+                            prefect_logger.info("Gif flows triggered.")
+
+                        #--------- GENERATE HEATMAPS -------------------#
                         prefect_logger.info("It's before 4 PM ET. Proceeding with heatmap generation.")
                         prefect_logger.info(f'final_book_clean_insert sent to heatmap_generation: {final_book_clean_insert}')
                         heatmap_generation_flow(final_book_clean_insert, effective_datetime=effective_datetime)
@@ -1530,10 +1537,7 @@ def Intraday_Flow():
                             intraday_gamma_heatmap(db,prod_pg_data, effective_datetime, current_date)
                             intraday_charm_heatmap(db,prod_pg_data, effective_datetime, current_date)
 
-                        if current_time > datetime_time(6, 0):
-                            prefect_logger.info("Triggering gif flows...")
-                            run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
-                            prefect_logger.info("Gif flows triggered.")
+
 
 
                     else:
