@@ -518,9 +518,17 @@ def intraday_charm_heatmap(db, pg, effective_datetime: str, effective_date: str)
     df_charm = current_data.pivot_table(index='sim_datetime', columns='price', values='value')  # , aggfunc='first')
 
     # Generate and send heatmap
-    charm_chart = plot_charm(df=df_charm,
-                             effective_datetime=effective_datetime,
-                             spx=spx_candlesticks)
+    # charm_chart = plot_charm(df=df_charm,
+    #                          effective_datetime=effective_datetime,
+    #                          spx=spx_candlesticks)
+
+    # Generate charm heatmap
+    charm_chart = plot_charm_test(
+        df=df_charm,
+        effective_datetime=effective_datetime,
+        spx=spx_candlesticks,
+        fig_show=False  # Set to True if you want to display the figure
+    )
 
     charm_chart.update_layout(
         width=1920,  # Full HD width
@@ -536,7 +544,7 @@ def intraday_charm_heatmap(db, pg, effective_datetime: str, effective_date: str)
         session_date=effective_date,
         y_min=5580,
         y_max=5850,
-        webhook_url=CHARM_HEATMAP_CHANNEL  # Make sure to define this
+        webhook_url=DEV_CHANNEL#CHARM_HEATMAP_CHANNEL  # Make sure to define this
     )
 
     if success:

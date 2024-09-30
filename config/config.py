@@ -151,8 +151,8 @@ class WebhookUrl(Enum):
     # Add more webhook URLs as needed
 
 
-HEATMAPS_START_TIME = '07:50:00'
-START_TIME_PRE_MARKET = '07:30:00'
+HEATMAPS_START_TIME = '06:30:00'
+START_TIME_PRE_MARKET = '06:30:00'
 START_TIME_MARKET = '08:00:00'
 DEFAULT_POS_TYPES = ['Net', 'C','P']
 

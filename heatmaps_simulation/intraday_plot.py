@@ -1190,6 +1190,205 @@ def plot_gamma_test(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df
     return fig
 
 
+def plot_charm_test(df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None, save_fig=False, fig_show=False, grid=False):
+    if not isinstance(effective_datetime, pd.Timestamp):
+        effective_datetime = pd.to_datetime(effective_datetime)
+
+    title_date = effective_datetime.strftime("%Y-%m-%d %H:%M")
+
+    # Split data into past and future
+    df_past = df[df.index <= effective_datetime]
+    df_future = df[df.index >= effective_datetime]
+
+    y = df.columns.values
+    y_traces = np.arange(10 * round(y[0] / 10), 10 * round(y[-1] / 10) + 10, 10)
+
+    times_to_show = np.arange(0, len(df.index), 6)
+    bonbhay = [df.index[time] for time in times_to_show]
+    x_values = [simtime.strftime("%H:%M") for simtime in bonbhay]
+
+    max_val = 150
+    min_val = -150
+    max_val = np.max([abs(max_val), abs(min_val)])
+
+    fig = go.Figure()
+
+    # Past data
+    if not df_past.empty:
+        if len(df_past) > 1:
+            heatmap_past = go.Contour(
+                name="Past Charm",
+                z=df_past.values.T,
+                x=df_past.index,
+                y=df_past.columns,
+                contours_coloring='heatmap',
+                colorscale=[[0.0, "rgb(0, 59, 99)"],
+                            [0.499, "rgb(186, 227, 255)"],
+                            [0.501, "rgb(255, 236, 196)"],
+                            [1.0, "rgb(255, 148, 71)"]],
+                zmax=max_val,
+                zmin=-max_val,
+                showscale=False,
+                line_width=0,
+                showlegend=True
+            )
+        else:
+            heatmap_past = go.Scatter(
+                name="Past Charm",
+                x=df_past.index,
+                y=df_past.columns,
+                mode='markers',
+                marker=dict(
+                    size=10,
+                    color=df_past.values.flatten(),
+                    colorscale=[[0.0, "rgb(0, 59, 99)"],
+                                [0.499, "rgb(186, 227, 255)"],
+                                [0.501, "rgb(255, 236, 196)"],
+                                [1.0, "rgb(255, 148, 71)"]],
+                    cmin=-max_val,
+                    cmax=max_val,
+                    showscale=False
+                ),
+                showlegend=True
+            )
+        fig.add_trace(heatmap_past)
+
+    # Future data
+    if not df_future.empty:
+        heatmap_future = go.Contour(
+            name="Future Charm",
+            z=df_future.values.T,
+            x=df_future.index,
+            y=df_future.columns,
+            contours_coloring='heatmap',
+            colorscale=[[0.0, "rgb(0, 59, 99)"],
+                        [0.499, "rgb(186, 227, 255)"],
+                        [0.501, "rgb(255, 236, 196)"],
+                        [1.0, "rgb(255, 148, 71)"]],
+            zmax=max_val,
+            zmin=-max_val,
+            line_color='#404040',
+            line_width=2,
+            contours_start=0,
+            contours_end=0,
+            colorbar=dict(
+                x=0.5,
+                y=-0.2,
+                len=0.5,
+                orientation='h',
+                title=dict(
+                    text='Charm (Delta / 1 Day)',
+                    side='top',
+                    font=dict(size=14, family='Noto Sans SemiBold')
+                ),
+            ),
+            showlegend=True
+        )
+        fig.add_trace(heatmap_future)
+
+    # Add vertical line at effective_datetime
+    fig.add_shape(
+        type="line",
+        x0=effective_datetime,
+        x1=effective_datetime,
+        y0=y.min(),
+        y1=y.max(),
+        line=dict(color="white", width=2, dash="dot"),
+    )
+
+    if grid:
+        for y_ in y_traces:
+            fig.add_hline(y=y_, line_width=1, line_dash='solid', line_color="rgb(222, 222, 222, 0.2)")
+        for x_ in bonbhay:
+            fig.add_vline(x=x_, line_width=1, line_dash="solid", line_color="rgb(222, 222, 222, 0.2)")
+
+    if spx is not None:
+        candlestick = go.Candlestick(
+            x=spx.index,
+            open=spx['open'],
+            high=spx['high'],
+            low=spx['low'],
+            close=spx['close'],
+            name='SPX',
+            showlegend=False
+        )
+        fig.add_trace(candlestick)
+
+    # Add layout images (assuming 'img_dark' and 'img_light' are defined elsewhere)
+    if 'img_dark' in globals():
+        fig.add_layout_image(
+            dict(
+                source=img_dark,
+                xref="paper",
+                yref="y domain",
+                x=0.5,
+                y=0.5,
+                yanchor="middle",
+                xanchor="center",
+                sizex=1,
+                sizey=1,
+                sizing="contain",
+                opacity=0.08,
+                layer="above")
+        )
+    if 'img_light' in globals():
+        fig.add_layout_image(
+            dict(
+                source=img_light,
+                xref="paper",
+                yref="paper",
+                x=1,
+                y=1.01,
+                yanchor="bottom",
+                xanchor="right",
+                sizex=0.175,
+                sizey=0.175,
+            )
+        )
+
+    fig.update_layout(
+        title=dict(
+            text=f"Market Makers Charm Exposure Map Forecast <br><sup>All expirations, as of {title_date}</sup>",
+            font=dict(size=40, family="Noto Sans SemiBold", color="white"),
+            yref='container',
+            x=0.0,
+            xanchor='left',
+            yanchor='top',
+            pad=dict(t=60, b=30, l=80)
+        ),
+        xaxis_title="Time",
+        yaxis_title="Price",
+        plot_bgcolor='rgba(255, 255, 255,0)',
+        paper_bgcolor='#053061',
+        font=dict(family="Noto Sans Medium", color='white', size=16),
+        newshape=dict(line_color='yellow'),
+        autosize=False,
+        width=1440,
+        height=810,
+        showlegend=False,
+        margin=dict(b=150)
+    )
+
+    fig.update_xaxes(
+        tickmode='array',
+        tickvals=bonbhay,
+        ticktext=x_values,
+        rangeslider_visible=False
+    )
+
+    fig.update_yaxes(
+        tickmode='array',
+        tickvals=y_traces,
+        ticktext=y_traces,
+        side='right'
+    )
+
+    if fig_show:
+        fig.show()
+
+    return fig
+
+
 if __name__ == "__main__":
     from utilities.db_utils import *
     # db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
