@@ -303,6 +303,7 @@ def compute_heatmap(args, type: str, df_book: pd.DataFrame, start_time: datetime
     args.proc = num_processors
     args.mode = type
 
+    prefect_logger.info(f"df_book in compute_heatmap:{df_book.head()}")
     #TODO: Friday AM TEST
     df_book['iv'] = df_book['iv'].astype(float)
 
