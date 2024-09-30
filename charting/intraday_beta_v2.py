@@ -560,7 +560,7 @@ def zero_dte_flow(
     webhook_url: str = None
     ):
 
-    webhook_url = webhook_url or get_webhook_url('dev')
+    webhook_url = webhook_url or get_webhook_url('zero_dte')
 
     expiration = str(session_date)
 
@@ -617,7 +617,7 @@ def one_dte_flow(
     webhook_url: str = None
 ):
     # Set default values if not provided
-    webhook_url = webhook_url or get_webhook_url('dev')
+    webhook_url = webhook_url or get_webhook_url('one_dte')
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
@@ -672,7 +672,7 @@ def GEX_flow(
 ):
 
     #Default values
-    webhook_url = webhook_url or get_webhook_url('dev')
+    webhook_url = webhook_url or get_webhook_url('gex')
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
