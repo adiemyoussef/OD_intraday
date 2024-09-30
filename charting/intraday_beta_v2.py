@@ -560,7 +560,7 @@ def zero_dte_flow(
     webhook_url: str = None
     ):
 
-    webhook_url = webhook_url or get_webhook_url('zero_dte')
+    webhook_url = webhook_url or get_webhook_url('dev')
 
     expiration = str(session_date)
 
@@ -568,8 +568,8 @@ def zero_dte_flow(
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-        # strike_range = get_strike_range(db,session_date)
-        strike_range = [5580,5900]
+        strike_range = get_strike_range(prod_pg_data,session_date)
+        #strike_range = [5580,5900]
     if expiration is None:
         expiration = session_date
     if position_types is None:
@@ -617,12 +617,12 @@ def one_dte_flow(
     webhook_url: str = None
 ):
     # Set default values if not provided
-    webhook_url = webhook_url or get_webhook_url('one_dte')
+    webhook_url = webhook_url or get_webhook_url('dev')
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-        #strike_range = get_strike_range(db,session_date, range_value = 0.025, range_type = 'percent')
-        strike_range = [5580, 5900]
+        strike_range = get_strike_range(prod_pg_data,session_date, range_value = 0.025, range_type = 'percent')
+        #strike_range = [5580, 5900]
     if position_types is None:
         position_types = DEFAULT_POS_TYPES
     elif 'All' in position_types:
@@ -672,12 +672,12 @@ def GEX_flow(
 ):
 
     #Default values
-    webhook_url = webhook_url or get_webhook_url('gex')
+    webhook_url = webhook_url or get_webhook_url('dev')
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-        #strike_range = get_strike_range(db,session_date, range_value = 0.025, range_type = 'percent')
-        strike_range = [5580, 5900]
+        strike_range = get_strike_range(prod_pg_data,session_date, range_value = 0.025, range_type = 'percent')
+        #strike_range = [5580, 5900]
     if position_types is None:
         position_types = DEFAULT_POS_TYPES
     if expiration is None:
@@ -729,8 +729,8 @@ def test_zero_dte_flow(
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
-        # strike_range = get_strike_range(db,session_date)
-        strike_range = [5580,5900]
+        strike_range = get_strike_range(prod_pg_data,session_date)
+        #strike_range = [5580,5900]
     if expiration is None:
         expiration = session_date
     if position_types is None:
@@ -1131,7 +1131,7 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame =None,
 if __name__ == "__main__":
     # test_zero_dte_flow()
     # breakpoint()
-    # zero_dte_flow()
+    zero_dte_flow()
     one_dte_flow()
     GEX_flow()
     #plot_depthview(webhook_url=WebhookUrl.DEFAULT)

@@ -716,7 +716,7 @@ def test_zero_dte_flow(
         position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
         webhook_url: str = None
 ):
-    webhook_url = webhook_url or get_webhook_url('dev')
+    webhook_url = webhook_url or get_webhook_url('zero_dte')
 
     expiration = str(session_date)
 
@@ -776,7 +776,7 @@ def test_one_dte_flow(
         position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
         webhook_url: str = None
 ):
-    webhook_url = webhook_url or get_webhook_url('dev')
+    webhook_url = webhook_url or get_webhook_url('one_dte')
 
     # Set default values if not provided
     if session_date is None:
