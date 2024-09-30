@@ -1523,7 +1523,7 @@ def Intraday_Flow():
 
                         if current_time > datetime_time(4, 0):
                             prefect_logger.info("Triggering gif flows...")
-                            run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
+                            # run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
                             prefect_logger.info("Gif flows triggered.")
 
                         #--------- GENERATE HEATMAPS -------------------#
