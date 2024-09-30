@@ -517,7 +517,18 @@ def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_da
     ]
     footer_text = f"Generated on {current_time} | By OptionsDepth.com"
 
-    success = send_to_discord(
+    # success = send_to_discord_new(
+    #     webhook_url,
+    #     file_paths,
+    #     content="", #"🚀 New options chart analysis is ready! Check out the latest market insights below.",
+    #     title=title,
+    #     description=description,
+    #     fields=fields,
+    #     footer_text=footer_text,
+    #     do_spaces=do_space
+    # )
+
+    success = send_to_discord_new(
         webhook_url,
         file_paths,
         content="", #"🚀 New options chart analysis is ready! Check out the latest market insights below.",
@@ -525,8 +536,9 @@ def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_da
         description=description,
         fields=fields,
         footer_text=footer_text,
-        do_spaces=do_space
+        #do_spaces=do_space
     )
+
 
     # Clean up the gif files after sending
     for path in file_paths:
