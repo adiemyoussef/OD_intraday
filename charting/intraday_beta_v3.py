@@ -420,21 +420,44 @@ def test_generate_video_task(data, candlesticks, session_date, participant, stri
         # Retrieve or initialize metadata
         metadata = do_space.get_or_initialize_metadata(space_name, metadata_key)
 
-        # Filter data to process only new timestamps
+        # # Filter data to process only new timestamps
+        # last_timestamp = pd.to_datetime(metadata['last_timestamp']) if metadata['last_timestamp'] else None
+        # if last_timestamp:
+        #     new_data = data[data['effective_datetime'] > last_timestamp]
+        # else:
+        #     new_data = data
+        #
+        # unprocessed_effectivedatetimes = new_data['effective_datetime'].unique()
+        # print(f'Unique time_stamps to process: {unprocessed_effectivedatetimes}')
+
+        # Filter data to process only new timestamps, but include necessary historical data
         last_timestamp = pd.to_datetime(metadata['last_timestamp']) if metadata['last_timestamp'] else None
         if last_timestamp:
+            # Include the last processed data point
+            last_processed_data = data[data['effective_datetime'] == last_timestamp]
+
+            # Include the first data point of the current day
+            current_day_start = pd.Timestamp(session_date).floor('D')
+            start_of_day_data = data[data['effective_datetime'] >= current_day_start].iloc[0:1]
+
+            # Include all new data points
             new_data = data[data['effective_datetime'] > last_timestamp]
+
+            # Combine all necessary data
+            data_to_process = pd.concat([last_processed_data, start_of_day_data, new_data]).drop_duplicates()
         else:
             new_data = data
+            data_to_process = pd.concat([start_of_day_data, new_data]).drop_duplicates()
 
         unprocessed_effectivedatetimes = new_data['effective_datetime'].unique()
+        effectivedatetimes_datasent = data_to_process['effective_datetime'].unique()
         print(f'Unique time_stamps to process: {unprocessed_effectivedatetimes}')
-
+        print(f'Unique time_stamps to process: {effectivedatetimes_datasent}')
         # Generate new frames for the filtered data
         new_frames = []
         for timestamp in new_data['effective_datetime'].unique():
             print(f'Processing: {timestamp}')
-            fig, frame_path = generate_frame_new(new_data, candlesticks, timestamp, participant, strike_range,
+            fig, frame_path = generate_frame_new(data_to_process, candlesticks, timestamp, participant, strike_range,
                                                  expiration,
                                                  pos, metric, last_price, img_path)
             frame_key = f"{frames_prefix}{timestamp.strftime('%Y%m%d%H%M%S')}.png"
@@ -716,7 +739,7 @@ def test_zero_dte_flow(
         position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
         webhook_url: str = None
 ):
-    webhook_url = webhook_url or get_webhook_url('zero_dte')
+    webhook_url = webhook_url or get_webhook_url('dev')
 
     expiration = str(session_date)
 
@@ -776,7 +799,7 @@ def test_one_dte_flow(
         position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
         webhook_url: str = None
 ):
-    webhook_url = webhook_url or get_webhook_url('one_dte')
+    webhook_url = webhook_url or get_webhook_url('dev')
 
     # Set default values if not provided
     if session_date is None:
@@ -836,7 +859,7 @@ def test_GEX_flow(
 ):
 
     #Default values
-    webhook_url = webhook_url or get_webhook_url('gex')
+    webhook_url = webhook_url or get_webhook_url('dev')
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
