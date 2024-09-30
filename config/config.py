@@ -116,6 +116,7 @@ SFTP_MAX_RETRY_ATTEMPTS = other_config.get('sftp_max_retry_attempts', 3)
 
 # RabbitMQ Configuration
 RABBITMQ_HOST = rabbitmq_config['host']
+FLOW_STATUS_QUEUE = 'intraday_flow_status'
 RABBITMQ_CBOE_QUEUE = rabbitmq_config['cboe_queue']
 RABBITMQ_HEARTBEAT_QUEUE = rabbitmq_config['heartbeat_queue']
 RABBITMQ_PORT = rabbitmq_config['port']

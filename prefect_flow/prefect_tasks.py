@@ -1277,6 +1277,8 @@ def Intraday_Flow():
     current_time = datetime.now(ZoneInfo("America/New_York")).time()
 
     expected_file_override = None #'/subscriptions/order_000059435/item_000068201/Cboe_OpenClose_2024-09-27_06_00_1.csv.zip'
+    effective_datetime = None
+    flow_status = "not completed"  # Initialize with a default status
 
     db_utils.connect()
     pg_data.connect()
@@ -1546,6 +1548,7 @@ def Intraday_Flow():
                         # heatmap_generation_flow(final_book_clean_insert,)
                         # generate_charts(final_book_clean_insert,effective_datetime=effective_datetime)
 
+                    flow_status = "completed successfully"
                     prefect_logger.info(f"Finished flow in {time_module.time() - flow_start_time} sec.")
 
                 else:
@@ -1559,10 +1562,38 @@ def Intraday_Flow():
             rabbitmq_utils.safe_nack(message_frame.delivery_tag, requeue=True)
 
     except Exception as e:
-        logger.error(f"Error in process_intraday_data flow: {e}")
+        prefect_logger.error(f"Error in Intraday_Flow: {e}")
+        flow_status = f"failed: {str(e)}"
     finally:
-        sftp_utils.disconnect()  # Disconnect at the end of the flow
+        # sftp_utils.disconnect()  # Disconnect at the end of the flow
+        # prefect_logger.info(f"Finished flow in {time_module.time() - flow_start_time} sec.")
+        # Send flow status message to the new queue
+        try:
+            # Ensure the new queue exists
+            rabbitmq_utils.get_queue(FLOW_STATUS_QUEUE)
 
+            prefect_logger.info(f'RabbitMQ status:{rabbitmq_utils.get_status()}')
+
+            status_message = {
+                "flow_name": "Intraday_Flow",
+                "effective_datetime": effective_datetime,
+                "status": flow_status,
+                "timestamp": datetime.now().isoformat()
+            }
+
+            prefect_logger.info(f'RabbitMQ flow status message :{status_message}')
+
+            rabbitmq_utils.publish_message(
+                queue_name=FLOW_STATUS_QUEUE,
+                message=json.dumps(status_message)
+            )
+
+            prefect_logger.info(f"Flow status message sent to new queue '{FLOW_STATUS_QUEUE}': {status_message}")
+        except Exception as e:
+            prefect_logger.error(f"Failed to send flow status message to new queue: {e}")
+
+        sftp_utils.disconnect()  # Disconnect at the end of the flow
+        prefect_logger.info(f"Finished flow in {time_module.time() - flow_start_time} sec.")
 
 @flow(name="Trigger Gif Flows")
 async def trigger_gif_flows():
