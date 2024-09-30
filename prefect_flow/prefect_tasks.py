@@ -1489,32 +1489,32 @@ def Intraday_Flow():
                     logger.info(f"\nTotal number of NaN values filled across all '_posn' columns: {total_nan_filled}")
 
                     # compare_dataframes(posn_only, final_book_clean_insert)
-
+                    prefect_logger.info(f"Inserting book ...")
                     db_utils.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
                     pg_data.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
-
+                    prefect_logger.info(f"End of book insertion...")
                     # Get the current price (you'll need to implement this function)
                     # current_price = get_current_price()
 
                     # TODO: if it's the 1800 file: export as unrevised initial book for the next effective datge
 
                     rabbitmq_utils.ensure_connection()
-                    logger.info(f'RabbitMQ Status: {rabbitmq_utils.get_status()}')
+                    prefect_logger.info(f'RabbitMQ Status: {rabbitmq_utils.get_status()}')
 
                     for attempt in range(RABBITMQ_MAX_ACK_RETRIES):
                         try:
                             rabbitmq_utils.safe_ack(message_frame.delivery_tag, msg_body)
-                            logger.debug(f"Message acknowledged for file: {file_info['file_name']}")
+                            prefect_logger.debug(f"Message acknowledged for file: {file_info['file_name']}")
                             break
                         except Exception as e:
-                            logger.error(
+                            prefect_logger.error(
                                 f"Error acknowledging message {file_info['file_name']} (attempt {attempt + 1}/{RABBITMQ_MAX_ACK_RETRIES}): {e}")
                             if attempt == RABBITMQ_MAX_ACK_RETRIES - 1:
                                 logger.error(
                                     f"Failed to acknowledge message {file_info['file_name']} after all retries.")
                             time.sleep(10)  # Wait a bit before retrying
 
-                    logger.info(f"Data flow finished in {time_module.time() - flow_start_time} sec.")
+                    prefect_logger.info(f"Data flow finished in {time_module.time() - flow_start_time} sec.")
 
                     # ------- Send Charts -------- #
                     effective_datetime = str(final_book_clean_insert["effective_datetime"].unique()[0])
