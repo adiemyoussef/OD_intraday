@@ -528,7 +528,7 @@ def send_discord_message(file_paths: List[str], as_of_time_stamp:str, session_da
     #     do_spaces=do_space
     # )
 
-    success = send_to_discord_new(
+    success = send_to_discord(
         webhook_url,
         file_paths,
         content="", #"🚀 New options chart analysis is ready! Check out the latest market insights below.",
@@ -1133,7 +1133,7 @@ if __name__ == "__main__":
     # breakpoint()
     # zero_dte_flow()
     one_dte_flow()
-    # GEX_flow()
+    GEX_flow()
     #plot_depthview(webhook_url=WebhookUrl.DEFAULT)
     #generate_heatmap_gif()
     #all_GEX_flow()

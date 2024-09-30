@@ -544,7 +544,7 @@ def intraday_charm_heatmap(db, pg, effective_datetime: str, effective_date: str)
         session_date=effective_date,
         y_min=5580,
         y_max=5850,
-        webhook_url=DEV_CHANNEL#CHARM_HEATMAP_CHANNEL  # Make sure to define this
+        webhook_url=CHARM_HEATMAP_CHANNEL  # Make sure to define this
     )
 
     if success:
@@ -1517,10 +1517,10 @@ def Intraday_Flow():
                     if current_time < datetime_time(16, 0):
                         prefect_logger.info("It's before 4 PM ET. Proceeding with heatmap generation.")
                         heatmap_generation_flow(final_book_clean_insert, effective_datetime=effective_datetime)
-                        intraday_charm_heatmap(db, prod_pg_data, effective_datetime, current_date)
+
 
                         # TODO: modify the other params to remove this and start at the same time as the book generation
-                        if current_time > datetime_time(8, 0):
+                        if current_time > datetime_time(7, 30):
                             intraday_gamma_heatmap(db,prod_pg_data, effective_datetime, current_date)
                             intraday_charm_heatmap(db,prod_pg_data, effective_datetime, current_date)
 

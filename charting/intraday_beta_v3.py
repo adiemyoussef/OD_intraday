@@ -871,7 +871,7 @@ def test_GEX_flow(
 
     # Send Discord message with Video URL
     video_success = send_discord_message(video_url, as_of_time_stamp, session_date, participant, strike_range,
-                                         expiration, position_types, 'positioning', webhook_url)
+                                         expiration, position_types, 'GEX', webhook_url)
 
     if video_success:
         print(f"Successfully processed and sent intraday data (video) for {session_date}")
