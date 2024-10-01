@@ -910,9 +910,6 @@ def test_GEX_flow(
     else:
         print(f"Failed to process or send intraday data for {session_date}")
 # ------------------ DEPTHVIEW ------------------#
-DEFAULT_POS_TYPES = ['customer_positions']
-START_TIME_PRE_MARKET = time(8, 0)
-START_TIME_MARKET = time(9, 30)
 DEPTHVIEW_IMG_PATH = "/Users/youssefadiem/Downloads"
 
 @task
@@ -1527,9 +1524,9 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
 
 
 if __name__ == "__main__":
-    intraday_depthview_flow()
-    # test_zero_dte_flow()
-    # test_one_dte_flow()
+    #intraday_depthview_flow()
+    test_zero_dte_flow()
+    test_one_dte_flow()
     # test_GEX_flow()
     # zero_dte_flow()
     # one_dte_flow()
