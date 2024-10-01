@@ -1528,10 +1528,10 @@ def Intraday_Flow():
                             run_deployment(name="Trigger Gif Flows/Trigger Gif Flows")
                             prefect_logger.info("Gif flows triggered.")
 
-                        #--------- GENERATE HEATMAPS -------------------#
-                        prefect_logger.info("It's before 4 PM ET. Proceeding with heatmap generation.")
-                        prefect_logger.info(f'final_book_clean_insert sent to heatmap_generation: {final_book_clean_insert}')
-                        heatmap_generation_flow(final_book_clean_insert, effective_datetime=effective_datetime)
+                            #--------- GENERATE HEATMAPS -------------------#
+                            prefect_logger.info("It's before 4 PM ET. Proceeding with heatmap generation.")
+                            prefect_logger.info(f'final_book_clean_insert sent to heatmap_generation: {final_book_clean_insert}')
+                            heatmap_generation_flow(final_book_clean_insert, effective_datetime=effective_datetime)
 
 
                         # TODO: modify the other params to remove this and start at the same time as the book generation

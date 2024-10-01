@@ -910,7 +910,278 @@ def test_GEX_flow(
     else:
         print(f"Failed to process or send intraday data for {session_date}")
 # ------------------ DEPTHVIEW ------------------#
+DEFAULT_POS_TYPES = ['customer_positions']
+START_TIME_PRE_MARKET = time(8, 0)
+START_TIME_MARKET = time(9, 30)
+DEPTHVIEW_IMG_PATH = "/Users/youssefadiem/Downloads"
 
+@task
+def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_date: str, latest_price: float, strike_min: float, strike_max: float, option_type:str = "all"):
+    #todo: if gamma --> change colorscale to blue-red,
+
+
+    #title formatting
+
+    if type == "GEX":
+        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Market Makers' GEX</span>"
+        colorscale = "RdBu"
+        title_colorbar = f"{type}<br>(M$/point)"
+
+    elif type == "DEX":
+        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer DEX</span>"
+        title_colorbar = f"{type}<br>(δ)"
+
+    elif type == "position":
+        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer Position</span>"
+        title_colorbar = f"{type}<br>(contracts #)"
+
+
+    if option_type == "calls":
+        option_types_title = "Filtered for calls only"
+
+    elif option_type == "puts":
+        option_types_title = "Filtered for puts only"
+
+    elif option_type == "all":
+        option_types_title = "All contracts, puts and calls combined"
+
+
+    breakpoint()
+    # Ensure that the DataFrame values are floats
+    heatmap_data[type] = heatmap_data[type].astype(float)
+    heatmap_data['strike_price'] = heatmap_data['strike_price'].astype(float)
+    heatmap_data['expiration_date_original'] = heatmap_data['expiration_date_original'].astype(str)
+    z = heatmap_data.pivot(index='strike_price', columns='expiration_date_original', values=type).values
+
+    breakpoint()
+    if type != "GEX":
+        colorscale = [
+            [0.0, 'red'],  # Lowest value
+            [0.5, 'white'],  # Mid value at zero
+            [1.0, 'green'],  # Highest value
+        ]
+
+    # Calculate the mid value for the color scale (centered at zero)
+    zmin = heatmap_data[type].min()
+    zmax = heatmap_data[type].max()
+    val_range = max(abs(zmin), abs(zmax))
+
+
+
+    # Apply symmetric log scale transformation
+    def symmetric_log_scale(value, log_base=10):
+        return np.sign(value) * np.log1p(np.abs(value)) / np.log(log_base)
+
+    z_log = symmetric_log_scale(z)
+
+
+    # Round the original values for display in hover text
+    rounded_z = np.around(z, decimals=2)
+
+
+    # Create the heatmap using Plotly
+    fig = go.Figure(data=go.Heatmap(
+        z=z_log,
+        x=heatmap_data['expiration_date_original'].unique(),
+        y=heatmap_data['strike_price'].unique(),
+        text=np.where(np.isnan(rounded_z), '', rounded_z),
+        texttemplate="%{text}",
+        colorscale=colorscale,
+        zmin=-symmetric_log_scale(val_range),
+        zmax=symmetric_log_scale(val_range),
+        colorbar=dict(
+            title=title_colorbar,
+            tickvals=symmetric_log_scale(np.array([-val_range, 0, val_range])),
+            ticktext=[-round(val_range), 0, round(val_range)]
+        ),
+        zmid=0,
+        hovertemplate='Expiration: %{x}<br>Strike: %{y}<br>' + type + ': %{text}<extra></extra>'
+    ))
+
+    fig.show()
+    breakpoint()
+    fig.update_layout(
+        title=dict(
+            text=(
+                  f"{dynamic_title}"
+                  f"<br><span style='font-size:20px;'>As of LOL</span>"
+                  f"<br><span style='font-size:20px;'>{option_types_title}</span>"
+
+            ),
+            font=dict(family="Noto Sans SemiBold", color="white"),
+            y=0.96,  # Adjust to control the vertical position of the title
+            x=0.0,
+
+            # xanchor='left',
+            # yanchor='top',
+            pad=dict(t=10, b=10, l=40)  # Adjust padding around the title
+        ),
+        # width=width,
+        # height=height,
+
+        margin=dict(l=40, r=40, t=130, b=30),  # Adjust overall margins
+        xaxis=dict(
+            title='Expiration Date',
+            tickangle=-45,
+            tickmode='linear',
+            type='category'
+        ),
+        yaxis=dict(
+            title='Strike Price',
+            tickmode='linear',
+            dtick=10
+        ),
+        font=dict(family="Noto Sans Medium", color='white'),
+        autosize=True,
+        # paper_bgcolor='white',  # Set paper background to white
+        plot_bgcolor='white',
+        paper_bgcolor='#053061',  # Dark blue background
+
+    )
+
+    fig.add_layout_image(
+        dict(
+            source=None,
+            xref="paper",
+            yref="paper",
+            x=1,
+            y=1.11,
+            xanchor="right",
+            yanchor="top",
+            sizex=0.175,
+            sizey=0.175,
+            sizing="contain",
+            layer="above"
+        )
+    )
+    fig.show()
+    breakpoint()
+    return fig
+
+@task
+def generate_depthview_image(fig: go.Figure, session_date: date, type_metric: str):
+    """Generate and save the depthview image."""
+    file_path = os.path.join(DEPTHVIEW_IMG_PATH, f"depthview_{type_metric}_{session_date}.png")
+    fig.write_image(file_path, format='png')
+    return file_path
+
+def round_to_nearest_tens(number):
+    """
+    Rounds a number to the nearest lower and upper multiples of 10.
+
+    Args:
+    number (int or float): The number to round.
+
+    Returns:
+    tuple: The nearest lower and upper multiples of 10.
+    """
+    lower = number - (number % 10)  # Find the nearest lower multiple of 10
+    upper = lower + 10  # Find the nearest upper multiple of 10
+    return (lower, upper)
+
+@task
+def process_book_data(book: pd.DataFrame, type: str, option_type: str, latest_price: float):
+    """Process the book data for depthview."""
+    metric_mapper = {
+        'DEX': 'delta',
+        'GEX': 'gamma',
+        'position': 1,
+    }
+
+    if type == 'DEX':
+        book[type] = book['total_customers_posn'] * book[metric_mapper.get(type)]
+    elif type == 'GEX':
+        book[type] = book['mm_posn'] * book[metric_mapper.get(type)]
+    elif type == 'position':
+        book[type] = book['total_customers_posn'] * 1
+
+    if option_type == "calls":
+        book = book[book["call_put_flag"] == "C"]
+    elif option_type == 'puts':
+        book = book[book["call_put_flag"] == "P"]
+
+    strike_min = round_to_nearest_tens(int(latest_price) * (1-0.02))[0]
+    strike_max = round_to_nearest_tens(int(latest_price) * (1+0.02))[1]
+
+    default_expiration_range = book["expiration_date_original"].unique()
+    default_expiration_range.sort()
+    default_expiration_range = default_expiration_range[:30]
+
+    df_filtered = book[
+        (book['strike_price'].between(strike_min, strike_max)) &
+        (book['expiration_date_original'].isin(default_expiration_range))]
+
+    heatmap_data = df_filtered.pivot_table(index='strike_price', columns='expiration_date_original',
+                                           values=type, aggfunc='sum')
+
+    heatmap_data_to_plot = heatmap_data.reset_index().melt(id_vars='strike_price',
+                                                           var_name='expiration_date_original', value_name=type)
+
+    return heatmap_data_to_plot, strike_min, strike_max
+@flow(name="Intraday Depthview Flow")
+def intraday_depthview_flow(
+    session_date: Optional[date] = None,
+    strike_range: Optional[List[int]] = None,
+    expiration: Optional[str] = None,
+    participant: str = 'customer',
+    position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
+    type_metric: str = 'DEX',
+    option_type: str = 'all',
+    webhook_url: str = None
+):
+    # Set default values
+    webhook_url = webhook_url or get_webhook_url('depthview')
+    if session_date is None:
+        session_date = datetime.now().date()
+    if strike_range is None:
+        strike_range = get_strike_range(prod_pg_data, session_date, range_value=0.025, range_type='percent')
+    if position_types is None:
+        position_types = DEFAULT_POS_TYPES
+    if expiration is None:
+        expiration = str(session_date)
+
+    # Determine start time based on current time
+    current_time = datetime.now().time()
+    if current_time < time(12, 0):
+        start_time = START_TIME_PRE_MARKET
+    elif time(12, 0) <= current_time < time(23, 0):
+        start_time = START_TIME_MARKET
+    else:
+        start_time = START_TIME_PRE_MARKET
+
+    logging.info(f"Start time set to: {start_time}")
+
+    # Fetch data
+    metrics, candlesticks, last_price = fetch_data(session_date, None, strike_range, expiration, start_time)
+    as_of_time_stamp = str(metrics["effective_datetime"].max())
+    last_price = last_price.values[0][0]
+
+    # Process data for depthview
+    heatmap_data, strike_min, strike_max = process_book_data(metrics, type_metric, option_type, last_price)
+
+    # Create depthview plot
+    fig = plot_depthview(heatmap_data, type_metric, as_of_time_stamp, last_price, strike_min, strike_max)
+
+    # Generate and save image
+    image_path = generate_depthview_image(fig, session_date, type_metric)
+    breakpoint()
+    # # Send Discord message with image
+    # message_success = send_discord_message(
+    #     image_path,
+    #     as_of_time_stamp,
+    #     session_date,
+    #     participant,
+    #     [strike_min, strike_max],
+    #     expiration,
+    #     position_types,
+    #     type_metric,
+    #     webhook_url
+    # )
+    #
+    # if message_success:
+    #     logging.info(f"Successfully processed and sent intraday depthview data for {session_date}")
+    # else:
+    #     logging.error(f"Failed to process or send intraday depthview data for {session_date}")
 
 # ---------------- HEATMAP GIF -------------------- #
 
@@ -1256,9 +1527,10 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
 
 
 if __name__ == "__main__":
-    test_zero_dte_flow()
-    test_one_dte_flow()
-    test_GEX_flow()
+    intraday_depthview_flow()
+    # test_zero_dte_flow()
+    # test_one_dte_flow()
+    # test_GEX_flow()
     # zero_dte_flow()
     # one_dte_flow()
     # GEX_flow()
