@@ -910,12 +910,9 @@ def test_GEX_flow(
     else:
         print(f"Failed to process or send intraday data for {session_date}")
 # ------------------ DEPTHVIEW ------------------#
-DEPTHVIEW_IMG_PATH = "/Users/youssefadiem/Downloads"
-
 @task
-def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_date: str, latest_price: float, strike_min: float, strike_max: float, option_type:str = "all"):
+def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_datetime: str, latest_price: float, strike_min: float, strike_max: float, option_type:str = "all", show_line_price:bool = False):
     #todo: if gamma --> change colorscale to blue-red,
-
 
     #title formatting
 
@@ -932,25 +929,19 @@ def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_date: str, lates
         dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer Position</span>"
         title_colorbar = f"{type}<br>(contracts #)"
 
-
     if option_type == "calls":
         option_types_title = "Filtered for calls only"
-
     elif option_type == "puts":
         option_types_title = "Filtered for puts only"
-
     elif option_type == "all":
         option_types_title = "All contracts, puts and calls combined"
 
-
-    breakpoint()
     # Ensure that the DataFrame values are floats
     heatmap_data[type] = heatmap_data[type].astype(float)
     heatmap_data['strike_price'] = heatmap_data['strike_price'].astype(float)
     heatmap_data['expiration_date_original'] = heatmap_data['expiration_date_original'].astype(str)
     z = heatmap_data.pivot(index='strike_price', columns='expiration_date_original', values=type).values
 
-    breakpoint()
     if type != "GEX":
         colorscale = [
             [0.0, 'red'],  # Lowest value
@@ -963,18 +954,14 @@ def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_date: str, lates
     zmax = heatmap_data[type].max()
     val_range = max(abs(zmin), abs(zmax))
 
-
-
     # Apply symmetric log scale transformation
     def symmetric_log_scale(value, log_base=10):
         return np.sign(value) * np.log1p(np.abs(value)) / np.log(log_base)
 
     z_log = symmetric_log_scale(z)
 
-
     # Round the original values for display in hover text
     rounded_z = np.around(z, decimals=2)
-
 
     # Create the heatmap using Plotly
     fig = go.Figure(data=go.Heatmap(
@@ -995,28 +982,44 @@ def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_date: str, lates
         hovertemplate='Expiration: %{x}<br>Strike: %{y}<br>' + type + ': %{text}<extra></extra>'
     ))
 
-    fig.show()
-    breakpoint()
+    # Add last price line if requested
+    if show_line_price and latest_price is not None:
+        # Calculate the time delta for extending the line
+        expiration_dates = pd.to_datetime(heatmap_data['expiration_date_original'].unique())
+        time_delta = (expiration_dates.max() - expiration_dates.min()) / 20  # Extend by 5% of the total time range
+
+        fig.add_shape(
+            type="line",
+            x0=expiration_dates.min() - time_delta,
+            y0=latest_price,
+            x1=expiration_dates.max(),
+            y1=latest_price,
+            line=dict(color="red", width=2, dash="solid"),
+        )
+
+        fig.add_trace(go.Scatter(
+            x=[None],
+            y=[None],
+            mode="lines",
+            name=f"Close Price: {latest_price}",
+            line=dict(color="red", width=2),
+            showlegend=True
+        ))
+
+
     fig.update_layout(
         title=dict(
             text=(
                   f"{dynamic_title}"
-                  f"<br><span style='font-size:20px;'>As of LOL</span>"
+                  f"<br><span style='font-size:20px;'>As of {as_of_datetime}</span>"
                   f"<br><span style='font-size:20px;'>{option_types_title}</span>"
-
             ),
             font=dict(family="Noto Sans SemiBold", color="white"),
-            y=0.96,  # Adjust to control the vertical position of the title
+            y=0.96,
             x=0.0,
-
-            # xanchor='left',
-            # yanchor='top',
-            pad=dict(t=10, b=10, l=40)  # Adjust padding around the title
+            pad=dict(t=10, b=10, l=40)
         ),
-        # width=width,
-        # height=height,
-
-        margin=dict(l=40, r=40, t=130, b=30),  # Adjust overall margins
+        margin=dict(l=40, r=40, t=130, b=30),
         xaxis=dict(
             title='Expiration Date',
             tickangle=-45,
@@ -1030,10 +1033,16 @@ def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_date: str, lates
         ),
         font=dict(family="Noto Sans Medium", color='white'),
         autosize=True,
-        # paper_bgcolor='white',  # Set paper background to white
         plot_bgcolor='white',
-        paper_bgcolor='#053061',  # Dark blue background
-
+        paper_bgcolor='#053061',
+        showlegend=True,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="right",
+            x=0.99,
+            bgcolor="rgba(255, 255, 255, 0.5)"
+        )
     )
 
     fig.add_layout_image(
@@ -1051,30 +1060,8 @@ def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_date: str, lates
             layer="above"
         )
     )
-    fig.show()
-    breakpoint()
+
     return fig
-
-@task
-def generate_depthview_image(fig: go.Figure, session_date: date, type_metric: str):
-    """Generate and save the depthview image."""
-    file_path = os.path.join(DEPTHVIEW_IMG_PATH, f"depthview_{type_metric}_{session_date}.png")
-    fig.write_image(file_path, format='png')
-    return file_path
-
-def round_to_nearest_tens(number):
-    """
-    Rounds a number to the nearest lower and upper multiples of 10.
-
-    Args:
-    number (int or float): The number to round.
-
-    Returns:
-    tuple: The nearest lower and upper multiples of 10.
-    """
-    lower = number - (number % 10)  # Find the nearest lower multiple of 10
-    upper = lower + 10  # Find the nearest upper multiple of 10
-    return (lower, upper)
 
 @task
 def process_book_data(book: pd.DataFrame, type: str, option_type: str, latest_price: float):
@@ -1115,6 +1102,7 @@ def process_book_data(book: pd.DataFrame, type: str, option_type: str, latest_pr
                                                            var_name='expiration_date_original', value_name=type)
 
     return heatmap_data_to_plot, strike_min, strike_max
+
 @flow(name="Intraday Depthview Flow")
 def intraday_depthview_flow(
     session_date: Optional[date] = None,
@@ -1122,7 +1110,7 @@ def intraday_depthview_flow(
     expiration: Optional[str] = None,
     participant: str = 'customer',
     position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
-    type_metric: str = 'DEX',
+    type_metric: str = 'position',
     option_type: str = 'all',
     webhook_url: str = None
 ):
@@ -1135,7 +1123,8 @@ def intraday_depthview_flow(
     if position_types is None:
         position_types = DEFAULT_POS_TYPES
     if expiration is None:
-        expiration = str(session_date)
+        #TODO: it should be the default amount of expirations
+        expiration = None
 
     # Determine start time based on current time
     current_time = datetime.now().time()
@@ -1152,33 +1141,73 @@ def intraday_depthview_flow(
     metrics, candlesticks, last_price = fetch_data(session_date, None, strike_range, expiration, start_time)
     as_of_time_stamp = str(metrics["effective_datetime"].max())
     last_price = last_price.values[0][0]
-
+    metrics = metrics[metrics["effective_datetime"] == as_of_time_stamp]
     # Process data for depthview
     heatmap_data, strike_min, strike_max = process_book_data(metrics, type_metric, option_type, last_price)
 
     # Create depthview plot
     fig = plot_depthview(heatmap_data, type_metric, as_of_time_stamp, last_price, strike_min, strike_max)
 
-    # Generate and save image
-    image_path = generate_depthview_image(fig, session_date, type_metric)
-    breakpoint()
-    # # Send Discord message with image
-    # message_success = send_discord_message(
-    #     image_path,
-    #     as_of_time_stamp,
-    #     session_date,
-    #     participant,
-    #     [strike_min, strike_max],
-    #     expiration,
-    #     position_types,
-    #     type_metric,
-    #     webhook_url
-    # )
-    #
-    # if message_success:
-    #     logging.info(f"Successfully processed and sent intraday depthview data for {session_date}")
-    # else:
-    #     logging.error(f"Failed to process or send intraday depthview data for {session_date}")
+    fig.update_layout(
+        width=1920,  # Full HD width
+        height=1080,  # Full HD height
+        font=dict(size=16)  # Increase font size for better readability
+
+    )
+
+    # Generate a unique identifier for this chart
+    chart_id = f"depthview_{session_date}_{type_metric}_{option_type}_{uuid.uuid4().hex[:8]}"
+
+    # Save the chart as an image file
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
+        fig.write_image(tmpfile.name, scale=2)
+        image_path = tmpfile.name
+
+
+    # Upload the image to Digital Ocean Spaces
+    image_key = f"depthview/{chart_id}.png"
+    do_space.upload_to_spaces(image_path, INTRADAYBOT_SPACENAME, image_key)
+
+    # Generate the public URL for the uploaded image
+    image_url = f"https://nyc3.digitaloceanspaces.com/{image_key}"
+
+
+    # Prepare the message for Discord
+    title = f"📊 {session_date} Intraday Depthview - {type_metric.upper()}"
+    fields = [
+        {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
+        {"name": "👥 Participant:", "value": participant, "inline": True},
+        {"name": "📈 Metric:", "value": type_metric, "inline": True},
+        {"name": "🎯 Strike Range:", "value": f"{strike_min} - {strike_max}", "inline": True},
+        {"name": "🔢 Option Type:", "value": option_type, "inline": True}
+    ]
+    footer_text = f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | By OptionsDepth.com"
+
+    # Send Discord message with image URL
+    message_success = send_discord_message(
+        [image_url],
+        as_of_time_stamp,
+        session_date,
+        participant,
+        [strike_min, strike_max],
+        expiration,
+        position_types,
+        type_metric,
+        webhook_url,
+        title=title,
+        fields=fields,
+        footer_text=footer_text
+    )
+
+    # Clean up the temporary file
+    os.unlink(image_path)
+
+    if message_success:
+        logging.info(f"Successfully processed and sent intraday depthview data for {session_date}")
+    else:
+        logging.error(f"Failed to process or send intraday depthview data for {session_date}")
+
+    return message_success
 
 # ---------------- HEATMAP GIF -------------------- #
 
@@ -1524,9 +1553,9 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
 
 
 if __name__ == "__main__":
-    #intraday_depthview_flow()
-    test_zero_dte_flow()
-    test_one_dte_flow()
+    intraday_depthview_flow()
+    #test_zero_dte_flow()
+    #test_one_dte_flow()
     # test_GEX_flow()
     # zero_dte_flow()
     # one_dte_flow()
