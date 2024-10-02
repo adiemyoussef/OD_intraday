@@ -1193,10 +1193,7 @@ def intraday_depthview_flow(
         expiration,
         position_types,
         type_metric,
-        webhook_url,
-        title=title,
-        fields=fields,
-        footer_text=footer_text
+        webhook_url
     )
 
     # Clean up the temporary file
