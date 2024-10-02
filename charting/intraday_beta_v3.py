@@ -1115,7 +1115,7 @@ def intraday_depthview_flow(
     webhook_url: str = None
 ):
     # Set default values
-    webhook_url = webhook_url or get_webhook_url('depthview')
+    webhook_url = webhook_url or get_webhook_url('test-depthview')
     if session_date is None:
         session_date = datetime.now().date()
     if strike_range is None:
