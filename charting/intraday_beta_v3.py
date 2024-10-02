@@ -913,7 +913,9 @@ def test_GEX_flow(
 @task
 def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_datetime: str, latest_price: float, strike_min: float, strike_max: float, option_type:str = "all", show_line_price:bool = False):
     #todo: if gamma --> change colorscale to blue-red,
+    prefect_logger = get_run_logger()
 
+    prefect_logger.info(f"Plot depthview for: {option_type} - {type} ")
     #title formatting
 
     if type == "GEX":
@@ -929,11 +931,11 @@ def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_datetime: str, l
         dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer Position</span>"
         title_colorbar = f"{type}<br>(contracts #)"
 
-    if option_type == "calls":
+    if option_type == "C":
         option_types_title = "Filtered for calls only"
-    elif option_type == "puts":
+    elif option_type == "P":
         option_types_title = "Filtered for puts only"
-    elif option_type == "all":
+    else:
         option_types_title = "All contracts, puts and calls combined"
 
     # Ensure that the DataFrame values are floats
