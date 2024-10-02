@@ -191,7 +191,7 @@ deployments:
 
 
 - name: Depthview Flow
-  entrypoint: charting/intraday_beta_v2.py:plot_depthview
+  entrypoint: charting/intraday_beta_v3.py:intraday_depthview_flow
   work_pool:
     name: intraday-paperspace-agent
     work_queue_name:
