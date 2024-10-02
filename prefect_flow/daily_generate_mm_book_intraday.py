@@ -533,4 +533,4 @@ def generate_revised_book(override_entries=False, sleep_time=600, retry_cycles=6
             raise Exception("OC and EOD not Synchronised")
 
 if __name__ == "__main__":
-    generate_revised_book(override_entries=True)
+    generate_revised_book(override_entries=False)
