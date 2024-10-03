@@ -303,13 +303,13 @@ deployments:
     timezone: UTC
     active: false
 - name: Revised Book - MySQL
-  entrypoint: prefect_flow/daily_generate_mm_book_intraday.py:generate_revised_book
+  entrypoint: prefect_flow/flow_dailybook_mysql.py:generate_revised_book
   work_pool:
     name: intraday-paperspace-agent
     work_queue_name:
     job_variables: {}
   schedules:
-  - cron: 30 2 * * 2-6
+  - cron: 5,15,25,35,45,55 2-5 * * 2-6
     timezone: America/New_York
     day_or: true
     active: true
