@@ -913,7 +913,9 @@ def test_GEX_flow(
 @task
 def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_datetime: str, latest_price: float, strike_min: float, strike_max: float, option_type:str = "all", show_line_price:bool = False):
     #todo: if gamma --> change colorscale to blue-red,
+    prefect_logger = get_run_logger()
 
+    prefect_logger.info(f"Plot depthview for: {option_type} - {type} ")
     #title formatting
 
     if type == "GEX":
@@ -929,11 +931,11 @@ def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_datetime: str, l
         dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer Position</span>"
         title_colorbar = f"{type}<br>(contracts #)"
 
-    if option_type == "calls":
+    if option_type == "C":
         option_types_title = "Filtered for calls only"
-    elif option_type == "puts":
+    elif option_type == "P":
         option_types_title = "Filtered for puts only"
-    elif option_type == "all":
+    else:
         option_types_title = "All contracts, puts and calls combined"
 
     # Ensure that the DataFrame values are floats
@@ -1066,11 +1068,14 @@ def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_datetime: str, l
 @task
 def process_book_data(book: pd.DataFrame, type: str, option_type: str, latest_price: float):
     """Process the book data for depthview."""
+    prefect_logger = get_run_logger()
     metric_mapper = {
         'DEX': 'delta',
         'GEX': 'gamma',
         'position': 1,
     }
+
+    prefect_logger.info(f"Processing {option_type} - {type}")
 
     if type == 'DEX':
         book[type] = book['total_customers_posn'] * book[metric_mapper.get(type)]
@@ -1083,6 +1088,8 @@ def process_book_data(book: pd.DataFrame, type: str, option_type: str, latest_pr
         book = book[book["call_put_flag"] == "C"]
     elif option_type == 'puts':
         book = book[book["call_put_flag"] == "P"]
+    else:
+        prefect_logger.info(f"Processing{option_type}")
 
     strike_min = round_to_nearest_tens(int(latest_price) * (1-0.02))[0]
     strike_max = round_to_nearest_tens(int(latest_price) * (1+0.02))[1]
@@ -1109,9 +1116,8 @@ def intraday_depthview_flow(
     strike_range: Optional[List[int]] = None,
     expiration: Optional[str] = None,
     participant: str = 'customer',
-    position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
+    position_types: Optional[List[str]] = ['Net', 'Call', 'Put'],
     type_metric: str = 'position',
-    option_type: str = 'all',
     webhook_url: str = None
 ):
     # Set default values
@@ -1120,8 +1126,6 @@ def intraday_depthview_flow(
         session_date = datetime.now().date()
     if strike_range is None:
         strike_range = get_strike_range(prod_pg_data, session_date, range_value=0.025, range_type='percent')
-    if position_types is None:
-        position_types = DEFAULT_POS_TYPES
     if expiration is None:
         #TODO: it should be the default amount of expirations
         expiration = None
@@ -1142,35 +1146,40 @@ def intraday_depthview_flow(
     as_of_time_stamp = str(metrics["effective_datetime"].max())
     last_price = last_price.values[0][0]
     metrics = metrics[metrics["effective_datetime"] == as_of_time_stamp]
-    # Process data for depthview
-    heatmap_data, strike_min, strike_max = process_book_data(metrics, type_metric, option_type, last_price)
 
-    # Create depthview plot
-    fig = plot_depthview(heatmap_data, type_metric, as_of_time_stamp, last_price, strike_min, strike_max)
+    image_urls = []
 
-    fig.update_layout(
-        width=1920,  # Full HD width
-        height=1080,  # Full HD height
-        font=dict(size=16)  # Increase font size for better readability
+    for option_type in position_types:
+        # Process data for depthview
+        heatmap_data, strike_min, strike_max = process_book_data(metrics, type_metric, option_type.lower(), last_price)
 
-    )
+        # Create depthview plot
+        fig = plot_depthview(heatmap_data, type_metric, as_of_time_stamp, last_price, strike_min, strike_max, option_type)
 
-    # Generate a unique identifier for this chart
-    chart_id = f"depthview_{session_date}_{type_metric}_{option_type}_{uuid.uuid4().hex[:8]}"
+        fig.update_layout(
+            width=1920,  # Full HD width
+            height=1080,  # Full HD height
+            font=dict(size=16)  # Increase font size for better readability
+        )
 
-    # Save the chart as an image file
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
-        fig.write_image(tmpfile.name, scale=2)
-        image_path = tmpfile.name
+        # Generate a unique identifier for this chart
+        chart_id = f"depthview_{session_date}_{type_metric}_{option_type}_{uuid.uuid4().hex[:8]}"
 
+        # Save the chart as an image file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
+            fig.write_image(tmpfile.name, scale=2)
+            image_path = tmpfile.name
 
-    # Upload the image to Digital Ocean Spaces
-    image_key = f"depthview/{chart_id}.png"
-    do_space.upload_to_spaces(image_path, INTRADAYBOT_SPACENAME, image_key)
+        # Upload the image to Digital Ocean Spaces
+        image_key = f"depthview/{chart_id}.png"
+        do_space.upload_to_spaces(image_path, INTRADAYBOT_SPACENAME, image_key)
 
-    # Generate the public URL for the uploaded image
-    image_url = f"https://nyc3.digitaloceanspaces.com/{image_key}"
+        # Generate the public URL for the uploaded image
+        image_url = f"https://nyc3.digitaloceanspaces.com/{image_key}"
+        image_urls.append(image_url)
 
+        # Clean up the temporary file
+        os.unlink(image_path)
 
     # Prepare the message for Discord
     title = f"📊 {session_date} Intraday Depthview - {type_metric.upper()}"
@@ -1179,13 +1188,13 @@ def intraday_depthview_flow(
         {"name": "👥 Participant:", "value": participant, "inline": True},
         {"name": "📈 Metric:", "value": type_metric, "inline": True},
         {"name": "🎯 Strike Range:", "value": f"{strike_min} - {strike_max}", "inline": True},
-        {"name": "🔢 Option Type:", "value": option_type, "inline": True}
+        {"name": "🔢 Option Types:", "value": ", ".join(position_types), "inline": True}
     ]
     footer_text = f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | By OptionsDepth.com"
 
-    # Send Discord message with image URL
+    # Send Discord message with image URLs
     message_success = send_discord_message(
-        [image_url],
+        image_urls,
         as_of_time_stamp,
         session_date,
         participant,
@@ -1196,16 +1205,12 @@ def intraday_depthview_flow(
         webhook_url
     )
 
-    # Clean up the temporary file
-    os.unlink(image_path)
-
     if message_success:
         logging.info(f"Successfully processed and sent intraday depthview data for {session_date}")
     else:
         logging.error(f"Failed to process or send intraday depthview data for {session_date}")
 
     return message_success
-
 # ---------------- HEATMAP GIF -------------------- #
 
 def generate_heatmap_gif(
