@@ -270,16 +270,17 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
 def test_generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration,
                              position_types, last_price, metric='positioning', img_path='config/images/logo_dark.png',
                              space_name=INTRADAYBOT_SPACENAME):
+    prefect_logger = get_run_logger()
     if not position_types:
         position_types = ['Net', 'C', 'P']
 
     results = {}
 
     for pos in position_types:
-        print(f"Processing: {session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
+        prefect_logger.info(f"Processing: {session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
 
         combo_id = f"{session_date}_{participant}_{'-'.join(map(str, strike_range))}_{expiration}_{pos}_{metric}"
-        print(f"Generated {combo_id} for {session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
+        prefect_logger.info(f"Generated {combo_id} for {session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
 
         metadata_key = f"metadata/{combo_id}.json"
         frames_prefix = f"frames/{combo_id}/"
@@ -290,7 +291,7 @@ def test_generate_video_task(data, candlesticks, session_date, participant, stri
         current_day_start = pd.Timestamp(session_date).floor('D')
         day_data = data[data['effective_datetime'] >= current_day_start]
 
-        print(f"Last time_stamp: {last_timestamp}")
+        prefect_logger.info(f"Last time_stamp: {last_timestamp}")
         if not day_data.empty:
             first_datetime = day_data['effective_datetime'].min()
             start_of_day_data = data[data['effective_datetime'] == first_datetime]
@@ -307,12 +308,12 @@ def test_generate_video_task(data, candlesticks, session_date, participant, stri
 
         unprocessed_effectivedatetimes = new_data['effective_datetime'].unique()
         effectivedatetimes_datasent = data_to_process['effective_datetime'].unique()
-        print(f'Unique time_stamps to process: {unprocessed_effectivedatetimes}')
-        print(f'Unique time_stamps to process: {effectivedatetimes_datasent}')
+        prefect_logger.info(f'Unique time_stamps to process: {unprocessed_effectivedatetimes}')
+        prefect_logger.info(f'Unique time_stamps to process: {effectivedatetimes_datasent}')
 
         new_frames = []
         for timestamp in new_data['effective_datetime'].unique():
-            print(f'Processing: {timestamp}')
+            prefect_logger.info(f'Processing: {timestamp}')
 
             # Generate frame
             fig, frame_path = generate_frame_new(data_to_process, candlesticks, timestamp, participant, strike_range,
