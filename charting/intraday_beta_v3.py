@@ -1407,8 +1407,8 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
 
 
 if __name__ == "__main__":
-    intraday_depthview_flow()
-    #test_zero_dte_flow()
+    #intraday_depthview_flow()
+    test_zero_dte_flow()
     #test_one_dte_flow()
     #test_GEX_flow()
     # zero_dte_flow()
