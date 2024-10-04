@@ -265,127 +265,6 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
 #     return tmpfile.name
 
 
-@task
-def test_generate_video_task_old(data, candlesticks, session_date, participant, strike_range, expiration,
-                                 position_types,
-                                 last_price, metric='positioning', img_path='config/images/logo_dark.png',
-                                 space_name=INTRADAYBOT_SPACENAME, webhook_url=None):
-    """
-    Generate and process video frames for multiple position types, create videos, and optionally send to Discord.
-
-    This function processes options data for specified position types (e.g., 'Net', 'C', 'P'),
-    generates video frames, creates videos, and stores them in DigitalOcean Spaces. It also
-    keeps track of the last processed timestamp to avoid redundant processing in subsequent runs.
-
-    Args:
-        data (pd.DataFrame): The options data to process.
-        candlesticks (pd.DataFrame): Candlestick data for the underlying asset.
-        session_date (str): The date of the trading session.
-        participant (str): The market participant type (e.g., 'mm', 'total_customers').
-        strike_range (list): The range of strike prices to consider.
-        expiration (str): The expiration date for the options.
-        position_types (list): List of position types to process (e.g., ['Net', 'C', 'P']).
-        last_price (float): The last price of the underlying asset.
-        metric (str): The metric to compute (default: 'positioning').
-        img_path (str): Path to the background image for frames.
-        space_name (str): Name of the DigitalOcean Space to use.
-        webhook_url (str): Discord webhook URL for sending results (optional).
-
-    Returns:
-        dict: A dictionary containing video and latest frame URLs for each position type.
-    """
-
-    # Set default position types if not provided
-    if not position_types:
-        position_types = ['Net', 'C', 'P']
-
-    results = {}
-
-    for pos in position_types:
-        print(f"Processing: {session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
-
-        # Create a unique hash for this combination of parameters
-        param_hash = hash(f"{session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
-        last_timestamp_key = f"last_timestamp_{param_hash}"
-        frames_prefix = f"frames_{param_hash}/"
-
-        # Retrieve the last processed timestamp from DigitalOcean Spaces
-        last_timestamp = None
-        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-            temp_file_name = temp_file.name
-            if do_space.download_from_spaces(space_name, last_timestamp_key, temp_file_name):
-                with open(temp_file_name, 'r') as f:
-                    last_timestamp = pd.to_datetime(f.read().strip())
-        os.remove(temp_file_name)
-
-        # Filter data to process only new timestamps
-        if last_timestamp:
-            new_data = data[data['effective_datetime'] > last_timestamp]
-        else:
-            new_data = data
-
-        # Generate new frames for the filtered data
-        new_frames = []
-        for timestamp in new_data['effective_datetime'].unique():
-            fig, frame_path = generate_frame_new(new_data, candlesticks, timestamp, participant, strike_range,
-                                                 expiration,
-                                                 pos, metric, last_price, img_path)
-            spaces_key = f"{frames_prefix}{timestamp.strftime('%Y%m%d%H%M%S')}.png"
-            do_space.upload_to_spaces(frame_path, space_name, spaces_key)
-            new_frames.append(spaces_key)
-            os.remove(frame_path)  # Remove the temporary file
-
-        # Retrieve all frames (existing + new) from DigitalOcean Spaces
-        all_frames = sorted(do_space.list_objects(space_name, prefix=frames_prefix))
-
-        # Generate video from all frames
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Download all frames to a temporary directory
-            for spaces_key in all_frames:
-                local_file = os.path.join(tmpdir, os.path.basename(spaces_key))
-                do_space.download_from_spaces(space_name, spaces_key, local_file)
-
-            # Use ffmpeg to create a video from the frames
-            output_video = f'video_{param_hash}.mp4'
-            ffmpeg_command = f'ffmpeg -framerate 3 -pattern_type glob -i "{tmpdir}/*.png" -c:v libx264 -pix_fmt yuv420p {output_video}'
-            subprocess.run(ffmpeg_command, shell=True, check=True)
-
-            # Upload the generated video to DigitalOcean Spaces
-            video_key = f"videos/{output_video}"
-            do_space.upload_to_spaces(output_video, space_name, video_key)
-            os.remove(output_video)
-
-        # Create URLs for the video and latest frame
-        video_url = f"https://{space_name}.nyc3.digitaloceanspaces.com/{video_key}"
-        latest_frame_key = all_frames[-1] if all_frames else None
-        latest_frame_url = f"https://nyc3.digitaloceanspaces.com/{latest_frame_key}" if latest_frame_key else None
-
-        # Store results for this position type
-        results[pos] = {
-            'video_url': video_url,
-            'latest_frame_url': latest_frame_url
-        }
-
-        # Send results to Discord if a webhook URL is provided
-        if webhook_url:
-            as_of_time_stamp = str(data["effective_datetime"].max())
-            success = send_discord_message([video_url, latest_frame_url], as_of_time_stamp, session_date, participant,
-                                           strike_range, expiration, [pos], metric, webhook_url)
-
-            # Update the last processed timestamp if Discord message was sent successfully
-            if success:
-                latest_timestamp = data['effective_datetime'].max()
-                with open('last_timestamp.txt', 'w') as f:
-                    f.write(str(latest_timestamp))
-                do_space.upload_to_spaces('last_timestamp.txt', space_name, last_timestamp_key)
-                print(f"Updated last processed timestamp to {latest_timestamp} for {pos}")
-            else:
-                print(f"Failed to send to Discord. Last timestamp not updated for {pos}")
-        else:
-            print("No webhook URL provided. Video not sent to Discord.")
-
-    return results
-
 
 @task
 def test_generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration, position_types,
@@ -1116,7 +995,7 @@ def intraday_depthview_flow(
     strike_range: Optional[List[int]] = None,
     expiration: Optional[str] = None,
     participant: str = 'customer',
-    position_types: Optional[List[str]] = ['Net', 'Call', 'Put'],
+    position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
     type_metric: str = 'position',
     webhook_url: str = None
 ):
@@ -1176,7 +1055,9 @@ def intraday_depthview_flow(
 
         # Generate the public URL for the uploaded image
         image_url = f"https://nyc3.digitaloceanspaces.com/{image_key}"
-        image_urls.append(image_url)
+
+        # Add to the dictionary instead of the list
+        image_urls[option_type] = {"image": image_url}
 
         # Clean up the temporary file
         os.unlink(image_path)
@@ -1198,7 +1079,7 @@ def intraday_depthview_flow(
         as_of_time_stamp,
         session_date,
         participant,
-        [strike_min, strike_max],
+        strike_range,
         expiration,
         position_types,
         type_metric,

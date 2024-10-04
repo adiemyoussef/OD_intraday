@@ -425,7 +425,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
         x_max = max(trace.x.max() for trace in fig.data if hasattr(trace, 'x') and len(trace.x) > 0)
 
         # Add some padding to the right of the chart
-        x_padding = (x_max - x_min) * 0.33  # 10% of the x-axis range
+        x_padding = (x_max - x_min) * 0.25  # 10% of the x-axis range
         new_x_max = x_max + x_padding
         new_x_min = x_min - x_padding
         # Update the x-axis range
@@ -532,6 +532,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
 
 
     return fig
+
 
 
 def generate_gif(data,candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,last_price,

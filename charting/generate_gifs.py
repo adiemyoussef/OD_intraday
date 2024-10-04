@@ -86,44 +86,7 @@ def generate_frame_wrapper(args):
     fig.write_image(frame_path)
     return index, frame_path
 
-def process_single_strike_original(group, participant):
-    #TODO: Investigate Net
-
-
-    date = group['effective_date'].iloc[0]
-    strike = group['strike_price'].iloc[0]
-
-    results = {}
-    for flag in ['C', 'P']:
-        flag_group = group[group['call_put_flag'] == flag].sort_values('effective_datetime')
-        if not flag_group.empty:
-            metric = flag_group[f'{participant}_posn']
-            datetimes = flag_group['effective_datetime']
-
-            highest_idx = metric.idxmax()
-            lowest_idx = metric.idxmin()
-
-            results[flag] = {
-                'start_of_day': {'value': metric.iloc[0], 'time': datetimes.iloc[0]},
-                'current': {'value': metric.iloc[-1], 'time': datetimes.iloc[-1]},
-                'lowest': {'value': metric.min(), 'time': datetimes[lowest_idx]},
-                'highest': {'value': metric.max(), 'time': datetimes[highest_idx]},
-                'prior_update': {'value': metric.iloc[-2] if len(metric) > 1 else metric.iloc[0],
-                                 'time': datetimes.iloc[-2] if len(metric) > 1 else datetimes.iloc[0]}
-            }
-
-    # Calculate net metric
-    if 'C' in results and 'P' in results:
-        results['Net'] = {
-            key: {'value': results['C'][key]['value'] + results['P'][key]['value'],
-                  'time': max(results['C'][key]['time'], results['P'][key]['time'])}
-            for key in results['C']
-        }
-
-    return {'date': date, 'strike_price': strike, **results}
-
 def process_single_strike(group, participant, metric, last_price=1):
-
     date = group['effective_date'].iloc[0]
     strike = group['strike_price'].iloc[0]
     results = {}
@@ -132,8 +95,7 @@ def process_single_strike(group, participant, metric, last_price=1):
         flag_group = group[group['call_put_flag'] == flag].sort_values('effective_datetime')
         if not flag_group.empty:
             if metric == "GEX":
-
-                metric_values = flag_group[f'{participant}_posn'] * flag_group['gamma'] * float(last_price) * 100  #/ 1000000
+                metric_values = flag_group[f'{participant}_posn'] * flag_group['gamma'] * float(last_price) * 100
             elif metric == "DEX":
                 metric_values = flag_group[f'{participant}_posn'] * flag_group['delta']
             else:
@@ -155,22 +117,11 @@ def process_single_strike(group, participant, metric, last_price=1):
             }
 
     # Calculate net metric
-    # if 'C' in results and 'P' in results:
-    #     results['Net'] = {
-    #         key: {
-    #             'value': results['C'][key]['value'] + results['P'][key]['value'],
-    #             'time': max(results['C'][key]['time'], results['P'][key]['time'])
-    #         } for key in results['C']
-    #     }
-    import math
-
-    # Calculate net metric
     results['Net'] = {}
     for key in set(results.get('C', {}).keys()) | set(results.get('P', {}).keys()):
         c_value = results.get('C', {}).get(key, {}).get('value', 0)
         p_value = results.get('P', {}).get(key, {}).get('value', 0)
 
-        # Handle NaN values
         c_value = 0 if math.isnan(c_value) else c_value
         p_value = 0 if math.isnan(p_value) else p_value
 
@@ -179,13 +130,13 @@ def process_single_strike(group, participant, metric, last_price=1):
         c_time = results.get('C', {}).get(key, {}).get('time')
         p_time = results.get('P', {}).get(key, {}).get('time')
 
-        # Use the available time, or None if both are missing
         net_time = max(filter(None, [c_time, p_time])) if c_time or p_time else None
 
         results['Net'][key] = {
             'value': net_value,
             'time': net_time
         }
+
     return {'date': date, 'strike_price': strike, **results}
 
 def generate_color_shades(base_color, num_shades=5):
@@ -434,7 +385,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
         x_max = max(trace.x.max() for trace in fig.data if hasattr(trace, 'x') and len(trace.x) > 0)
 
         # Add some padding to the right of the chart
-        x_padding = (x_max - x_min) * 0.33  # 10% of the x-axis range
+        x_padding = (x_max - x_min) * 0.25  # 10% of the x-axis range
         new_x_max = x_max + x_padding
         new_x_min = x_min - x_padding
         # Update the x-axis range
@@ -447,7 +398,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
             y0=spx_spot_price,
             y1=spx_spot_price,
             line=dict(color="black", width=2, dash="dot"),  # Changed to dotted line
-            #line=dict(color="black", width=4, dash="dash"),
+
             name="SPX Spot Price"
         )
 
@@ -542,7 +493,7 @@ def generate_frame(data, candlesticks, timestamp, participant, strike_input, exp
 
     return fig
 
-def generate_frame_new(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type,metric_to_compute,last_price,
+def generate_frame_last(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type,metric_to_compute,last_price,
                    full_img_path):
 
 
@@ -894,6 +845,308 @@ def generate_frame_new(data, candlesticks, timestamp, participant, strike_input,
 
     return fig, tmpfile.name
 
+def generate_frame_new(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type, metric_to_compute, last_price, full_img_path):
+    if metric_to_compute == 'GEX':
+        x_axis_title = "Notional Gamma (M$)"
+    elif metric_to_compute == 'DEX':
+        x_axis_title = "Delta Exposure"
+    else:
+        x_axis_title = "Position"
+
+    img_src = None
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(script_dir)
+        full_img_path = os.path.normpath(os.path.join(project_root, 'config', 'images', os.path.basename(full_img_path)))
+
+        print(f"Attempting to load image from: {full_img_path}")
+        print(f"Current platform: {platform.system()}")
+
+        if os.path.isfile(full_img_path):
+            with Image.open(full_img_path) as img:
+                buffered = BytesIO()
+                img.save(buffered, format="PNG")
+                img_str = base64.b64encode(buffered.getvalue()).decode()
+                img_src = f"data:image/png;base64,{img_str}"
+            print(f"Image loaded successfully from: {full_img_path}")
+        else:
+            print(f"Image file not found at: {full_img_path}")
+            print(f"Current working directory: {os.getcwd()}")
+            print(f"Contents of {os.path.dirname(full_img_path)}:")
+            print(os.listdir(os.path.dirname(full_img_path)))
+
+            if platform.system() == "Darwin":
+                lower_case_files = [f.lower() for f in os.listdir(os.path.dirname(full_img_path))]
+                if os.path.basename(full_img_path).lower() in lower_case_files:
+                    print("Note: The image file might exist with a different case. macOS is case-insensitive but case-preserving.")
+    except Exception as e:
+        print(f"Error loading image: {e}")
+        print(f"Attempted to load from: {full_img_path}")
+        print(f"Current working directory: {os.getcwd()}")
+
+    metrics_data = data[data['effective_datetime'] <= timestamp].copy()
+
+    if candlesticks is not None and 'effective_datetime' in candlesticks.columns:
+        candlesticks_data = candlesticks[candlesticks['effective_datetime'] == timestamp].copy()
+    else:
+        print("Candlesticks data is missing or does not contain 'effective_datetime' column. SPX Spot Price line will not be added.")
+        candlesticks_data = pd.DataFrame()
+
+    if strike_input != "all":
+        if isinstance(strike_input, (list, tuple)):
+            metrics_data = metrics_data[metrics_data['strike_price'].between(min(strike_input), max(strike_input))]
+            subtitle_strike = f"For strikes: {min(strike_input)} to {max(strike_input)}"
+        elif isinstance(strike_input, int):
+            metrics_data = metrics_data[metrics_data['strike_price'] == strike_input]
+            subtitle_strike = f"For strike: {strike_input}"
+    else:
+        subtitle_strike = "All Strikes"
+
+    if expiration_input != "all":
+        if isinstance(expiration_input, (list, tuple)):
+            metrics_data = metrics_data[metrics_data['expiration_date_original'].isin(expiration_input)]
+            subtitle_expiration = f"For expirations: {', '.join(str(exp) for exp in expiration_input)}"
+        elif isinstance(expiration_input, date):
+            metrics_data = metrics_data[metrics_data['expiration_date_original'] == expiration_input]
+            subtitle_expiration = f"For expiration: {expiration_input}"
+        else:
+            expiration_input = pd.to_datetime(expiration_input).strftime('%Y-%m-%d')
+            metrics_data['expiration_date_original'] = pd.to_datetime(metrics_data['expiration_date_original']).dt.strftime('%Y-%m-%d')
+            metrics_data = metrics_data[metrics_data['expiration_date_original'] == expiration_input]
+            subtitle_expiration = f"For expiration: {expiration_input}"
+    else:
+        subtitle_expiration = "All Expirations"
+
+    grouped = metrics_data.groupby('strike_price')
+    results = [process_single_strike(group, participant, metric_to_compute, last_price) for _, group in grouped]
+    results_df = pd.DataFrame(results).sort_values('strike_price', ascending=True)
+
+    fig = make_subplots(rows=1, cols=1)
+
+    position_types = ['C', 'P', 'Net'] if position_type == 'All' else [position_type]
+
+    colors = {
+        'Net': {
+            'negative': 'rgb(0,149,255)',
+            'positive': 'rgb(0,149,255)'
+        },
+        'C': {
+            'negative': 'rgb(0,217,51)',
+            'positive': 'rgb(0,217,51)'
+        },
+        'P': {
+            'negative': 'rgb(204,3,0)',
+            'positive': 'rgb(204,3,0)'
+        }
+    }
+
+    def safe_extract(x, key):
+        if isinstance(x, dict) and key in x:
+            return x[key]['value'] if isinstance(x[key], dict) else x[key]
+        return None
+
+    x_min = float('inf')
+    x_max = float('-inf')
+
+    for pos_type in position_types:
+        if pos_type in results_df.columns:
+            update_period = ['current', 'start_of_day', 'prior_update']
+            symbols = ['line-ns', 'circle', 'x-thin']
+
+            for position, symbol in zip(update_period, symbols):
+                x_values = results_df[pos_type].apply(lambda x: safe_extract(x, position))
+                valid_mask = x_values.notnull()
+
+                if position == 'current':
+                    positive_mask = x_values > 0
+                    negative_mask = x_values <= 0
+
+                    trace_positive = go.Bar(
+                        x=x_values[valid_mask & positive_mask],
+                        y=results_df['strike_price'][valid_mask & positive_mask],
+                        name=f'{pos_type} {position.capitalize().replace("_", " ")} (Positive)',
+                        orientation='h',
+                        marker_color=colors[pos_type]['positive'],
+                        opacity=1,
+                        legendgroup=pos_type,
+                        legendgrouptitle_text=pos_type,
+                        hovertemplate=f"<b>{position.capitalize().replace('_', ' ')}</b><br>" +
+                                      "Strike: %{y}<br>" +
+                                      "Position: %{x}<br>" +
+                                      "Time: %{customdata}<extra></extra>",
+                        customdata=results_df[pos_type][valid_mask & positive_mask].apply(
+                            lambda x: x[position]['time'] if isinstance(x, dict) and position in x else None)
+                    )
+                    fig.add_trace(trace_positive)
+
+                    trace_negative = go.Bar(
+                        x=x_values[valid_mask & negative_mask],
+                        y=results_df['strike_price'][valid_mask & negative_mask],
+                        name=f'{pos_type} {position.capitalize().replace("_", " ")} (Negative)',
+                        orientation='h',
+                        marker_color=colors[pos_type]['negative'],
+                        opacity=1,
+                        legendgroup=pos_type,
+                        legendgrouptitle_text=pos_type,
+                        hovertemplate=f"<b>{position.capitalize().replace('_', ' ')}</b><br>" +
+                                      "Strike: %{y}<br>" +
+                                      "Position: %{x}<br>" +
+                                      "Time: %{customdata}<extra></extra>",
+                        customdata=results_df[pos_type][valid_mask & negative_mask].apply(
+                            lambda x: x[position]['time'] if isinstance(x, dict) and position in x else None)
+                    )
+                    fig.add_trace(trace_negative)
+                else:
+                    trace = go.Scatter(
+                        x=x_values[valid_mask],
+                        y=results_df['strike_price'][valid_mask],
+                        mode='markers',
+                        name=f'{pos_type} {position.capitalize().replace("_", " ")}',
+                        marker=dict(
+                            symbol=symbol,
+                            size=10,
+                            color='black',
+                            line=dict(width=2, color='black'),
+                        ),
+                        legendgroup=pos_type,
+                        hovertemplate=f"<b>{position.capitalize().replace('_', ' ')}</b><br>" +
+                                      "Strike: %{y}<br>" +
+                                      "Position: %{x}<br>" +
+                                      "Time: %{customdata}<extra></extra>",
+                        customdata=results_df[pos_type][valid_mask].apply(
+                            lambda x: x[position]['time'] if isinstance(x, dict) and position in x else None)
+                    )
+                    fig.add_trace(trace)
+
+            for _, row in results_df.iterrows():
+                strike = row['strike_price']
+                data = row[pos_type]
+                if isinstance(data, dict):
+                    min_value = safe_extract(data, 'lowest')
+                    max_value = safe_extract(data, 'highest')
+                    if min_value is not None and max_value is not None:
+                        fig.add_shape(
+                            type="line",
+                            x0=min_value,
+                            x1=max_value,
+                            y0=strike,
+                            y1=strike,
+                            line=dict(
+                                color=colors[pos_type]['positive'],
+                                width=1,  # Thinner line for the wick
+                                dash="solid",
+                            ),
+                            opacity=0.5,  # Semi-transparent
+                        )
+                        x_min = min(x_min, min_value)
+                        x_max = max(x_max, max_value)
+
+    # Add some padding to the x-axis range
+    x_padding = (x_max - x_min) * 0.1  # 10% padding on each side
+    x_min -= x_padding
+    x_max += x_padding
+
+    # Update the x-axis range
+    fig.update_xaxes(range=[x_min, x_max])
+
+    if 'close' in candlesticks_data.columns and not candlesticks_data['close'].empty:
+        spx_spot_price = candlesticks_data['close'].iloc[0]
+
+        fig.add_shape(
+            type="line",
+            x0=x_min,
+            x1=x_max,
+            y0=spx_spot_price,
+            y1=spx_spot_price,
+            line=dict(color="black", width=2, dash="dot"),
+            name="SPX Spot Price"
+        )
+
+        fig.add_annotation(
+            x=x_max,
+            y=spx_spot_price,
+            text=f"SPX Spot<br><b>{spx_spot_price:.2f}</b>",
+            showarrow=False,
+            xanchor="right",
+            yanchor="middle",
+            bgcolor="grey",
+            bordercolor="black",
+            borderpad=6,
+            borderwidth=1,
+            font=dict(color="white", size=16),
+        )
+
+    fig.update_layout(
+        title=dict(
+            text=(f"<b>Breakdown By Strike</b><br>"
+                  f"<sup>SPX: {participant_mapping.get(participant, 'Unknown Participant')} {position_type} {metric_to_compute} as of {timestamp}</sup><br>"
+                  f"<sup>{subtitle_strike} | {subtitle_expiration}</sup>"),
+            font=dict(family="Arial", size=24, color="black"),
+            x=0.0,
+            y=0.98,
+            xanchor='left',
+            yanchor='top'
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            groupclick="toggleitem"
+        ),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Arial", color='black', size=12),
+        xaxis=dict(
+            title=f"{x_axis_title}",
+            showgrid=True,
+            gridcolor='lightgrey',
+            zeroline=True,
+            zerolinecolor='black',
+            zerolinewidth=2
+        ),
+        yaxis=dict(
+            title="Strike Price",
+            showgrid=True,
+            gridcolor='lightgrey',
+            dtick=10
+        ),
+        width=1000,
+        height=1200,
+        margin=dict(l=50, r=50, t=100, b=50),
+        images=[dict(
+            source=img_src,
+            xref="paper", yref="paper",
+            x=0.15, y=0.8,
+            sizex=0.65, sizey=0.65,
+            sizing="contain",
+            opacity=0.25,
+            layer="below"
+        )] if img_src else []
+    )
+
+    fig.add_annotation(
+        text="© OptionsDepth.com",
+        xref="paper", yref="paper",
+        x=-0.05, y=-0.05,
+        showarrow=False,
+        font=dict(size=11, color="gray")
+    )
+
+    fig.add_annotation(
+        text="Powered by OptionsDepth.com",
+        xref="paper", yref="paper",
+        x=0.99, y=-0.05,
+        showarrow=False,
+        font=dict(size=11, color="gray"),
+        xanchor="right"
+    )
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
+        fig.write_image(tmpfile.name, scale=3)
+
+    return fig, tmpfile.name
 def generate_gif(data,candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,last_price,
                  metric = "positioning",
                  img_path='config/images/logo_dark.png',
@@ -1261,9 +1514,14 @@ def send_to_discord_new(webhook_url: str, file_paths_or_urls: List[dict], conten
     }
 
     # Prepare the payload with the embed
+    # payload = {
+    #     "embeds": embed,
+    #     "content": content or ""
+    # }
+
     payload = {
-        "embeds": [embed],
-        "content": content or ""
+        # "embeds": [embed],
+        "content": "Toto test"
     }
 
     # Send the embedded message to Discord
