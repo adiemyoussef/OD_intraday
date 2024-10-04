@@ -1515,7 +1515,7 @@ def send_to_discord_new(webhook_url: str, file_paths_or_urls: List[dict], conten
 
     # Prepare the payload with the embed
     payload = {
-        "embeds": embed,
+        "embeds": [embed],
         "content": content or ""
     }
 
