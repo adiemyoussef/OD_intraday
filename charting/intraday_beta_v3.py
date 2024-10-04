@@ -11,7 +11,7 @@ from prefect import task, flow, get_run_logger, get_client
 from datetime import timedelta, datetime, date
 from typing import List, Optional
 # from charting.generate_gifs import generate_gif, send_to_discord
-from charting.generate_gifs import generate_gif, generate_frame_new, send_to_discord, generate_video,send_to_discord_new
+from charting.generate_gifs import generate_gif, generate_frame_new, send_to_discord, generate_video,send_to_discord_new, process_single_strike
 
 from utilities.misc_utils import *
 from utilities.db_utils import *
@@ -267,20 +267,9 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
 
 
 @task
-def test_generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration, position_types,
-                             last_price, metric='positioning', img_path='config/images/logo_dark.png',
+def test_generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration,
+                             position_types, last_price, metric='positioning', img_path='config/images/logo_dark.png',
                              space_name=INTRADAYBOT_SPACENAME):
-    """
-    Generate and process video frames for multiple position types, create videos, and optionally send to Discord.
-    This version uses DigitalOcean Spaces for persistent tracking of generated frames.
-
-    Args:
-        [All arguments remain the same as in the previous version]
-
-    Returns:
-        dict: A dictionary containing video and latest frame URLs for each position type.
-    """
-
     if not position_types:
         position_types = ['Net', 'C', 'P']
 
@@ -289,27 +278,14 @@ def test_generate_video_task(data, candlesticks, session_date, participant, stri
     for pos in position_types:
         print(f"Processing: {session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
 
-        # Create a unique identifier for this combination of parameters
         combo_id = f"{session_date}_{participant}_{'-'.join(map(str, strike_range))}_{expiration}_{pos}_{metric}"
         print(f"Generated {combo_id} for {session_date}_{participant}_{strike_range}_{expiration}_{pos}_{metric}")
-        # Keys for storing metadata and frames in DigitalOcean Spaces
+
         metadata_key = f"metadata/{combo_id}.json"
         frames_prefix = f"frames/{combo_id}/"
 
-        # Retrieve or initialize metadata
         metadata = do_space.get_or_initialize_metadata(space_name, metadata_key)
 
-        # # Filter data to process only new timestamps
-        # last_timestamp = pd.to_datetime(metadata['last_timestamp']) if metadata['last_timestamp'] else None
-        # if last_timestamp:
-        #     new_data = data[data['effective_datetime'] > last_timestamp]
-        # else:
-        #     new_data = data
-        #
-        # unprocessed_effectivedatetimes = new_data['effective_datetime'].unique()
-        # print(f'Unique time_stamps to process: {unprocessed_effectivedatetimes}')
-
-        # Filter data to process only new timestamps, but include necessary historical data
         last_timestamp = pd.to_datetime(metadata['last_timestamp']) if metadata['last_timestamp'] else None
         current_day_start = pd.Timestamp(session_date).floor('D')
         day_data = data[data['effective_datetime'] >= current_day_start]
@@ -319,16 +295,11 @@ def test_generate_video_task(data, candlesticks, session_date, participant, stri
             first_datetime = day_data['effective_datetime'].min()
             start_of_day_data = data[data['effective_datetime'] == first_datetime]
         else:
-            start_of_day_data = pd.DataFrame()  # Empty DataFrame if no data for the day
+            start_of_day_data = pd.DataFrame()
 
         if last_timestamp:
-            # Include the last processed data point
             last_processed_data = data[data['effective_datetime'] == last_timestamp]
-
-            # Include all new data points
             new_data = data[data['effective_datetime'] > last_timestamp]
-
-            # Combine all necessary data
             data_to_process = pd.concat([last_processed_data, start_of_day_data, new_data]).drop_duplicates()
         else:
             new_data = data
@@ -338,28 +309,27 @@ def test_generate_video_task(data, candlesticks, session_date, participant, stri
         effectivedatetimes_datasent = data_to_process['effective_datetime'].unique()
         print(f'Unique time_stamps to process: {unprocessed_effectivedatetimes}')
         print(f'Unique time_stamps to process: {effectivedatetimes_datasent}')
-        # Generate new frames for the filtered data
+
         new_frames = []
         for timestamp in new_data['effective_datetime'].unique():
             print(f'Processing: {timestamp}')
+
+            # Generate frame
             fig, frame_path = generate_frame_new(data_to_process, candlesticks, timestamp, participant, strike_range,
-                                                 expiration,
-                                                 pos, metric, last_price, img_path)
+                                                 expiration, pos, metric, last_price, img_path)
+            #fig.show()
             frame_key = f"{frames_prefix}{timestamp.strftime('%Y%m%d%H%M%S')}.png"
             do_space.upload_to_spaces(frame_path, space_name, frame_key)
             new_frames.append(frame_key)
             metadata['frames'].append(frame_key)
-            os.remove(frame_path)  # Remove the temporary file
+            os.remove(frame_path)
 
-        # Update metadata with new frames and last timestamp
         if new_frames:
             metadata['last_timestamp'] = str(new_data['effective_datetime'].max())
             do_space.update_metadata(space_name, metadata_key, metadata)
 
-        # Generate video from all frames
         video_url, latest_frame_url = generate_video_from_frames(do_space, space_name, metadata['frames'], combo_id)
 
-        # Store results for this position type
         results[pos] = {
             'video_url': video_url,
             'latest_frame_url': latest_frame_url
@@ -1040,7 +1010,7 @@ def intraday_depthview_flow(
             height=1080,  # Full HD height
             font=dict(size=16)  # Increase font size for better readability
         )
-
+        fig.show()
         # Generate a unique identifier for this chart
         chart_id = f"depthview_{session_date}_{type_metric}_{option_type}_{uuid.uuid4().hex[:8]}"
 
@@ -1436,10 +1406,10 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
 
 
 if __name__ == "__main__":
-    intraday_depthview_flow()
-    #test_zero_dte_flow()
+    #intraday_depthview_flow()
+    test_zero_dte_flow()
     #test_one_dte_flow()
-    # test_GEX_flow()
+    #test_GEX_flow()
     # zero_dte_flow()
     # one_dte_flow()
     # GEX_flow()
