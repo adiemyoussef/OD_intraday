@@ -161,6 +161,16 @@ START_TIME_PRE_MARKET = '00:00:00'
 START_TIME_MARKET = '00:00:00'
 DEFAULT_POS_TYPES = ['Net', 'C','P']
 
+PARTICIPANT_MAPPING = {
+    'mm': 'Market Makers',
+    'broker': 'Brokers and Dealers',
+    'firm': 'Firms',
+    'nonprocus': 'Non-Professional Customers',
+    'procust': 'Professional Customers',
+    'total_customers': 'Total Customers'
+}
+
+
 #--------------- DATA PROCESSING ---------------------#
 # Data Processing
 OPTION_SYMBOLS_TO_PROCESS = other_config.get('option_symbols_to_process', ['SPX', 'SPXW'])

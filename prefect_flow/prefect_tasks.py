@@ -1603,6 +1603,7 @@ async def trigger_gif_flows():
             # "0 DTE Flow",
             # "1 DTE Flow",
             # "MM GEX Flow",
+            "Depthview",
             "TEST - 0 DTE Flow",
             "TEST - 1 DTE Flow",
             "TEST - GEX gifs"

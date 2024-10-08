@@ -33,6 +33,7 @@ import subprocess
 default_date = date.today()
 STRIKE_RANGE = [5500, 5900]
 DEBUG_MODE = False  # Set to False for production
+TEST_FLAG = True
 
 db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()
@@ -63,6 +64,9 @@ def get_webhook_url(flow_name):
         return WEBHOOK_URLS['dev']
     return WEBHOOK_URLS.get(flow_name, WEBHOOK_URLS['dev'])
 
+
+def get_prefixed_id(combo_id):
+    return f"TEST_{combo_id}" if TEST_FLAG else combo_id
 
 @task
 def parse_strike_range(strike_range: str) -> List[int]:
@@ -371,39 +375,37 @@ def generate_video_from_frames(do_space, space_name, frame_keys, combo_id):
 @task
 def send_discord_message(file_paths: List[str], as_of_time_stamp: str, session_date: str, participant: str,
                          strike_range: List[int], expiration: str, position_types: List[str], metric: str,
-                         webhook_url: str) -> bool:
-    participant_mapping = {
-        'mm': 'Market Makers',
-        'broker': 'Brokers and Dealers',
-        'firm': 'Firms',
-        'nonprocus': 'Non-Professional Customers',
-        'procust': 'Professional Customers',
-        'total_customers': 'Total Customers'
-    }
-    participant_text = participant_mapping.get(participant, 'Unknown Participant')
+                         webhook_url: str, description: str = None, fields: List[dict] = None) -> bool:
 
-    title = f"📊 {session_date} Intraday Recap"
-    description = (
-        f"Detailed analysis of {participant_text} {metric} for the {session_date} session.\n"
-        f"This chart provides insights into market movements and positioning within the specified strike range.\n"
-        ""
-    )
+
+
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    fields = [
+    footer_text = f"Generated on {current_time} | By OptionsDepth.com"
+    title = f"📊 {session_date} Intraday Recap"
+
+    # Use provided description or fall back to default
+    description = description or (
+        f"Detailed analysis of {participant} {metric} for the {session_date} session.\n"
+        f"This chart provides insights into market movements and positioning within the specified strike range.\n"
+    )
+
+    # Use provided fields or fall back to default
+    default_fields = [
         {"name": "", "value": "", "inline": True},
         {"name": "", "value": "", "inline": True},
         {"name": "", "value": "", "inline": True},
         {"name": "📈 Analysis Type", "value": f"Intraday {metric} Movement", "inline": True},
         {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
         {"name": "", "value": "", "inline": True},
-        {"name": "👥 Participant(s)", "value": participant_text, "inline": True},
+        {"name": "👥 Participant(s)", "value": participant, "inline": True},
         {"name": "🎯 Strike Range", "value": f"{strike_range[0]} - {strike_range[1]}", "inline": True},
         {"name": "📅 Expiration(s)", "value": expiration, "inline": True},
         {"name": "", "value": "", "inline": True},
         {"name": "", "value": "", "inline": True},
         {"name": "", "value": "", "inline": True},
     ]
-    footer_text = f"Generated on {current_time} | By OptionsDepth.com"
+    fields = fields or default_fields
+
 
     success = send_to_discord_new(
         webhook_url,
@@ -416,13 +418,6 @@ def send_discord_message(file_paths: List[str], as_of_time_stamp: str, session_d
         do_spaces=do_space
     )
 
-    # # Clean up the gif files after sending
-    # for path in file_paths:
-    #     try:
-    #         print(f'Suppose to remove: {path}')
-    #         #os.remove(path)
-    #     except FileNotFoundError:
-    #         print(f"Warning: Could not delete file {path}. It may have already been deleted.")
 
     return success
 
@@ -473,9 +468,23 @@ def zero_dte_flow(
                                         position_types, last_price, 'positioning', POS_0DTE)
     print(f"Video and frames generated at: {paths_to_send}")
 
+    description = (
+        f"0DTE (Zero Days to Expiration) analysis for {session_date}.\n"
+        f"This chart showcases intraday positioning movements for options expiring today."
+    )
+
+    fields = [
+        {"name": "📅 Expiration", "value": expiration, "inline": True},
+        {"name": "⏰ As of", "value": as_of_time_stamp, "inline": True},
+        {"name": "👥 Participant", "value": participant, "inline": True},
+        {"name": "🎯 Strike Range", "value": f"{strike_range[0]} - {strike_range[1]}", "inline": True},
+        {"name": "📊 Analysis Type", "value": "0DTE Positioning", "inline": True},
+    ]
+
     # Send Discord message with Videos
     video_success = send_discord_message(paths_to_send, as_of_time_stamp, session_date, participant, strike_range,
-                                         expiration, position_types, 'positioning', webhook_url)
+                                         expiration, position_types, 'positioning', webhook_url,
+                                         description=description, fields=fields)
 
     if video_success:
         print(f"Successfully processed and sent intraday data (GIF and video) for {session_date}")
@@ -525,9 +534,23 @@ def one_dte_flow(
                                        position_types, last_price, 'positioning', POS_UPCOMING_EXP)
     print(f"Video generated at: {videos_paths}")
 
+    description = (
+        f"Next Day Expiration analysis for {session_date}.\n"
+        f"This chart illustrates intraday positioning movements for options expiring tomorrow."
+    )
+
+    fields = [
+        {"name": "📅 Expiration", "value": expiration, "inline": True},
+        {"name": "⏰ As of", "value": as_of_time_stamp, "inline": True},
+        {"name": "👥 Participant", "value": participant, "inline": True},
+        {"name": "🎯 Strike Range", "value": f"{strike_range[0]} - {strike_range[1]}", "inline": True},
+        {"name": "📊 Analysis Type", "value": "1DTE Positioning", "inline": True},
+    ]
+
     # Send Discord message with Videos
     video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range,
-                                         expiration, position_types, 'positioning', webhook_url)
+                                         expiration, position_types, 'positioning', webhook_url,
+                                         description=description, fields=fields)
 
     if video_success:
         print(f"Successfully processed and sent intraday data (GIF and video) for {session_date}")
@@ -574,9 +597,23 @@ def GEX_flow(
                                        position_types, last_price, "GEX", GEX_0DTE)
     print(f"Video generated at: {videos_paths}")
 
+    description = (
+        f"Gamma Exposure (GEX) analysis for {session_date}.\n"
+        f"This chart shows the intraday movement of market makers' gamma exposure."
+    )
+
+    fields = [
+        {"name": "📅 Expiration", "value": expiration, "inline": True},
+        {"name": "⏰ As of", "value": as_of_time_stamp, "inline": True},
+        {"name": "👥 Participant", "value": "Market Makers", "inline": True},
+        {"name": "🎯 Strike Range", "value": f"{strike_range[0]} - {strike_range[1]}", "inline": True},
+        {"name": "📊 Analysis Type", "value": "Gamma Exposure (GEX)", "inline": True},
+    ]
+
     # Send Discord message with Videos
     video_success = send_discord_message(videos_paths, as_of_time_stamp, session_date, participant, strike_range,
-                                         expiration, position_types, 'GEX', webhook_url)
+                                         expiration, position_types, 'GEX', webhook_url,
+                                         description=description, fields=fields)
 
     if video_success:
         print(f"Successfully processed and sent intraday data (GIF and video) for {session_date}")
@@ -595,8 +632,8 @@ def test_zero_dte_flow(
         position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
         webhook_url: str = None
 ):
-    #webhook_url = webhook_url or get_webhook_url('test-0dte')
-    webhook_url = webhook_url or get_webhook_url('zero_dte')
+    webhook_url = webhook_url or get_webhook_url('test-0dte')
+    #webhook_url = webhook_url or get_webhook_url('zero_dte')
 
     expiration = str(session_date)
 
@@ -628,19 +665,30 @@ def test_zero_dte_flow(
     metrics, candlesticks, last_price = fetch_data(session_date, None, strike_range, expiration, start_time)
     as_of_time_stamp = str(metrics["effective_datetime"].max())
     last_price = last_price.values[0][0]
-    # Process data and generate GIFs
-    # paths_to_send = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
-    #                                    position_types, last_price ,'positioning', POS_0DTE)
-    # print(f"Video and frames generated at: {paths_to_send}")
+
 
     # Generate video with new frames
     video_url = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
                                          position_types, last_price, metric='positioning', img_path=POS_0DTE,
                                          space_name=INTRADAYBOT_SPACENAME)
 
+    description = (
+        f"0DTE (Zero Days to Expiration) analysis for {session_date}.\n"
+        f"These charts showcase intraday positioning movements for options expiring today."
+    )
+
+    fields = [
+        {"name": "📅 Expiration", "value": expiration, "inline": True},
+        {"name": "⏰ As of", "value": as_of_time_stamp, "inline": True},
+        {"name": "👥 Participant", "value": PARTICIPANT_MAPPING.get(participant,participant), "inline": True},
+        {"name": "🎯 Strike Range", "value": f"{strike_range[0]} - {strike_range[1]}", "inline": True},
+        {"name": "📊 Analysis Type", "value": "0DTE Positioning", "inline": True},
+    ]
+
     # Send Discord message with Video URL
     video_success = send_discord_message(video_url, as_of_time_stamp, session_date, participant, strike_range,
-                                         expiration, position_types, 'positioning', webhook_url)
+                                         expiration, position_types, 'positioning', webhook_url,
+                                         description=description, fields=fields)
 
     if video_success:
         print(f"Successfully processed and sent intraday data (video) for {session_date}")
@@ -656,8 +704,8 @@ def test_one_dte_flow(
         position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
         webhook_url: str = None
 ):
-    #webhook_url = webhook_url or get_webhook_url('test-1dte')
-    webhook_url = webhook_url or get_webhook_url('one_dte')
+    webhook_url = webhook_url or get_webhook_url('test-1dte')
+    #webhook_url = webhook_url or get_webhook_url('one_dte')
 
     # Set default values if not provided
     if session_date is None:
@@ -687,19 +735,31 @@ def test_one_dte_flow(
     metrics, candlesticks, last_price = fetch_data(session_date, None, strike_range, expiration, start_time)
     as_of_time_stamp = str(metrics["effective_datetime"].max())
     last_price = last_price.values[0][0]
-    # Process data and generate GIFs
-    # paths_to_send = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
-    #                                    position_types, last_price ,'positioning', POS_0DTE)
-    # print(f"Video and frames generated at: {paths_to_send}")
+
 
     # Generate video with new frames
     video_url = test_generate_video_task(metrics, candlesticks, session_date, participant, strike_range, expiration,
                                          position_types, last_price, metric='positioning', img_path=POS_UPCOMING_EXP,
                                          space_name=INTRADAYBOT_SPACENAME)
 
+
+    description = (
+        f"Next Day Expiration analysis for {session_date}.\n"
+        f"These charts illustrate intraday positioning movements for options expiring the next session."
+    )
+
+    fields = [
+        {"name": "📅 Expiration", "value": expiration, "inline": True},
+        {"name": "⏰ As of", "value": as_of_time_stamp, "inline": True},
+        {"name": "👥 Participant", "value": PARTICIPANT_MAPPING.get(participant,participant), "inline": True},
+        {"name": "🎯 Strike Range", "value": f"{strike_range[0]} - {strike_range[1]}", "inline": True},
+        {"name": "📊 Analysis Type", "value": "1DTE Positioning", "inline": True},
+    ]
+
     # Send Discord message with Video URL
     video_success = send_discord_message(video_url, as_of_time_stamp, session_date, participant, strike_range,
-                                         expiration, position_types, 'positioning', webhook_url)
+                                         expiration, position_types, 'positioning', webhook_url,
+                                         description=description, fields=fields)
 
     if video_success:
         print(f"Successfully processed and sent intraday data (video) for {session_date}")
@@ -717,13 +777,12 @@ def test_GEX_flow(
 ):
 
     #Default values
-    # webhook_url = webhook_url or get_webhook_url('test-gex-0dte')
-    webhook_url = webhook_url or get_webhook_url('gex')
+    webhook_url = webhook_url or get_webhook_url('test-gex-0dte')
+    #webhook_url = webhook_url or get_webhook_url('gex')
     if session_date is None:
         session_date = datetime.now().strftime('%Y-%m-%d')
     if strike_range is None:
         strike_range = get_strike_range(prod_pg_data,session_date, range_value = 0.025, range_type = 'percent')
-        #strike_range = [5580, 5900]
     if position_types is None:
         position_types = DEFAULT_POS_TYPES
     if expiration is None:
@@ -751,9 +810,24 @@ def test_GEX_flow(
                                          position_types, last_price, metric='GEX', img_path=GEX_0DTE,
                                           space_name=INTRADAYBOT_SPACENAME)
 
+    description = (
+        f"Gamma Exposure (GEX) analysis for {session_date}.\n"
+        f"These chart shows the intraday movement of market makers' gamma exposure."
+    )
+
+    fields = [
+        {"name": "📅 Expiration", "value": expiration, "inline": True},
+        {"name": "⏰ As of", "value": as_of_time_stamp, "inline": True},
+        {"name": "👥 Participant", "value": "Market Makers", "inline": True},
+        {"name": "🎯 Strike Range", "value": f"{strike_range[0]} - {strike_range[1]}", "inline": True},
+        {"name": "📊 Analysis Type", "value": "Gamma Exposure (GEX)", "inline": True},
+    ]
+
+
     # Send Discord message with Video URL
     video_success = send_discord_message(video_url, as_of_time_stamp, session_date, participant, strike_range,
-                                         expiration, position_types, 'GEX', webhook_url)
+                                         expiration, position_types, 'GEX', webhook_url,
+                                         description=description, fields=fields)
 
     if video_success:
         print(f"Successfully processed and sent intraday data (video) for {session_date}")
@@ -817,18 +891,23 @@ def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_datetime: str, l
 
     # Create the heatmap using Plotly
     fig = go.Figure(data=go.Heatmap(
-        z=z_log,
+        z=z, #z_log,
         x=heatmap_data['expiration_date_original'].unique(),
         y=heatmap_data['strike_price'].unique(),
         text=np.where(np.isnan(rounded_z), '', rounded_z),
         texttemplate="%{text}",
         colorscale=colorscale,
-        zmin=-symmetric_log_scale(val_range),
-        zmax=symmetric_log_scale(val_range),
+        zmin=-10000, #symmetric_log_scale(val_range),
+        zmax=10000, #symmetric_log_scale(val_range),
+        # colorbar=dict(
+        #     title=title_colorbar,
+        #     tickvals=symmetric_log_scale(np.array([-val_range, 0, val_range])),
+        #     ticktext=[-round(val_range), 0, round(val_range)]
+        # ),
         colorbar=dict(
             title=title_colorbar,
-            tickvals=symmetric_log_scale(np.array([-val_range, 0, val_range])),
-            ticktext=[-round(val_range), 0, round(val_range)]
+            tickvals=[-10000, -5000, 0, 5000, 10000],
+            ticktext=['-10000', '-5000', '0', '5000', '10000']
         ),
         zmid=0,
         hovertemplate='Expiration: %{x}<br>Strike: %{y}<br>' + type + ': %{text}<extra></extra>'
@@ -934,13 +1013,23 @@ def process_book_data(book: pd.DataFrame, type: str, option_type: str, latest_pr
     elif type == 'position':
         book[type] = book['total_customers_posn'] * 1
 
-    if option_type == "calls":
+    #TODO: Lazy way of coding ----> Make this part better
+    if option_type == "C":
+        prefect_logger.info(f"Processing {option_type}")
+        prefect_logger.info(f"Length before filtering: {len(book)}")
         book = book[book["call_put_flag"] == "C"]
-    elif option_type == 'puts':
+        prefect_logger.info(f"Length after filtering: {len(book)}")
+    elif option_type == "P":
+        prefect_logger.info(f"Processing {option_type}")
+        prefect_logger.info(f"Length before filtering: {len(book)}")
         book = book[book["call_put_flag"] == "P"]
+        prefect_logger.info(f"Length after filtering: {len(book)}")
     else:
-        prefect_logger.info(f"Processing{option_type}")
+        prefect_logger.info(f"Processing {option_type} ---> Keeping all contracts")
+        prefect_logger.info(f"Length of book: {len(book)}")
 
+
+    #TODO: Remove the hard coded values
     strike_min = round_to_nearest_tens(int(latest_price) * (1-0.02))[0]
     strike_max = round_to_nearest_tens(int(latest_price) * (1+0.02))[1]
 
@@ -960,18 +1049,50 @@ def process_book_data(book: pd.DataFrame, type: str, option_type: str, latest_pr
 
     return heatmap_data_to_plot, strike_min, strike_max
 
+@task
+def generate_depthview_frame(metrics, type_metric, timestamp, participant, strike_range, last_price, option_type):
+    prefect_logger = get_run_logger()
+    prefect_logger.info(f'Processing: {timestamp}')
+
+    # Filter data for the specific timestamp
+    data_for_timestamp = metrics[metrics['effective_datetime'] == timestamp]
+
+    # Process data for depthview
+    heatmap_data, strike_min, strike_max = process_book_data(data_for_timestamp, type_metric, option_type, last_price)
+
+    # Create depthview plot
+    fig = plot_depthview(heatmap_data, type_metric, timestamp, last_price, strike_min, strike_max, option_type)
+
+    fig.update_layout(
+        width=1920,  # Full HD width
+        height=1080,  # Full HD height
+        font=dict(size=16)  # Increase font size for better readability
+    )
+
+    # Save the frame as an image file
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
+        fig.write_image(tmpfile.name, scale=2)
+        frame_path = tmpfile.name
+
+    return frame_path
+
 @flow(name="Intraday Depthview Flow")
-def intraday_depthview_flow(
+def intraday_depthview(
     session_date: Optional[date] = None,
     strike_range: Optional[List[int]] = None,
     expiration: Optional[str] = None,
-    participant: str = 'customer',
+    participant: str = 'total_customers',
     position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
     type_metric: str = 'position',
     webhook_url: str = None
 ):
+    prefect_logger = get_run_logger()
     # Set default values
     webhook_url = webhook_url or get_webhook_url('test-depthview')
+    #webhook_url = webhook_url or get_webhook_url('depthview')
+
+
+
     if session_date is None:
         session_date = datetime.now().date()
     if strike_range is None:
@@ -995,66 +1116,81 @@ def intraday_depthview_flow(
     metrics, candlesticks, last_price = fetch_data(session_date, None, strike_range, expiration, start_time)
     as_of_time_stamp = str(metrics["effective_datetime"].max())
     last_price = last_price.values[0][0]
-    metrics = metrics[metrics["effective_datetime"] == as_of_time_stamp]
+    # metrics = metrics[metrics["effective_datetime"] == as_of_time_stamp]
 
-    image_urls = []
+    results = {}
 
     for option_type in position_types:
-        # Process data for depthview
-        heatmap_data, strike_min, strike_max = process_book_data(metrics, type_metric, option_type.lower(), last_price)
+        prefect_logger.info(f"Processing: {session_date}_{participant}_{strike_range}_{option_type}_{type_metric}")
 
-        # Create depthview plot
-        fig = plot_depthview(heatmap_data, type_metric, as_of_time_stamp, last_price, strike_min, strike_max, option_type)
+        combo_id = f"{session_date}_{participant}_{'-'.join(map(str, strike_range))}_{option_type}_{type_metric}"
+        metadata_key = f"metadata/depthview_{combo_id}.json"
+        frames_prefix = f"frames/depthview_{combo_id}/"
 
-        fig.update_layout(
-            width=1920,  # Full HD width
-            height=1080,  # Full HD height
-            font=dict(size=16)  # Increase font size for better readability
-        )
-        fig.show()
-        # Generate a unique identifier for this chart
-        chart_id = f"depthview_{session_date}_{type_metric}_{option_type}_{uuid.uuid4().hex[:8]}"
 
-        # Save the chart as an image file
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
-            fig.write_image(tmpfile.name, scale=2)
-            image_path = tmpfile.name
+        metadata = do_space.get_or_initialize_metadata(INTRADAYBOT_SPACENAME, metadata_key)
 
-        # Upload the image to Digital Ocean Spaces
-        image_key = f"depthview/{chart_id}.png"
-        do_space.upload_to_spaces(image_path, INTRADAYBOT_SPACENAME, image_key)
+        last_timestamp = pd.to_datetime(metadata['last_timestamp']) if metadata['last_timestamp'] else None
 
-        # Generate the public URL for the uploaded image
-        image_url = f"https://nyc3.digitaloceanspaces.com/{image_key}"
+        if last_timestamp:
+            new_data = metrics[metrics['effective_datetime'] > last_timestamp]
+        else:
+            new_data = metrics
 
-        # Add to the dictionary instead of the list
-        image_urls[option_type] = {"image": image_url}
+        new_frames = []
+        for timestamp in new_data['effective_datetime'].unique():
+            metrics_filtered = metrics[metrics["effective_datetime"] == timestamp]
 
-        # Clean up the temporary file
-        os.unlink(image_path)
+            frame_path = generate_depthview_frame(metrics_filtered, type_metric, timestamp, participant, strike_range,
+                                                  last_price, option_type)
+            frame_key = f"{frames_prefix}{timestamp.strftime('%Y%m%d%H%M%S')}.png"
+            do_space.upload_to_spaces(frame_path, INTRADAYBOT_SPACENAME, frame_key)
+            new_frames.append(frame_key)
+            metadata['frames'].append(frame_key)
+            os.remove(frame_path)
+
+        if new_frames:
+            metadata['last_timestamp'] = str(new_data['effective_datetime'].max())
+            do_space.update_metadata(INTRADAYBOT_SPACENAME, metadata_key, metadata)
+
+        video_url, latest_frame_url = generate_video_from_frames(do_space, INTRADAYBOT_SPACENAME, metadata['frames'],
+                                                                 f"depthview_{combo_id}")
+
+        results[option_type] = {
+            'video_url': video_url,
+            'latest_frame_url': latest_frame_url
+        }
+
 
     # Prepare the message for Discord
     title = f"📊 {session_date} Intraday Depthview - {type_metric.upper()}"
+    description = (
+        f"Intraday Depthview for {session_date}.\n"
+        f"This chart showcases intraday positioning movements for options expiring for the upcoming 30 days."
+    )
     fields = [
         {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
-        {"name": "👥 Participant:", "value": participant, "inline": True},
+        {"name": "👥 Participant:", "value": PARTICIPANT_MAPPING.get(participant, 'Unknown Participant'),
+         "inline": True},
         {"name": "📈 Metric:", "value": type_metric, "inline": True},
-        {"name": "🎯 Strike Range:", "value": f"{strike_min} - {strike_max}", "inline": True},
+        {"name": "🎯 Strike Range:", "value": f"{strike_range[0]} - {strike_range[1]}", "inline": True},
         {"name": "🔢 Option Types:", "value": ", ".join(position_types), "inline": True}
     ]
-    footer_text = f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | By OptionsDepth.com"
 
-    # Send Discord message with image URLs
+
+    # Send Discord message with image and video URLs
     message_success = send_discord_message(
-        image_urls,
+        results,
         as_of_time_stamp,
         session_date,
-        participant,
+        PARTICIPANT_MAPPING.get(participant, 'Unknown Participant'),
         strike_range,
         expiration,
         position_types,
         type_metric,
-        webhook_url
+        webhook_url,
+        description,
+        fields
     )
 
     if message_success:
@@ -1063,6 +1199,144 @@ def intraday_depthview_flow(
         logging.error(f"Failed to process or send intraday depthview data for {session_date}")
 
     return message_success
+#----------------- DEPTH FLOW ----------------------#
+@flow(name="Intraday Depthflow")
+def intraday_depthflow(
+        session_date: Optional[date] = None,
+        strike_range: Optional[List[int]] = None,
+        expiration: Optional[str] = None,
+        participant: str = 'total_customers',
+        position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
+        type_metric: str = 'position',
+        webhook_url: str = None
+):
+    prefect_logger = get_run_logger()
+    # Set default values
+    webhook_url = webhook_url or get_webhook_url('test-depthview')
+
+    if session_date is None:
+        session_date = datetime.now().date()
+    if strike_range is None:
+        strike_range = get_strike_range(prod_pg_data, session_date, range_value=0.025, range_type='percent')
+    if expiration is None:
+        # TODO: it should be the default amount of expirations
+        expiration = None
+
+    # Determine start time based on current time
+    current_time = datetime.now().time()
+    if current_time < time(12, 0):
+        start_time = START_TIME_PRE_MARKET
+    elif time(12, 0) <= current_time < time(23, 0):
+        start_time = START_TIME_MARKET
+    else:
+        start_time = START_TIME_PRE_MARKET
+
+    logging.info(f"Start time set to: {start_time}")
+
+    # Fetch data
+    metrics, candlesticks, last_price = fetch_data(session_date, None, strike_range, expiration, start_time)
+    as_of_time_stamp = str(metrics["effective_datetime"].max())
+    last_price = last_price.values[0][0]
+
+    # Get the initial timestamp (t_0)
+    t_0 = metrics["effective_datetime"].min()
+    initial_data = metrics[metrics["effective_datetime"] == t_0]
+
+    results = {}
+
+    for option_type in position_types:
+        prefect_logger.info(f"Processing: {session_date}_{participant}_{strike_range}_{option_type}_{type_metric}")
+
+        combo_id = f"{session_date}_{participant}_{'-'.join(map(str, strike_range))}_{option_type}_{type_metric}"
+        metadata_key = f"metadata/depthflow_{combo_id}.json"
+        frames_prefix = f"frames/depthflow_{combo_id}/"
+
+        metadata = do_space.get_or_initialize_metadata(INTRADAYBOT_SPACENAME, metadata_key)
+
+        last_timestamp = pd.to_datetime(metadata['last_timestamp']) if metadata['last_timestamp'] else None
+
+        if last_timestamp:
+            new_data = metrics[metrics['effective_datetime'] > last_timestamp]
+        else:
+            new_data = metrics
+
+        new_frames = []
+        for timestamp in new_data['effective_datetime'].unique():
+            metrics_filtered = metrics[metrics["effective_datetime"] == timestamp]
+
+            # Compute the difference from initial state
+            metrics_filtered = compute_difference_from_initial(metrics_filtered, initial_data, participant)
+
+            frame_path = generate_depthview_frame(metrics_filtered, option_type, timestamp, participant,
+                                                  strike_range,
+                                                  last_price, option_type)
+            frame_key = f"{frames_prefix}{timestamp.strftime('%Y%m%d%H%M%S')}.png"
+            do_space.upload_to_spaces(frame_path, INTRADAYBOT_SPACENAME, frame_key)
+            new_frames.append(frame_key)
+            metadata['frames'].append(frame_key)
+            os.remove(frame_path)
+
+        if new_frames:
+            metadata['last_timestamp'] = str(new_data['effective_datetime'].max())
+            do_space.update_metadata(INTRADAYBOT_SPACENAME, metadata_key, metadata)
+
+        video_url, latest_frame_url = generate_video_from_frames(do_space, INTRADAYBOT_SPACENAME, metadata['frames'],
+                                                                 f"depthview_{combo_id}")
+
+        results[option_type] = {
+            'video_url': video_url,
+            'latest_frame_url': latest_frame_url
+        }
+
+    # Prepare the message for Discord
+    title = f"📊 {session_date} Intraday Depthflow - {type_metric.upper()} Changes"
+    description = (
+        f"Intraday Depthview for {session_date}.\n"
+        f"This chart showcases changes in intraday positioning movements compared to the initial state at {t_0} "
+        f"for options expiring in the upcoming 30 days."
+    )
+    fields = [
+        {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
+        {"name": "👥 Participant:", "value": PARTICIPANT_MAPPING.get(participant, 'Unknown Participant'),
+         "inline": True},
+        {"name": "📈 Metric:", "value": f"Change in {type_metric}", "inline": True},
+        {"name": "🎯 Strike Range:", "value": f"{strike_range[0]} - {strike_range[1]}", "inline": True},
+        {"name": "🔢 Option Types:", "value": ", ".join(position_types), "inline": True},
+        {"name": "🕰️ Baseline Time:", "value": str(t_0), "inline": True}
+    ]
+
+    # Send Discord message with image and video URLs
+    message_success = send_discord_message(
+        results,
+        as_of_time_stamp,
+        session_date,
+        PARTICIPANT_MAPPING.get(participant, 'Unknown Participant'),
+        strike_range,
+        expiration,
+        position_types,
+        f"Change in {type_metric}",
+        webhook_url,
+        description,
+        fields
+    )
+
+    if message_success:
+        logging.info(f"Successfully processed and sent intraday depthview data for {session_date}")
+    else:
+        logging.error(f"Failed to process or send intraday depthview data for {session_date}")
+
+    return message_success
+
+
+def compute_difference_from_initial(current_data, initial_data, participant):
+    """
+    Compute the difference between current data and initial data for the specified metric.
+    """
+    merged_data = current_data.merge(initial_data, on=['option_symbol','call_put_flag','expiration_date_original','strike_price',],
+                                     suffixes=('', '_initial'))
+    merged_data[f'{participant}_posn_change'] = merged_data[f'{participant}_posn'] - merged_data[f'{participant}_posn_initial']
+    return merged_data
+
 # ---------------- HEATMAP GIF -------------------- #
 
 def generate_heatmap_gif(
@@ -1407,10 +1681,11 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
 
 
 if __name__ == "__main__":
-    #intraday_depthview_flow()
-    #test_zero_dte_flow()
+    intraday_depthview()
+    #intraday_depthflow()
+    test_zero_dte_flow()
     test_one_dte_flow()
-    #test_GEX_flow()
+    test_GEX_flow()
     # zero_dte_flow()
     # one_dte_flow()
     # GEX_flow()

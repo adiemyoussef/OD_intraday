@@ -190,8 +190,8 @@ deployments:
   parameters: {}
 
 
-- name: Depthview Flow
-  entrypoint: charting/intraday_beta_v3.py:intraday_depthview_flow
+- name: Depthview
+  entrypoint: charting/intraday_beta_v3.py:intraday_depthview
   work_pool:
     name: intraday-paperspace-agent
     work_queue_name:

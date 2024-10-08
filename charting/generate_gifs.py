@@ -996,6 +996,7 @@ def generate_frame_new(data, candlesticks, timestamp, participant, strike_input,
                             lambda x: x[position]['time'] if isinstance(x, dict) and position in x else None)
                     )
                     fig.add_trace(trace_negative)
+
                 else:
                     trace = go.Scatter(
                         x=x_values[valid_mask],
@@ -1147,6 +1148,7 @@ def generate_frame_new(data, candlesticks, timestamp, participant, strike_input,
         fig.write_image(tmpfile.name, scale=3)
 
     return fig, tmpfile.name
+
 def generate_gif(data,candlesticks, session_date, participant_input, position_type_input, strike_input, expiration_input,last_price,
                  metric = "positioning",
                  img_path='config/images/logo_dark.png',
@@ -1519,10 +1521,6 @@ def send_to_discord_new(webhook_url: str, file_paths_or_urls: List[dict], conten
         "content": content or ""
     }
 
-    # payload = {
-    #     # "embeds": [embed],
-    #     "content": "Toto test"
-    # }
 
     # Send the embedded message to Discord
     try:
