@@ -875,6 +875,26 @@ def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_datetime: str, l
             [1.0, 'green'],  # Highest value
         ]
 
+    if type == 'GEX':
+        color_bar= dict(
+         title=title_colorbar,
+         tickvals=[-10, -5, 0, 5, 10],
+         ticktext=['-10', '-5', '0', '5', '10']
+        )
+        z_min=-10 #symmetric_log_scale(val_range)
+        z_max=10 #symmetric_log_scale(val_range)
+
+    else:
+
+        color_bar= dict(
+         title=title_colorbar,
+         tickvals=[-10000, -5000, 0, 5000, 10000],
+         ticktext=['-10000', '-5000', '0', '5000', '10000']
+        )
+        z_min=-10000 #symmetric_log_scale(val_range)
+        z_max=10000 #symmetric_log_scale(val_range)
+
+
     # Calculate the mid value for the color scale (centered at zero)
     zmin = heatmap_data[type].min()
     zmax = heatmap_data[type].max()
@@ -897,18 +917,14 @@ def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_datetime: str, l
         text=np.where(np.isnan(rounded_z), '', rounded_z),
         texttemplate="%{text}",
         colorscale=colorscale,
-        zmin=-10000, #symmetric_log_scale(val_range),
-        zmax=10000, #symmetric_log_scale(val_range),
+        zmin=z_min, #symmetric_log_scale(val_range),
+        zmax=z_max, #symmetric_log_scale(val_range),
         # colorbar=dict(
         #     title=title_colorbar,
         #     tickvals=symmetric_log_scale(np.array([-val_range, 0, val_range])),
         #     ticktext=[-round(val_range), 0, round(val_range)]
         # ),
-        colorbar=dict(
-            title=title_colorbar,
-            tickvals=[-10000, -5000, 0, 5000, 10000],
-            ticktext=['-10000', '-5000', '0', '5000', '10000']
-        ),
+        colorbar=color_bar,
         zmid=0,
         hovertemplate='Expiration: %{x}<br>Strike: %{y}<br>' + type + ': %{text}<extra></extra>'
     ))
