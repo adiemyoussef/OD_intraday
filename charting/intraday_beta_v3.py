@@ -1075,7 +1075,7 @@ def generate_depthview_frame(metrics, type_metric, timestamp, participant, strik
         frame_path = tmpfile.name
 
     return frame_path
-
+#----------------- DEPTHVIEW POSITION ----------------------#
 @flow(name="Intraday Depthview Flow")
 def intraday_depthview(
     session_date: Optional[date] = None,
@@ -1199,7 +1199,133 @@ def intraday_depthview(
         logging.error(f"Failed to process or send intraday depthview data for {session_date}")
 
     return message_success
-#----------------- DEPTH FLOW ----------------------#
+
+#----------------- DEPTHVIEW GEX ----------------------#
+@flow(name="Intraday Depthview - GEX")
+def intraday_depthview_gex(
+    session_date: Optional[date] = None,
+    strike_range: Optional[List[int]] = None,
+    expiration: Optional[str] = None,
+    participant: str = 'mm',
+    position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
+    type_metric: str = 'GEX',
+    webhook_url: str = None
+):
+    prefect_logger = get_run_logger()
+    # Set default values
+    webhook_url = webhook_url or get_webhook_url('test-depthview-gex')
+    #webhook_url = webhook_url or get_webhook_url('depthview-position')
+
+
+
+    if session_date is None:
+        session_date = datetime.now().date()
+    if strike_range is None:
+        strike_range = get_strike_range(prod_pg_data, session_date, range_value=0.025, range_type='percent')
+    if expiration is None:
+        #TODO: it should be the default amount of expirations
+        expiration = None
+
+    # Determine start time based on current time
+    current_time = datetime.now().time()
+    if current_time < time(12, 0):
+        start_time = START_TIME_PRE_MARKET
+    elif time(12, 0) <= current_time < time(23, 0):
+        start_time = START_TIME_MARKET
+    else:
+        start_time = START_TIME_PRE_MARKET
+
+    logging.info(f"Start time set to: {start_time}")
+
+    # Fetch data
+    metrics, candlesticks, last_price = fetch_data(session_date, None, strike_range, expiration, start_time)
+    as_of_time_stamp = str(metrics["effective_datetime"].max())
+    last_price = last_price.values[0][0]
+    # metrics = metrics[metrics["effective_datetime"] == as_of_time_stamp]
+
+    results = {}
+
+    for option_type in position_types:
+        prefect_logger.info(f"Processing: {session_date}_{participant}_{strike_range}_{option_type}_{type_metric}")
+
+        combo_id = f"{session_date}_{participant}_{'-'.join(map(str, strike_range))}_{option_type}_{type_metric}"
+        metadata_key = f"metadata/depthview_{combo_id}.json"
+        frames_prefix = f"frames/depthview_{combo_id}/"
+
+
+        metadata = do_space.get_or_initialize_metadata(INTRADAYBOT_SPACENAME, metadata_key)
+
+        last_timestamp = pd.to_datetime(metadata['last_timestamp']) if metadata['last_timestamp'] else None
+
+        if last_timestamp:
+            new_data = metrics[metrics['effective_datetime'] > last_timestamp]
+        else:
+            new_data = metrics
+
+        new_frames = []
+        for timestamp in new_data['effective_datetime'].unique():
+            metrics_filtered = metrics[metrics["effective_datetime"] == timestamp]
+
+            frame_path = generate_depthview_frame(metrics_filtered, type_metric, timestamp, participant, strike_range,
+                                                  last_price, option_type)
+            frame_key = f"{frames_prefix}{timestamp.strftime('%Y%m%d%H%M%S')}.png"
+            do_space.upload_to_spaces(frame_path, INTRADAYBOT_SPACENAME, frame_key)
+            new_frames.append(frame_key)
+            metadata['frames'].append(frame_key)
+            os.remove(frame_path)
+
+        if new_frames:
+            metadata['last_timestamp'] = str(new_data['effective_datetime'].max())
+            do_space.update_metadata(INTRADAYBOT_SPACENAME, metadata_key, metadata)
+
+        video_url, latest_frame_url = generate_video_from_frames(do_space, INTRADAYBOT_SPACENAME, metadata['frames'],
+                                                                 f"depthview_{combo_id}")
+
+        results[option_type] = {
+            'video_url': video_url,
+            'latest_frame_url': latest_frame_url
+        }
+
+
+    # Prepare the message for Discord
+    title = f"📊 {session_date} Intraday Depthview - {type_metric.upper()}"
+    description = (
+        f"Intraday Depthview for {session_date}.\n"
+        f"This chart showcases intraday Market Makers GEX movements for options expiring for the upcoming 30 days."
+    )
+    fields = [
+        {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
+        {"name": "👥 Participant:", "value": PARTICIPANT_MAPPING.get(participant, 'Unknown Participant'),
+         "inline": True},
+        {"name": "📈 Metric:", "value": type_metric, "inline": True},
+        {"name": "🎯 Strike Range:", "value": f"{strike_range[0]} - {strike_range[1]}", "inline": True},
+        {"name": "🔢 Option Types:", "value": ", ".join(position_types), "inline": True}
+    ]
+
+
+    # Send Discord message with image and video URLs
+    message_success = send_discord_message(
+        results,
+        as_of_time_stamp,
+        session_date,
+        PARTICIPANT_MAPPING.get(participant, 'Unknown Participant'),
+        strike_range,
+        expiration,
+        position_types,
+        type_metric,
+        webhook_url,
+        description,
+        fields
+    )
+
+    if message_success:
+        logging.info(f"Successfully processed and sent intraday depthview data for {session_date}")
+    else:
+        logging.error(f"Failed to process or send intraday depthview data for {session_date}")
+
+    return message_success
+
+#----------------- DEPTHFLOW POSITION ----------------------#
 @flow(name="Intraday Depthflow")
 def intraday_depthflow(
         session_date: Optional[date] = None,
@@ -1681,11 +1807,12 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
 
 
 if __name__ == "__main__":
-    intraday_depthview()
+    intraday_depthview_gex()
+    #intraday_depthview()
     #intraday_depthflow()
-    test_zero_dte_flow()
-    test_one_dte_flow()
-    test_GEX_flow()
+    #test_zero_dte_flow()
+    #test_one_dte_flow()
+    #test_GEX_flow()
     # zero_dte_flow()
     # one_dte_flow()
     # GEX_flow()
