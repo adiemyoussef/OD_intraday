@@ -385,7 +385,7 @@ def heatmap_generation_flow(
     df_book: pd.DataFrame = None,
     steps: float = 2.5,
     range: float = 0.03,
-    open_price: float = 5750,
+    open_price: float = 5780,
     effective_datetime: str = None,
     effective_date: str = '2024-09-27',
     effective_time: str = '09:00:00'
