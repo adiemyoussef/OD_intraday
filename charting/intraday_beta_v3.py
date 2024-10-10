@@ -1229,8 +1229,9 @@ def intraday_depthview_gex(
 ):
     prefect_logger = get_run_logger()
     # Set default values
-    webhook_url = webhook_url or get_webhook_url('test-depthview-gex')
-    #webhook_url = webhook_url or get_webhook_url('depthview-position')
+    webhook_url = webhook_url or get_webhook_url('depthview-gex')
+    #webhook_url = webhook_url or get_webhook_url('test-depthview-gex')
+
 
 
 
