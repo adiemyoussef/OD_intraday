@@ -393,7 +393,7 @@ def intraday_gamma_heatmap(db, pg, effective_datetime: str, effective_date: str)
     #                          effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5440, y_max=5735)
 
     gamma_chart = plot_gamma_test(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks,
-                                  y_min=5580, y_max=5850,
+                                  y_min=5600, y_max=5900,
                                   save_fig=False, fig_show=False,
                                   fig_path=None, show_projection_line=False)
 
@@ -409,8 +409,8 @@ def intraday_gamma_heatmap(db, pg, effective_datetime: str, effective_date: str)
         gamma_chart=gamma_chart,
         as_of_time_stamp=effective_datetime,
         session_date=effective_date,
-        y_min=5550,
-        y_max=5850,
+        y_min=5600,
+        y_max=5900,
         webhook_url=HEATMAP_CHANNEL  # Make sure to define this
     )
 
