@@ -190,7 +190,7 @@ deployments:
   parameters: {}
 
 
-- name: Depthview
+- name: Depthview - Posn
   entrypoint: charting/intraday_beta_v3.py:intraday_depthview
   work_pool:
     name: intraday-paperspace-agent
