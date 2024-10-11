@@ -142,6 +142,7 @@ WEBHOOK_URLS = {
     'gex': 'https://discord.com/api/webhooks/1277599354932428842/c2Ix3cPdLzI0fzxDdoGRye8nyKPLZj0dqmIxOiRQP2DYFx7YbgphUe8rAsWqkZUKiD0f',
     'depthview-position': 'https://discord.com/api/webhooks/1293204122777944125/OdxElt15NAE5yCbBuAc8RXSoYm7dOEiVoJX1LS2-6ZjjAgy61x9N5dyYwtIc_2BlFB_5',
     'depthview-gex': 'https://discord.com/api/webhooks/1293894907328593971/SlK5ojRPg34dshuTM4g4NfHOAiWcCyzB1x-K-8Dgq9UqvyHixO61zUKzUqFw8Jlk_RyJ',
+    'depthview-dex': 'https://discord.com/api/webhooks/1294119388915695646/XnEu1VWR2G4UO4K95ifDQNBf0TtYIs_uQAEa5bULZdPvaOEP1sS2tMxJdck7Zprvh9r-',
     'options_charts': 'TOTO',
     'dev': 'https://discord.com/api/webhooks/1290327506741629121/eoNGb8jZhlgmnDYyuKYBk90wm6it8atN88B1kcCJxZbyNCgZqQ5bJC2_pvZZDThIMi6I',
     'test-0dte': 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ',
@@ -149,6 +150,7 @@ WEBHOOK_URLS = {
     'test-gex-0dte': 'https://discord.com/api/webhooks/1290327206006100018/aaFlt1_zGCYiAinB1PysmA96BCK6Yrn839g-omhyHjw2CaCR8btmesTRy8ij5cdqoW-E',
     'test-depthview': 'https://discord.com/api/webhooks/1291105984235962389/foibAP6OtQ37rrm6HzIMCFNgP399BJtQ53ZYD816pH8lUb6i6w1oS7b-61a0X4aclXWM',
     'test-depthview-gex': 'TOTO',
+    'test-depthview-dex': 'TOTO',
     }
 
 class WebhookUrl(Enum):
