@@ -1228,8 +1228,8 @@ def intraday_depthview_dex(
 ):
     prefect_logger = get_run_logger()
     # Set default values
-    #webhook_url = webhook_url or get_webhook_url('depthview-dex')
-    webhook_url = webhook_url or get_webhook_url('test-depthview-dex')
+    webhook_url = webhook_url or get_webhook_url('depthview-dex')
+    #webhook_url = webhook_url or get_webhook_url('test-depthview-dex')
 
 
     if session_date is None:
