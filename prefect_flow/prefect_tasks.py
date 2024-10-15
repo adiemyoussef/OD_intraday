@@ -527,6 +527,7 @@ def intraday_charm_heatmap(db, pg, effective_datetime: str, effective_date: str)
         df=df_charm,
         effective_datetime=effective_datetime,
         spx=spx_candlesticks,
+        y_min=5750, y_max=5950,
         fig_show=False  # Set to True if you want to display the figure
     )
 
