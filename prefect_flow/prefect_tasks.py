@@ -1602,12 +1602,12 @@ async def trigger_gif_flows():
             # "0 DTE Flow",
             # "1 DTE Flow",
             # "MM GEX Flow",
-            "TEST - GEX gifs"
+            "TEST - GEX gifs",
             "TEST - 0 DTE Flow",
             "TEST - 1 DTE Flow",
             "Depthview - GEX",
             "Depthview - DEX",
-            "Depthview - Posn",
+            "Depthview - Posn"
 
         ]
         await trigger_deployments(deployment_names)
