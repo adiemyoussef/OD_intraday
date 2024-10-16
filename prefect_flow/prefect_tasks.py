@@ -1603,12 +1603,13 @@ async def trigger_gif_flows():
             # "0 DTE Flow",
             # "1 DTE Flow",
             # "MM GEX Flow",
+            "TEST - GEX gifs"
+            "TEST - 0 DTE Flow",
+            "TEST - 1 DTE Flow",
             "Depthview - GEX",
             "Depthview - DEX",
             "Depthview - Posn",
-            "TEST - 0 DTE Flow",
-            "TEST - 1 DTE Flow",
-            "TEST - GEX gifs"
+
         ]
         await trigger_deployments(deployment_names)
         prefect_logger.info("All gif flows have been triggered.")
