@@ -1190,7 +1190,7 @@ def plot_gamma_test(df_heatmap: pd.DataFrame, minima_df: pd.DataFrame, maxima_df
     return fig
 
 
-def plot_charm_test(df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None, save_fig=False, fig_show=False, grid=False):
+def plot_charm_test(df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = None,y_min=5750, y_max=5950, save_fig=False, fig_show=False, grid=False):
     if not isinstance(effective_datetime, pd.Timestamp):
         effective_datetime = pd.to_datetime(effective_datetime)
 
@@ -1294,6 +1294,16 @@ def plot_charm_test(df: pd.DataFrame, effective_datetime, spx: pd.DataFrame = No
         y0=y.min(),
         y1=y.max(),
         line=dict(color="white", width=2, dash="dot"),
+    )
+
+    # Set y-axis ticks and range
+    y_ticks = np.arange(10 * round(y_min / 10), 10 * round(y_max / 10) + 10, 10)
+    fig.update_yaxes(
+        tickmode='array',
+        tickvals=y_ticks,
+        ticktext=y_ticks,
+        side='right',
+        range=[y_min, y_max]
     )
 
     if grid:

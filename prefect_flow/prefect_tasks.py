@@ -393,7 +393,7 @@ def intraday_gamma_heatmap(db, pg, effective_datetime: str, effective_date: str)
     #                          effective_datetime=effective_datetime, spx=spx_candlesticks, y_min=5440, y_max=5735)
 
     gamma_chart = plot_gamma_test(df_gamma, minima_df, maxima_df, effective_datetime, spx_candlesticks,
-                                  y_min=5600, y_max=5900,
+                                  y_min=5750, y_max=5950,
                                   save_fig=False, fig_show=False,
                                   fig_path=None, show_projection_line=False)
 
@@ -409,8 +409,8 @@ def intraday_gamma_heatmap(db, pg, effective_datetime: str, effective_date: str)
         gamma_chart=gamma_chart,
         as_of_time_stamp=effective_datetime,
         session_date=effective_date,
-        y_min=5600,
-        y_max=5900,
+        y_min=5750,
+        y_max=5950,
         webhook_url=HEATMAP_CHANNEL  # Make sure to define this
     )
 
@@ -527,6 +527,7 @@ def intraday_charm_heatmap(db, pg, effective_datetime: str, effective_date: str)
         df=df_charm,
         effective_datetime=effective_datetime,
         spx=spx_candlesticks,
+        y_min=5750, y_max=5950,
         fig_show=False  # Set to True if you want to display the figure
     )
 
@@ -542,8 +543,8 @@ def intraday_charm_heatmap(db, pg, effective_datetime: str, effective_date: str)
         charm_chart=charm_chart,
         as_of_time_stamp=effective_datetime,
         session_date=effective_date,
-        y_min=5580,
-        y_max=5850,
+        y_min=5750,
+        y_max=5950,
         webhook_url=CHARM_HEATMAP_CHANNEL  # Make sure to define this
     )
 
@@ -1494,8 +1495,7 @@ def Intraday_Flow():
                     db_utils.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
                     pg_data.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
                     prefect_logger.info(f"End of book insertion...")
-                    # Get the current price (you'll need to implement this function)
-                    # current_price = get_current_price()
+
 
                     # TODO: if it's the 1800 file: export as unrevised initial book for the next effective datge
 
@@ -1530,7 +1530,7 @@ def Intraday_Flow():
                             #--------- GENERATE HEATMAPS -------------------#
                             prefect_logger.info("It's before 4 PM ET. Proceeding with heatmap generation.")
                             prefect_logger.info(f'final_book_clean_insert sent to heatmap_generation: {final_book_clean_insert}')
-                            heatmap_generation_flow(final_book_clean_insert,open_price = 5780, effective_datetime=effective_datetime)
+                            heatmap_generation_flow(final_book_clean_insert,open_price = 5850, effective_datetime=effective_datetime)
 
 
                         # TODO: modify the other params to remove this and start at the same time as the book generation
@@ -1564,8 +1564,7 @@ def Intraday_Flow():
         prefect_logger.error(f"Error in Intraday_Flow: {e}")
         flow_status = f"failed: {str(e)}"
     finally:
-        # sftp_utils.disconnect()  # Disconnect at the end of the flow
-        # prefect_logger.info(f"Finished flow in {time_module.time() - flow_start_time} sec.")
+
         # Send flow status message to the new queue
         try:
             # Ensure the new queue exists
