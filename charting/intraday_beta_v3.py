@@ -1950,12 +1950,12 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
 
 
 if __name__ == "__main__":
-    #intraday_depthview_gex()
-    #intraday_depthview()
-    #intraday_depthflow()
+    intraday_depthview_gex()
+    intraday_depthview()
+    intraday_depthflow()
     test_zero_dte_flow()
-    #test_one_dte_flow()
-    #test_GEX_flow()
+    test_one_dte_flow()
+    test_GEX_flow()
     # zero_dte_flow()
     # one_dte_flow()
     # GEX_flow()
