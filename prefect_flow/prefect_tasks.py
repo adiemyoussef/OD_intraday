@@ -1505,6 +1505,7 @@ def Intraday_Flow():
                     prefect_logger.info(f"Inserting book ...")
                     db_utils.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
                     pg_data.insert_progress('intraday', 'intraday_books', final_book_clean_insert)
+                    stage_pg_data.insert_progress('public', 'charts_intradaybook', final_book_clean_insert)
                     prefect_logger.info(f"End of book insertion...")
 
 
@@ -1558,7 +1559,7 @@ def Intraday_Flow():
                         # heatmap_generation_flow(final_book_clean_insert,)
                         # generate_charts(final_book_clean_insert,effective_datetime=effective_datetime)
 
-                    stage_pg_data.insert_progress('public', 'charts_intradaybook', final_book_clean_insert)
+
                     flow_status = "completed successfully"
                     prefect_logger.info(f"Finished flow in {time_module.time() - flow_start_time} sec.")
 
