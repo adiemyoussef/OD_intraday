@@ -68,13 +68,23 @@ prod_pg_data = PostGreData(
     password=POSGRE_PROD_DB_PASSWORD,
     database=POSGRE_PROD_DB_NAME
 )
+stage_pg_data = PostGreData(
+    host=POSGRE_STAGE_DB_HOST,
+    port=POSGRE_STAGE_DB_PORT,
+    user=POSGRE_STAGE_DB_USER,
+    password=POSGRE_STAGE_DB_PASSWORD,
+    database=POSGRE_STAGE_DB_NAME
+)
+
 rabbitmq_utils = RabbitMQUtilities(RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_USER, RABBITMQ_PASS, logger=logger)
 sftp_utils = SFTPUtility(SFTP_HOST, SFTP_PORT, SFTP_USERNAME, SFTP_PASSWORD, logger=logger)
 
 logger.info(f"Initializing db status: {db_utils.get_status()}")
 logger.info(f'Postgre Status -- > {pg_data.get_status()}')
 logger.info(f'Prod Postgre Status -- > {prod_pg_data.get_status()}')
+logger.info(f'Stage Postgre Status -- > {stage_pg_data.get_status()}')
 logger.info(f"Initializing RabbitMQ status: {rabbitmq_utils.get_status()}")
+
 
 
 
@@ -1547,6 +1557,7 @@ def Intraday_Flow():
                         # heatmap_generation_flow(final_book_clean_insert,)
                         # generate_charts(final_book_clean_insert,effective_datetime=effective_datetime)
 
+                    stage_pg_data.insert_progress('public', 'charts_intradaybook', final_book_clean_insert)
                     flow_status = "completed successfully"
                     prefect_logger.info(f"Finished flow in {time_module.time() - flow_start_time} sec.")
 
