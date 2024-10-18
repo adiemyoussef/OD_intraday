@@ -83,6 +83,7 @@ def fetch_data(session_date: str, effective_datetime: str, strike_range: List[in
     metrics_query = f"""
     SELECT * FROM intraday.intraday_books
     WHERE effective_date = '{session_date}'
+    AND expiration_date != '2024-10-18 09:15:00'
     """
 
     if effective_datetime is not None:
@@ -142,6 +143,7 @@ def fetch_data_depthview(session_date: str, strike_range: List[int], expiration:
     WHERE effective_date = '{session_date}'
     AND effective_datetime >= (SELECT MAX(effective_datetime) FROM intraday.intraday_books where effective_date = '{session_date}')
     AND strike_price BETWEEN {strike_range[0]} AND {strike_range[1]}
+    AND expiration_date != '2024-10-18 09:15:00'
     """
 
     if expiration is not None:
@@ -1948,10 +1950,10 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
 
 
 if __name__ == "__main__":
-    intraday_depthview_gex()
+    #intraday_depthview_gex()
     #intraday_depthview()
     #intraday_depthflow()
-    #test_zero_dte_flow()
+    test_zero_dte_flow()
     #test_one_dte_flow()
     #test_GEX_flow()
     # zero_dte_flow()
