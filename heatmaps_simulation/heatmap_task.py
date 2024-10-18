@@ -430,6 +430,7 @@ def heatmap_generation_flow(
     prefect_logger.info(f"Built unpivoted Gamma data. Shape: {gamma_to_push.shape}")
     prefect_logger.info(f'{db.get_status()}')
     db.connect()
+    stage_pg_data.connect()
     prefect_logger.info(f'{db.get_status()}')
     db.insert_progress('intraday','intraday_gamma',gamma_to_push)
 
