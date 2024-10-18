@@ -1292,6 +1292,7 @@ def Intraday_Flow():
 
     db_utils.connect()
     pg_data.connect()
+    stage_pg_data.connect()
     try:
 
         # TODO: initial_price, last_price = get_prices()
