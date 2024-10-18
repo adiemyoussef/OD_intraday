@@ -40,6 +40,17 @@ db = DatabaseUtilities(DB_HOST, int(DB_PORT), DB_USER, DB_PASSWORD, DB_NAME)
 db.connect()
 print(f'{db.get_status()}')
 
+stage_pg_data = PostGreData(
+    host=POSGRE_STAGE_DB_HOST,
+    port=POSGRE_STAGE_DB_PORT,
+    user=POSGRE_STAGE_DB_USER,
+    password=POSGRE_STAGE_DB_PASSWORD,
+    database=POSGRE_STAGE_DB_NAME
+)
+print(f'{stage_pg_data.get_status()}')
+
+
+
 DEV_CHANNEL ='https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
 
 
@@ -421,6 +432,7 @@ def heatmap_generation_flow(
     db.connect()
     prefect_logger.info(f'{db.get_status()}')
     db.insert_progress('intraday','intraday_gamma',gamma_to_push)
+
     prefect_logger.info("Inserted gamma data into database")
 
     # Charm
@@ -431,6 +443,8 @@ def heatmap_generation_flow(
     db.connect()
     prefect_logger.info(f'{db.get_status()}')
     db.insert_progress('intraday','intraday_charm',charm_to_push)
+    stage_pg_data.insert_progress('public', 'charts_intradaygamma', gamma_to_push)
+    stage_pg_data.insert_progress('public', 'charts_intradaycharm', charm_to_push)
     prefect_logger.info("Inserted Charm data into database")
 
 if __name__ == "__main__":
