@@ -445,6 +445,7 @@ def heatmap_generation_flow(
     db.insert_progress('intraday','intraday_charm',charm_to_push)
     stage_pg_data.insert_progress('public', 'charts_intradaygamma', gamma_to_push)
     stage_pg_data.insert_progress('public', 'charts_intradaycharm', charm_to_push)
+    print("Coucou")
     prefect_logger.info("Inserted Charm data into database")
 
 if __name__ == "__main__":
