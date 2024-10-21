@@ -845,7 +845,9 @@ def generate_frame_last(data, candlesticks, timestamp, participant, strike_input
 
     return fig, tmpfile.name
 
+@task(name= 'Generate frame')
 def generate_frame_new(data, candlesticks, timestamp, participant, strike_input, expiration_input, position_type, metric_to_compute, last_price, full_img_path):
+    prefect_logger = get_run_logger()
     if metric_to_compute == 'GEX':
         x_axis_title = "Notional Gamma (M$)"
     elif metric_to_compute == 'DEX':
@@ -868,28 +870,28 @@ def generate_frame_new(data, candlesticks, timestamp, participant, strike_input,
                 img.save(buffered, format="PNG")
                 img_str = base64.b64encode(buffered.getvalue()).decode()
                 img_src = f"data:image/png;base64,{img_str}"
-            print(f"Image loaded successfully from: {full_img_path}")
+            prefect_logger.info(f"Image loaded successfully from: {full_img_path}")
         else:
-            print(f"Image file not found at: {full_img_path}")
-            print(f"Current working directory: {os.getcwd()}")
-            print(f"Contents of {os.path.dirname(full_img_path)}:")
-            print(os.listdir(os.path.dirname(full_img_path)))
+            prefect_logger.info(f"Image file not found at: {full_img_path}")
+            prefect_logger.info(f"Current working directory: {os.getcwd()}")
+            prefect_logger.info(f"Contents of {os.path.dirname(full_img_path)}:")
+            prefect_logger.info(os.listdir(os.path.dirname(full_img_path)))
 
             if platform.system() == "Darwin":
                 lower_case_files = [f.lower() for f in os.listdir(os.path.dirname(full_img_path))]
                 if os.path.basename(full_img_path).lower() in lower_case_files:
-                    print("Note: The image file might exist with a different case. macOS is case-insensitive but case-preserving.")
+                    prefect_logger.info("Note: The image file might exist with a different case. macOS is case-insensitive but case-preserving.")
     except Exception as e:
-        print(f"Error loading image: {e}")
-        print(f"Attempted to load from: {full_img_path}")
-        print(f"Current working directory: {os.getcwd()}")
+        prefect_logger.info(f"Error loading image: {e}")
+        prefect_logger.info(f"Attempted to load from: {full_img_path}")
+        prefect_logger.info(f"Current working directory: {os.getcwd()}")
 
     metrics_data = data[data['effective_datetime'] <= timestamp].copy()
 
     if candlesticks is not None and 'effective_datetime' in candlesticks.columns:
         candlesticks_data = candlesticks[candlesticks['effective_datetime'] == timestamp].copy()
     else:
-        print("Candlesticks data is missing or does not contain 'effective_datetime' column. SPX Spot Price line will not be added.")
+        prefect_logger.info("Candlesticks data is missing or does not contain 'effective_datetime' column. SPX Spot Price line will not be added.")
         candlesticks_data = pd.DataFrame()
 
     if strike_input != "all":

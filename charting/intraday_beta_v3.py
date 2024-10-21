@@ -272,7 +272,7 @@ def generate_video_task(data: pd.DataFrame, candlesticks: pd.DataFrame, session_
 
 
 
-@task
+@task(name= 'Generate video')
 def test_generate_video_task(data, candlesticks, session_date, participant, strike_range, expiration,
                              position_types, last_price, metric='positioning', img_path='config/images/logo_dark.png',
                              space_name=INTRADAYBOT_SPACENAME):
@@ -1950,9 +1950,11 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
 
 
 if __name__ == "__main__":
-    intraday_depthview_gex()
     intraday_depthview()
-    intraday_depthflow()
+    intraday_depthview_dex()
+    intraday_depthview_gex()
+
+    #intraday_depthflow()
     test_zero_dte_flow()
     test_one_dte_flow()
     test_GEX_flow()
