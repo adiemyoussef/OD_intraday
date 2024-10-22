@@ -14,7 +14,7 @@ push:
 
 # the deployments section allows you to provide configuration for deploying flows
 deployments:
-- name: paperspace_deploy_prod
+- name: Intraday Flow
   version:
   tags: []
   description: "\n    This flow processes intraday financial data for options trading.\n\
@@ -33,7 +33,7 @@ deployments:
     work_queue_name:
     job_variables: {}
   schedules:
-  - cron: 0,10,20,30,40,50,0,10,20 8-16 * * 1-5
+  - cron: 0,10,20,30,40,50,0,10,20 0-16 * * 1-5
     timezone: America/New_York
     day_or: true
     active: true
@@ -189,7 +189,6 @@ deployments:
   description:
   parameters: {}
 
-
 - name: Depthview - Posn
   entrypoint: charting/intraday_beta_v3.py:intraday_depthview
   work_pool:
@@ -311,6 +310,7 @@ deployments:
   description:
   parameters: {}
 
+#----------------- Heatmap ------------------#
 - name: Generate Heatmap
   entrypoint: heatmaps_simulation/heatmap_task.py:heatmap_generation_flow
   work_pool:

@@ -1,7 +1,7 @@
 import json
 import math
 import uuid
-
+from decimal import Decimal
 import pandas as pd
 import pytz
 import requests
@@ -83,7 +83,6 @@ def fetch_data(session_date: str, effective_datetime: str, strike_range: List[in
     metrics_query = f"""
     SELECT * FROM intraday.intraday_books
     WHERE effective_date = '{session_date}'
-    AND expiration_date != '2024-10-18 09:15:00'
     """
 
     if effective_datetime is not None:
@@ -423,7 +422,269 @@ def send_discord_message(file_paths: List[str], as_of_time_stamp: str, session_d
 
     return success
 
+# ------------------ DEPTHVIEW ------------------#
+@task
+def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_datetime: str, latest_price: float, strike_min: float, strike_max: float, option_type:str = "all", show_line_price:bool = False):
+    #todo: if gamma --> change colorscale to blue-red,
+    prefect_logger = get_run_logger()
 
+    prefect_logger.info(f"Plot depthview for: {option_type} - {type} ")
+    #title formatting
+
+    if type == "GEX":
+        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Market Makers' GEX</span>"
+        colorscale = "RdBu"
+        title_colorbar = f"{type}<br>(M$/point)"
+
+    elif type == "DEX":
+        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer DEX</span>"
+        title_colorbar = f"{type}<br>(δ)"
+
+    elif type == "position":
+        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer Position</span>"
+        title_colorbar = f"{type}<br>(contracts #)"
+
+    if option_type == "C":
+        option_types_title = "Filtered for calls only"
+    elif option_type == "P":
+        option_types_title = "Filtered for puts only"
+    else:
+        option_types_title = "All contracts, puts and calls combined"
+
+    # Ensure that the DataFrame values are floats
+    heatmap_data[type] = heatmap_data[type].astype(float)
+    heatmap_data['strike_price'] = heatmap_data['strike_price'].astype(float)
+    heatmap_data['expiration_date_original'] = heatmap_data['expiration_date_original'].astype(str)
+    z = heatmap_data.pivot(index='strike_price', columns='expiration_date_original', values=type).values
+
+    if type != "GEX":
+        colorscale = [
+            [0.0, 'red'],  # Lowest value
+            [0.5, 'white'],  # Mid value at zero
+            [1.0, 'green'],  # Highest value
+        ]
+
+    if type == 'GEX':
+        color_bar= dict(
+         title=title_colorbar,
+         tickvals=[-10, -5, 0, 5, 10],
+         ticktext=['-10', '-5', '0', '5', '10']
+        )
+        z_min=-10 #symmetric_log_scale(val_range)
+        z_max=10 #symmetric_log_scale(val_range)
+
+    else:
+
+        color_bar= dict(
+         title=title_colorbar,
+         tickvals=[-10000, -5000, 0, 5000, 10000],
+         ticktext=['-10000', '-5000', '0', '5000', '10000']
+        )
+        z_min=-10000 #symmetric_log_scale(val_range)
+        z_max=10000 #symmetric_log_scale(val_range)
+
+
+    # Calculate the mid value for the color scale (centered at zero)
+    zmin = heatmap_data[type].min()
+    zmax = heatmap_data[type].max()
+    val_range = max(abs(zmin), abs(zmax))
+
+    # Apply symmetric log scale transformation
+    def symmetric_log_scale(value, log_base=10):
+        return np.sign(value) * np.log1p(np.abs(value)) / np.log(log_base)
+
+    z_log = symmetric_log_scale(z)
+
+    # Round the original values for display in hover text
+    rounded_z = np.around(z, decimals=2)
+
+    # Create the heatmap using Plotly
+    fig = go.Figure(data=go.Heatmap(
+        z=z, #z_log,
+        x=heatmap_data['expiration_date_original'].unique(),
+        y=heatmap_data['strike_price'].unique(),
+        text=np.where(np.isnan(rounded_z), '', rounded_z),
+        texttemplate="%{text}",
+        colorscale=colorscale,
+        zmin=z_min, #symmetric_log_scale(val_range),
+        zmax=z_max, #symmetric_log_scale(val_range),
+        # colorbar=dict(
+        #     title=title_colorbar,
+        #     tickvals=symmetric_log_scale(np.array([-val_range, 0, val_range])),
+        #     ticktext=[-round(val_range), 0, round(val_range)]
+        # ),
+        colorbar=color_bar,
+        zmid=0,
+        hovertemplate='Expiration: %{x}<br>Strike: %{y}<br>' + type + ': %{text}<extra></extra>'
+    ))
+
+    # Add last price line if requested
+    if show_line_price and latest_price is not None:
+        # Calculate the time delta for extending the line
+        expiration_dates = pd.to_datetime(heatmap_data['expiration_date_original'].unique())
+        time_delta = (expiration_dates.max() - expiration_dates.min()) / 20  # Extend by 5% of the total time range
+
+        fig.add_shape(
+            type="line",
+            x0=expiration_dates.min() - time_delta,
+            y0=latest_price,
+            x1=expiration_dates.max(),
+            y1=latest_price,
+            line=dict(color="red", width=2, dash="solid"),
+        )
+
+        fig.add_trace(go.Scatter(
+            x=[None],
+            y=[None],
+            mode="lines",
+            name=f"Close Price: {latest_price}",
+            line=dict(color="red", width=2),
+            showlegend=True
+        ))
+
+
+    fig.update_layout(
+        title=dict(
+            text=(
+                  f"{dynamic_title}"
+                  f"<br><span style='font-size:20px;'>As of {as_of_datetime}</span>"
+                  f"<br><span style='font-size:20px;'>{option_types_title}</span>"
+            ),
+            font=dict(family="Noto Sans SemiBold", color="white"),
+            y=0.96,
+            x=0.0,
+            pad=dict(t=10, b=10, l=40)
+        ),
+        margin=dict(l=40, r=40, t=130, b=30),
+        xaxis=dict(
+            title='Expiration Date',
+            tickangle=-45,
+            tickmode='linear',
+            type='category'
+        ),
+        yaxis=dict(
+            title='Strike Price',
+            tickmode='linear',
+            dtick=10
+        ),
+        font=dict(family="Noto Sans Medium", color='white'),
+        autosize=True,
+        plot_bgcolor='white',
+        paper_bgcolor='#053061',
+        showlegend=True,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="right",
+            x=0.99,
+            bgcolor="rgba(255, 255, 255, 0.5)"
+        )
+    )
+
+    fig.add_layout_image(
+        dict(
+            source=None,
+            xref="paper",
+            yref="paper",
+            x=1,
+            y=1.11,
+            xanchor="right",
+            yanchor="top",
+            sizex=0.175,
+            sizey=0.175,
+            sizing="contain",
+            layer="above"
+        )
+    )
+
+    return fig
+
+@task
+def process_book_data(book: pd.DataFrame, type: str, option_type: str, latest_price: float):
+    """Process the book data for depthview."""
+    prefect_logger = get_run_logger()
+    metric_mapper = {
+        'DEX': 'delta',
+        'GEX': 'gamma',
+        'position': 1,
+    }
+
+    prefect_logger.info(f"Processing {option_type} - {type}")
+
+    if type == 'DEX':
+        book[type] = book['total_customers_posn'] * book[metric_mapper.get(type)]
+    elif type == 'GEX':
+        print(f' !!!! LATEST PRICE ---> {latest_price}')
+        book[type] = book['mm_posn'] * book[metric_mapper.get(type)] * float(latest_price) * (100 / 1000000)
+        # book[type] = (Decimal(str(book['mm_posn'])) *
+        #               Decimal(str(book[metric_mapper.get(type)])) *
+        #               Decimal(str(latest_price)) *
+        #               Decimal('100') / Decimal('1000000'))
+    elif type == 'position':
+        book[type] = book['total_customers_posn'] * 1
+
+    #TODO: Lazy way of coding ----> Make this part better
+    if option_type == "C":
+        prefect_logger.info(f"Processing {option_type}")
+        prefect_logger.info(f"Length before filtering: {len(book)}")
+        book = book[book["call_put_flag"] == "C"]
+        prefect_logger.info(f"Length after filtering: {len(book)}")
+    elif option_type == "P":
+        prefect_logger.info(f"Processing {option_type}")
+        prefect_logger.info(f"Length before filtering: {len(book)}")
+        book = book[book["call_put_flag"] == "P"]
+        prefect_logger.info(f"Length after filtering: {len(book)}")
+    else:
+        prefect_logger.info(f"Processing {option_type} ---> Keeping all contracts")
+        prefect_logger.info(f"Length of book: {len(book)}")
+
+
+    #TODO: Remove the hard coded values
+    strike_min = round_to_nearest_tens(int(latest_price) * (1-0.02))[0]
+    strike_max = round_to_nearest_tens(int(latest_price) * (1+0.02))[1]
+
+    default_expiration_range = book["expiration_date_original"].unique()
+    default_expiration_range.sort()
+    default_expiration_range = default_expiration_range[:30]
+
+    df_filtered = book[
+        (book['strike_price'].between(strike_min, strike_max)) &
+        (book['expiration_date_original'].isin(default_expiration_range))]
+
+    heatmap_data = df_filtered.pivot_table(index='strike_price', columns='expiration_date_original',
+                                           values=type, aggfunc='sum')
+
+    heatmap_data_to_plot = heatmap_data.reset_index().melt(id_vars='strike_price',
+                                                           var_name='expiration_date_original', value_name=type)
+
+    return heatmap_data_to_plot, strike_min, strike_max
+
+@task
+def generate_depthview_frame(metrics, type_metric, timestamp, participant, strike_range, last_price, option_type):
+    prefect_logger = get_run_logger()
+    prefect_logger.info(f'Processing: {timestamp}')
+
+    # Filter data for the specific timestamp
+    data_for_timestamp = metrics[metrics['effective_datetime'] == timestamp]
+
+    # Process data for depthview
+    heatmap_data, strike_min, strike_max = process_book_data(data_for_timestamp, type_metric, option_type, last_price)
+
+    # Create depthview plot
+    fig = plot_depthview(heatmap_data, type_metric, timestamp, last_price, strike_min, strike_max, option_type)
+
+    fig.update_layout(
+        width=1920,  # Full HD width
+        height=1080,  # Full HD height
+        font=dict(size=16)  # Increase font size for better readability
+    )
+
+    # Save the frame as an image file
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
+        fig.write_image(tmpfile.name, scale=2)
+        frame_path = tmpfile.name
+
+    return frame_path
 @flow(name="0DTE gifs")
 def zero_dte_flow(
         session_date: Optional[date] = default_date,
@@ -625,7 +886,7 @@ def GEX_flow(
 
 
 # -------------------DEV TEST---------------------#
-@flow(name="TEST - 0DTE gifs")
+@flow(name="0DTE posn")
 def test_zero_dte_flow(
         session_date: Optional[date] = default_date,
         strike_range: Optional[List[int]] = None,
@@ -697,7 +958,7 @@ def test_zero_dte_flow(
     else:
         print(f"Failed to process or send intraday data for {session_date}")
 
-@flow(name="TEST - 1DTE gifs")
+@flow(name="1DTE posn")
 def test_one_dte_flow(
         session_date: Optional[date] = default_date,
         strike_range: Optional[List[int]] = None,
@@ -835,266 +1096,9 @@ def test_GEX_flow(
         print(f"Successfully processed and sent intraday data (video) for {session_date}")
     else:
         print(f"Failed to process or send intraday data for {session_date}")
-# ------------------ DEPTHVIEW ------------------#
-@task
-def plot_depthview(heatmap_data: pd.DataFrame, type: str, as_of_datetime: str, latest_price: float, strike_min: float, strike_max: float, option_type:str = "all", show_line_price:bool = False):
-    #todo: if gamma --> change colorscale to blue-red,
-    prefect_logger = get_run_logger()
 
-    prefect_logger.info(f"Plot depthview for: {option_type} - {type} ")
-    #title formatting
-
-    if type == "GEX":
-        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Market Makers' GEX</span>"
-        colorscale = "RdBu"
-        title_colorbar = f"{type}<br>(M$/point)"
-
-    elif type == "DEX":
-        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer DEX</span>"
-        title_colorbar = f"{type}<br>(δ)"
-
-    elif type == "position":
-        dynamic_title = f"<span style='font-size:40px;'>SPX DepthView - Net Customer Position</span>"
-        title_colorbar = f"{type}<br>(contracts #)"
-
-    if option_type == "C":
-        option_types_title = "Filtered for calls only"
-    elif option_type == "P":
-        option_types_title = "Filtered for puts only"
-    else:
-        option_types_title = "All contracts, puts and calls combined"
-
-    # Ensure that the DataFrame values are floats
-    heatmap_data[type] = heatmap_data[type].astype(float)
-    heatmap_data['strike_price'] = heatmap_data['strike_price'].astype(float)
-    heatmap_data['expiration_date_original'] = heatmap_data['expiration_date_original'].astype(str)
-    z = heatmap_data.pivot(index='strike_price', columns='expiration_date_original', values=type).values
-
-    if type != "GEX":
-        colorscale = [
-            [0.0, 'red'],  # Lowest value
-            [0.5, 'white'],  # Mid value at zero
-            [1.0, 'green'],  # Highest value
-        ]
-
-    if type == 'GEX':
-        color_bar= dict(
-         title=title_colorbar,
-         tickvals=[-10, -5, 0, 5, 10],
-         ticktext=['-10', '-5', '0', '5', '10']
-        )
-        z_min=-10 #symmetric_log_scale(val_range)
-        z_max=10 #symmetric_log_scale(val_range)
-
-    else:
-
-        color_bar= dict(
-         title=title_colorbar,
-         tickvals=[-10000, -5000, 0, 5000, 10000],
-         ticktext=['-10000', '-5000', '0', '5000', '10000']
-        )
-        z_min=-10000 #symmetric_log_scale(val_range)
-        z_max=10000 #symmetric_log_scale(val_range)
-
-
-    # Calculate the mid value for the color scale (centered at zero)
-    zmin = heatmap_data[type].min()
-    zmax = heatmap_data[type].max()
-    val_range = max(abs(zmin), abs(zmax))
-
-    # Apply symmetric log scale transformation
-    def symmetric_log_scale(value, log_base=10):
-        return np.sign(value) * np.log1p(np.abs(value)) / np.log(log_base)
-
-    z_log = symmetric_log_scale(z)
-
-    # Round the original values for display in hover text
-    rounded_z = np.around(z, decimals=2)
-
-    # Create the heatmap using Plotly
-    fig = go.Figure(data=go.Heatmap(
-        z=z, #z_log,
-        x=heatmap_data['expiration_date_original'].unique(),
-        y=heatmap_data['strike_price'].unique(),
-        text=np.where(np.isnan(rounded_z), '', rounded_z),
-        texttemplate="%{text}",
-        colorscale=colorscale,
-        zmin=z_min, #symmetric_log_scale(val_range),
-        zmax=z_max, #symmetric_log_scale(val_range),
-        # colorbar=dict(
-        #     title=title_colorbar,
-        #     tickvals=symmetric_log_scale(np.array([-val_range, 0, val_range])),
-        #     ticktext=[-round(val_range), 0, round(val_range)]
-        # ),
-        colorbar=color_bar,
-        zmid=0,
-        hovertemplate='Expiration: %{x}<br>Strike: %{y}<br>' + type + ': %{text}<extra></extra>'
-    ))
-
-    # Add last price line if requested
-    if show_line_price and latest_price is not None:
-        # Calculate the time delta for extending the line
-        expiration_dates = pd.to_datetime(heatmap_data['expiration_date_original'].unique())
-        time_delta = (expiration_dates.max() - expiration_dates.min()) / 20  # Extend by 5% of the total time range
-
-        fig.add_shape(
-            type="line",
-            x0=expiration_dates.min() - time_delta,
-            y0=latest_price,
-            x1=expiration_dates.max(),
-            y1=latest_price,
-            line=dict(color="red", width=2, dash="solid"),
-        )
-
-        fig.add_trace(go.Scatter(
-            x=[None],
-            y=[None],
-            mode="lines",
-            name=f"Close Price: {latest_price}",
-            line=dict(color="red", width=2),
-            showlegend=True
-        ))
-
-
-    fig.update_layout(
-        title=dict(
-            text=(
-                  f"{dynamic_title}"
-                  f"<br><span style='font-size:20px;'>As of {as_of_datetime}</span>"
-                  f"<br><span style='font-size:20px;'>{option_types_title}</span>"
-            ),
-            font=dict(family="Noto Sans SemiBold", color="white"),
-            y=0.96,
-            x=0.0,
-            pad=dict(t=10, b=10, l=40)
-        ),
-        margin=dict(l=40, r=40, t=130, b=30),
-        xaxis=dict(
-            title='Expiration Date',
-            tickangle=-45,
-            tickmode='linear',
-            type='category'
-        ),
-        yaxis=dict(
-            title='Strike Price',
-            tickmode='linear',
-            dtick=10
-        ),
-        font=dict(family="Noto Sans Medium", color='white'),
-        autosize=True,
-        plot_bgcolor='white',
-        paper_bgcolor='#053061',
-        showlegend=True,
-        legend=dict(
-            yanchor="top",
-            y=0.99,
-            xanchor="right",
-            x=0.99,
-            bgcolor="rgba(255, 255, 255, 0.5)"
-        )
-    )
-
-    fig.add_layout_image(
-        dict(
-            source=None,
-            xref="paper",
-            yref="paper",
-            x=1,
-            y=1.11,
-            xanchor="right",
-            yanchor="top",
-            sizex=0.175,
-            sizey=0.175,
-            sizing="contain",
-            layer="above"
-        )
-    )
-
-    return fig
-
-@task
-def process_book_data(book: pd.DataFrame, type: str, option_type: str, latest_price: float):
-    """Process the book data for depthview."""
-    prefect_logger = get_run_logger()
-    metric_mapper = {
-        'DEX': 'delta',
-        'GEX': 'gamma',
-        'position': 1,
-    }
-
-    prefect_logger.info(f"Processing {option_type} - {type}")
-
-    if type == 'DEX':
-        book[type] = book['total_customers_posn'] * book[metric_mapper.get(type)]
-    elif type == 'GEX':
-        book[type] = book['mm_posn'] * book[metric_mapper.get(type)]
-    elif type == 'position':
-        book[type] = book['total_customers_posn'] * 1
-
-    #TODO: Lazy way of coding ----> Make this part better
-    if option_type == "C":
-        prefect_logger.info(f"Processing {option_type}")
-        prefect_logger.info(f"Length before filtering: {len(book)}")
-        book = book[book["call_put_flag"] == "C"]
-        prefect_logger.info(f"Length after filtering: {len(book)}")
-    elif option_type == "P":
-        prefect_logger.info(f"Processing {option_type}")
-        prefect_logger.info(f"Length before filtering: {len(book)}")
-        book = book[book["call_put_flag"] == "P"]
-        prefect_logger.info(f"Length after filtering: {len(book)}")
-    else:
-        prefect_logger.info(f"Processing {option_type} ---> Keeping all contracts")
-        prefect_logger.info(f"Length of book: {len(book)}")
-
-
-    #TODO: Remove the hard coded values
-    strike_min = round_to_nearest_tens(int(latest_price) * (1-0.02))[0]
-    strike_max = round_to_nearest_tens(int(latest_price) * (1+0.02))[1]
-
-    default_expiration_range = book["expiration_date_original"].unique()
-    default_expiration_range.sort()
-    default_expiration_range = default_expiration_range[:30]
-
-    df_filtered = book[
-        (book['strike_price'].between(strike_min, strike_max)) &
-        (book['expiration_date_original'].isin(default_expiration_range))]
-
-    heatmap_data = df_filtered.pivot_table(index='strike_price', columns='expiration_date_original',
-                                           values=type, aggfunc='sum')
-
-    heatmap_data_to_plot = heatmap_data.reset_index().melt(id_vars='strike_price',
-                                                           var_name='expiration_date_original', value_name=type)
-
-    return heatmap_data_to_plot, strike_min, strike_max
-
-@task
-def generate_depthview_frame(metrics, type_metric, timestamp, participant, strike_range, last_price, option_type):
-    prefect_logger = get_run_logger()
-    prefect_logger.info(f'Processing: {timestamp}')
-
-    # Filter data for the specific timestamp
-    data_for_timestamp = metrics[metrics['effective_datetime'] == timestamp]
-
-    # Process data for depthview
-    heatmap_data, strike_min, strike_max = process_book_data(data_for_timestamp, type_metric, option_type, last_price)
-
-    # Create depthview plot
-    fig = plot_depthview(heatmap_data, type_metric, timestamp, last_price, strike_min, strike_max, option_type)
-
-    fig.update_layout(
-        width=1920,  # Full HD width
-        height=1080,  # Full HD height
-        font=dict(size=16)  # Increase font size for better readability
-    )
-
-    # Save the frame as an image file
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
-        fig.write_image(tmpfile.name, scale=2)
-        frame_path = tmpfile.name
-
-    return frame_path
 #----------------- DEPTHVIEW POSITION ----------------------#
-@flow(name="Intraday Depthview")
+@flow(name="Intraday Depthview - Posn")
 def intraday_depthview(
     session_date: Optional[date] = None,
     strike_range: Optional[List[int]] = None,
@@ -1354,10 +1358,8 @@ def intraday_depthview_gex(
 ):
     prefect_logger = get_run_logger()
     # Set default values
-    webhook_url = webhook_url or get_webhook_url('depthview-gex')
-    #webhook_url = webhook_url or get_webhook_url('test-depthview-gex')
-
-
+    #webhook_url = webhook_url or get_webhook_url('depthview-gex')
+    webhook_url = webhook_url or get_webhook_url('test-depthview-gex')
 
 
     if session_date is None:
@@ -1466,154 +1468,6 @@ def intraday_depthview_gex(
         logging.error(f"Failed to process or send intraday depthview data for {session_date}")
 
     return message_success
-
-
-#----------------- DEPTHFLOW POSITION ----------------------#
-@flow(name="Intraday Depthflow")
-def intraday_depthflow(
-        session_date: Optional[date] = None,
-        strike_range: Optional[List[int]] = None,
-        expiration: Optional[str] = None,
-        participant: str = 'total_customers',
-        position_types: Optional[List[str]] = DEFAULT_POS_TYPES,
-        type_metric: str = 'position',
-        webhook_url: str = None
-):
-    prefect_logger = get_run_logger()
-    # Set default values
-    webhook_url = webhook_url or get_webhook_url('test-depthview')
-
-    if session_date is None:
-        session_date = datetime.now().date()
-    if strike_range is None:
-        strike_range = get_strike_range(prod_pg_data, session_date, range_value=0.025, range_type='percent')
-    if expiration is None:
-        # TODO: it should be the default amount of expirations
-        expiration = None
-
-    # Determine start time based on current time
-    current_time = datetime.now().time()
-    if current_time < time(12, 0):
-        start_time = START_TIME_PRE_MARKET
-    elif time(12, 0) <= current_time < time(23, 0):
-        start_time = START_TIME_MARKET
-    else:
-        start_time = START_TIME_PRE_MARKET
-
-    logging.info(f"Start time set to: {start_time}")
-
-    # Fetch data
-    metrics, candlesticks, last_price = fetch_data(session_date, None, strike_range, expiration, start_time)
-    as_of_time_stamp = str(metrics["effective_datetime"].max())
-    last_price = last_price.values[0][0]
-
-    # Get the initial timestamp (t_0)
-    t_0 = metrics["effective_datetime"].min()
-    initial_data = metrics[metrics["effective_datetime"] == t_0]
-
-    results = {}
-
-    for option_type in position_types:
-        prefect_logger.info(f"Processing: {session_date}_{participant}_{strike_range}_{option_type}_{type_metric}")
-
-        combo_id = f"{session_date}_{participant}_{'-'.join(map(str, strike_range))}_{option_type}_{type_metric}"
-        metadata_key = f"metadata/depthflow_{combo_id}.json"
-        frames_prefix = f"frames/depthflow_{combo_id}/"
-
-        metadata = do_space.get_or_initialize_metadata(INTRADAYBOT_SPACENAME, metadata_key)
-
-        last_timestamp = pd.to_datetime(metadata['last_timestamp']) if metadata['last_timestamp'] else None
-
-        if last_timestamp:
-            new_data = metrics[metrics['effective_datetime'] > last_timestamp]
-        else:
-            new_data = metrics
-
-        new_frames = []
-        for timestamp in new_data['effective_datetime'].unique():
-            metrics_filtered = metrics[metrics["effective_datetime"] == timestamp]
-
-            # Compute the difference from initial state
-            metrics_filtered = compute_difference_from_initial(metrics_filtered, initial_data, participant)
-
-            frame_path = generate_depthview_frame(metrics_filtered, option_type, timestamp, participant,
-                                                  strike_range,
-                                                  last_price, option_type)
-            frame_key = f"{frames_prefix}{timestamp.strftime('%Y%m%d%H%M%S')}.png"
-            do_space.upload_to_spaces(frame_path, INTRADAYBOT_SPACENAME, frame_key)
-            new_frames.append(frame_key)
-            metadata['frames'].append(frame_key)
-            os.remove(frame_path)
-
-        if new_frames:
-            metadata['last_timestamp'] = str(new_data['effective_datetime'].max())
-            do_space.update_metadata(INTRADAYBOT_SPACENAME, metadata_key, metadata)
-
-        video_url, latest_frame_url = generate_video_from_frames(do_space, INTRADAYBOT_SPACENAME, metadata['frames'],
-                                                                 f"depthview_{combo_id}")
-
-        results[option_type] = {
-            'video_url': video_url,
-            'latest_frame_url': latest_frame_url
-        }
-
-    # Prepare the message for Discord
-    title = f"📊 {session_date} Intraday Depthflow - {type_metric.upper()} Changes"
-    description = (
-        f"Intraday Depthview for {session_date}.\n"
-        f"This chart showcases changes in intraday positioning movements compared to the initial state at {t_0} "
-        f"for options expiring in the upcoming 30 days."
-    )
-    fields = [
-        {"name": "⏰ As of:", "value": as_of_time_stamp, "inline": True},
-        {"name": "👥 Participant:", "value": PARTICIPANT_MAPPING.get(participant, 'Unknown Participant'),
-         "inline": True},
-        {"name": "📈 Metric:", "value": f"Change in {type_metric}", "inline": True},
-        {"name": "🎯 Strike Range:", "value": f"{strike_range[0]} - {strike_range[1]}", "inline": True},
-        {"name": "🔢 Option Types:", "value": ", ".join(position_types), "inline": True},
-        {"name": "🕰️ Baseline Time:", "value": str(t_0), "inline": True}
-    ]
-
-    # Send Discord message with image and video URLs
-    message_success = send_discord_message(
-        results,
-        as_of_time_stamp,
-        session_date,
-        PARTICIPANT_MAPPING.get(participant, 'Unknown Participant'),
-        strike_range,
-        expiration,
-        position_types,
-        f"Change in {type_metric}",
-        webhook_url,
-        description,
-        fields
-    )
-
-    if message_success:
-        logging.info(f"Successfully processed and sent intraday depthview data for {session_date}")
-    else:
-        logging.error(f"Failed to process or send intraday depthview data for {session_date}")
-
-    return message_success
-
-
-def compute_difference_from_initial(current_data, initial_data, participant):
-    """
-    Compute the difference between current data and initial data for the specified metric.
-    """
-    merged_data = current_data.merge(initial_data, on=['option_symbol','call_put_flag','expiration_date_original','strike_price',],
-                                     suffixes=('', '_initial'))
-    merged_data[f'{participant}_posn_change'] = merged_data[f'{participant}_posn'] - merged_data[f'{participant}_posn_initial']
-    return merged_data
-
-# ---------------- HEATMAP GIF -------------------- #
-
-def generate_heatmap_gif(
-        session_date: Optional[date] = default_date,
-        webhook_url: str = 'https://discord.com/api/webhooks/1274040299735486464/Tp8OSd-aX6ry1y3sxV-hmSy0J3UDhQeyXQbeLD1T9XF5zL4N5kJBBiQFFgKXNF9315xJ'
-):
-    pass
-
 
 # ------------ STATIC CHARTS ----------------------#
 
@@ -1950,9 +1804,10 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
 
 
 if __name__ == "__main__":
-    intraday_depthview()
-    intraday_depthview_dex()
+    #intraday_depthview()
+    #intraday_depthview_dex()
     intraday_depthview_gex()
+    test_GEX_flow()
 
     #intraday_depthflow()
     test_zero_dte_flow()

@@ -95,7 +95,7 @@ def process_single_strike(group, participant, metric, last_price=1):
         flag_group = group[group['call_put_flag'] == flag].sort_values('effective_datetime')
         if not flag_group.empty:
             if metric == "GEX":
-                metric_values = flag_group[f'{participant}_posn'] * flag_group['gamma'] * float(last_price) * 100
+                metric_values = flag_group[f'{participant}_posn'] * flag_group['gamma'] * float(last_price) * 100 / 1000000
             elif metric == "DEX":
                 metric_values = flag_group[f'{participant}_posn'] * flag_group['delta']
             else:
