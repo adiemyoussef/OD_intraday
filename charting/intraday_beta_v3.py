@@ -1806,7 +1806,7 @@ def generate_and_send_options_charts(df_metrics: pd.DataFrame = None,
 if __name__ == "__main__":
     #intraday_depthview()
     #intraday_depthview_dex()
-    intraday_depthview_gex()
+    #intraday_depthview_gex()
     test_GEX_flow()
 
     #intraday_depthflow()
